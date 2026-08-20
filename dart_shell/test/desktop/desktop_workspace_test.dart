@@ -203,7 +203,7 @@ void main() {
     expect(placement.contentRect, nativeGeometry);
   });
 
-  test('window snapshots do not rewrite native initial geometry', () {
+  test('window snapshots retain shell-corrected initial geometry', () {
     final container = ProviderContainer.test();
     final controller = container.read(desktopWorkspaceProvider.notifier);
     final windows = <DenialWindow>[
@@ -215,7 +215,7 @@ void main() {
 
     expect(
       container.read(desktopWorkspaceProvider).placements[1]!.contentRect,
-      secondOutput,
+      secondOutput.shift(const Offset(0, 35)),
     );
   });
 
@@ -983,10 +983,55 @@ void main() {
       outputRect: secondOutput,
     );
 
-    expect(launcher, const Rect.fromLTWH(2574, 14, 680, 620));
-    expect(dashboard, const Rect.fromLTWH(2574, 806, 470, 620));
-    expect(launcherTrigger, const Rect.fromLTWH(2560, 0, 8, 96));
+    expect(launcher, const Rect.fromLTWH(2574, 806, 680, 620));
+    expect(
+      dashboard,
+      const Rect.fromLTWH(
+        2574,
+        1426 - DesktopMetrics.dashboardHeight,
+        470,
+        DesktopMetrics.dashboardHeight,
+      ),
+    );
+    // Both default to the bottom-left corner, so their edge triggers coincide.
+    // Whichever mounts last owns the hover; edge-hover panels are opt-in and
+    // the anchors are user-configurable, so this is recorded rather than
+    // arbitrated here.
+    expect(launcherTrigger, const Rect.fromLTWH(2560, 1344, 8, 96));
     expect(dashboardTrigger, const Rect.fromLTWH(2560, 1344, 8, 96));
+  });
+
+  test('desktop panels yield margin from system bar when active', () {
+    const bottomBar = Rect.fromLTWH(2560, 1408, 2560, 32);
+    final launcher = DesktopMetrics.launcherRect(
+      viewSize,
+      outputRect: secondOutput,
+      systemBarRect: bottomBar,
+      systemBarSide: SystemBarSide.bottom,
+      placement: const ShellPopupPlacement(
+        anchor: ShellPopupAnchor.bottomCenter,
+        width: 680,
+        height: 620,
+        margin: DesktopMetrics.panelMargin,
+      ),
+    );
+    final dashboard = DesktopMetrics.dashboardRect(
+      viewSize,
+      outputRect: secondOutput,
+      systemBarRect: bottomBar,
+      systemBarSide: SystemBarSide.bottom,
+      placement: const ShellPopupPlacement(
+        anchor: ShellPopupAnchor.bottomRight,
+        width: 470,
+        height: 780,
+        margin: DesktopMetrics.panelMargin,
+      ),
+    );
+
+    // Bottom margin starts at bottomBar.top (1408) - 14 = 1394
+    expect(launcher.bottom, 1408 - DesktopMetrics.panelMargin);
+    expect(dashboard.bottom, 1408 - DesktopMetrics.panelMargin);
+    expect(dashboard.right, secondOutput.right - DesktopMetrics.panelMargin);
   });
 
   test('desktop panels and hover triggers follow configured anchors', () {
@@ -1284,6 +1329,362 @@ void main() {
       container.read(desktopWorkspaceProvider).placements[2]!.frame,
       monitorRect,
     );
+  });
+
+  test(
+    'beginMaximizedDrag restores maximized window proportionally under cursor and initiates dragging',
+    () {
+      final container = ProviderContainer.test();
+      final controller = container.read(desktopWorkspaceProvider.notifier);
+      const originalGeometry = Rect.fromLTWH(200, 200, 800, 500);
+
+      controller.syncWindows(
+        <DenialWindow>[
+          _window(
+            objectId: 1,
+            windowId: 11,
+            monitorId: 1,
+            geometry: originalGeometry,
+          ),
+        ],
+        viewSize,
+        1,
+        snapshotSequence: 1,
+      );
+
+      final initialPlacement = container
+          .read(desktopWorkspaceProvider)
+          .placements[1]!;
+      final initialFrame = initialPlacement.frame;
+
+      // Maximize the window
+      controller.toggleMaximized(1);
+      final maximized = container.read(desktopWorkspaceProvider).placements[1]!;
+      expect(maximized.maximized, isTrue);
+      expect(maximized.restoreFrame, initialFrame);
+
+      // Begin drag at 50% across the titlebar with pointer at (1000, 200)
+      controller.beginMaximizedDrag(
+        1,
+        pointerPosition: const Offset(1000, 200),
+        pointerFractionX: 0.5,
+        pointerOffsetY: 17.0,
+      );
+
+      final draggingPlacement = container
+          .read(desktopWorkspaceProvider)
+          .placements[1]!;
+      expect(draggingPlacement.maximized, isFalse);
+      expect(draggingPlacement.dragging, isTrue);
+      expect(draggingPlacement.frame.width, initialFrame.width);
+      expect(draggingPlacement.frame.height, initialFrame.height);
+      // Center of restored window's titlebar should align with pointer x=1000 (1000 - 0.5 * 802)
+      expect(draggingPlacement.frame.left, 1000 - (initialFrame.width * 0.5));
+
+      // Move by delta and verify tracking
+      controller.moveBy(1, const Offset(50, 30));
+      final movedPlacement = container
+          .read(desktopWorkspaceProvider)
+          .placements[1]!;
+      expect(movedPlacement.frame.left, draggingPlacement.frame.left + 50);
+      expect(movedPlacement.frame.top, draggingPlacement.frame.top + 30);
+
+      // End move
+      controller.endMove(1);
+      expect(
+        container.read(desktopWorkspaceProvider).placements[1]!.dragging,
+        isFalse,
+      );
+    },
+  );
+
+  test('a titlebar drag leaves the shell owing Rust the final position', () {
+    final container = ProviderContainer.test();
+    final controller = container.read(desktopWorkspaceProvider.notifier);
+    controller.syncWindows(
+      <DenialWindow>[_window(objectId: 1, windowId: 11, monitorId: 1)],
+      viewSize,
+      1,
+      snapshotSequence: 1,
+    );
+
+    controller.beginMove(1);
+    controller.moveBy(1, const Offset(120, 80));
+    final dragging = container.read(desktopWorkspaceProvider).placements[1]!;
+    expect(dragging.dragging, isTrue);
+    expect(dragging.nativeGrab, isFalse);
+    expect(dragging.shellDragging, isTrue);
+
+    controller.endMove(1);
+    final settled = container.read(desktopWorkspaceProvider).placements[1]!;
+    expect(settled.shellDragging, isFalse);
+    expect(settled.frame, dragging.frame);
+  });
+
+  test('a compositor grab owns the frame for as long as it runs', () {
+    final container = ProviderContainer.test();
+    final controller = container.read(desktopWorkspaceProvider.notifier);
+    controller.syncWindows(
+      <DenialWindow>[_window(objectId: 1, windowId: 11, monitorId: 1)],
+      viewSize,
+      1,
+      snapshotSequence: 1,
+    );
+
+    controller.applyNativePlacement(
+      1,
+      _placementEvent(
+        sequence: 2,
+        contentRect: const Rect.fromLTWH(300, 200, 640, 400),
+        monitorId: 1,
+        workspaceId: 1,
+        phase: DenialWindowPlacementPhase.update,
+      ),
+    );
+    final grabbed = container.read(desktopWorkspaceProvider).placements[1]!;
+    expect(grabbed.dragging, isTrue);
+    expect(grabbed.nativeGrab, isTrue);
+    expect(
+      grabbed.shellDragging,
+      isFalse,
+      reason: 'Rust placed this rectangle, so the shell owes it nothing',
+    );
+
+    controller.applyNativePlacement(
+      1,
+      _placementEvent(
+        sequence: 3,
+        contentRect: const Rect.fromLTWH(340, 240, 640, 400),
+        monitorId: 1,
+        workspaceId: 1,
+      ),
+    );
+    final released = container.read(desktopWorkspaceProvider).placements[1]!;
+    expect(released.dragging, isFalse);
+    expect(
+      released.nativeGrab,
+      isFalse,
+      reason: 'ending the drag must release ownership with it',
+    );
+  });
+
+  test('a titlebar drag takes ownership back from a compositor grab', () {
+    final container = ProviderContainer.test();
+    final controller = container.read(desktopWorkspaceProvider.notifier);
+    controller.syncWindows(
+      <DenialWindow>[_window(objectId: 1, windowId: 11, monitorId: 1)],
+      viewSize,
+      1,
+      snapshotSequence: 1,
+    );
+
+    // A grab whose end phase never arrives — the client disconnected mid-move,
+    // or the compositor dropped the event — must not silence the next titlebar
+    // drag for the rest of the window's life.
+    controller.applyNativePlacement(
+      1,
+      _placementEvent(
+        sequence: 2,
+        contentRect: const Rect.fromLTWH(300, 200, 640, 400),
+        monitorId: 1,
+        workspaceId: 1,
+        phase: DenialWindowPlacementPhase.begin,
+      ),
+    );
+    controller.beginMove(1);
+    controller.moveBy(1, const Offset(40, 0));
+
+    expect(
+      container.read(desktopWorkspaceProvider).placements[1]!.shellDragging,
+      isTrue,
+    );
+  });
+
+  test('moveBy accumulates subpixel remainders across incremental steps', () {
+    final container = ProviderContainer.test();
+    final controller = container.read(desktopWorkspaceProvider.notifier);
+
+    controller.syncWindows(
+      <DenialWindow>[
+        _window(
+          objectId: 1,
+          windowId: 11,
+          monitorId: 1,
+          geometry: const Rect.fromLTWH(100, 100, 600, 400),
+        ),
+      ],
+      viewSize,
+      1,
+      snapshotSequence: 1,
+    );
+
+    controller.beginMove(1);
+    final startLeft = container
+        .read(desktopWorkspaceProvider)
+        .placements[1]!
+        .frame
+        .left;
+
+    // Move by 0.3 px multiple times
+    controller.moveBy(1, const Offset(0.3, 0.0));
+    // 0.3 snaps to 0 in whole pixels, so frame hasn't jumped
+    expect(
+      container.read(desktopWorkspaceProvider).placements[1]!.frame.left,
+      startLeft,
+    );
+
+    controller.moveBy(1, const Offset(0.3, 0.0));
+    expect(
+      container.read(desktopWorkspaceProvider).placements[1]!.frame.left,
+      startLeft,
+    );
+
+    // After 4th step (total 1.2 px accumulated), frame shifts by 1 px
+    controller.moveBy(1, const Offset(0.4, 0.0));
+    expect(
+      container.read(desktopWorkspaceProvider).placements[1]!.frame.left,
+      startLeft + 1.0,
+    );
+
+    controller.endMove(1);
+  });
+
+  test('dragging a window whose content fills the screen does not jump', () {
+    final container = ProviderContainer.test();
+    final controller = container.read(desktopWorkspaceProvider.notifier);
+
+    // Rust places clients without knowing the shell draws a titlebar, so a
+    // full-height client is legitimate. The shell shifts the initial frame
+    // down just enough to keep the titlebar on the visible canvas.
+    controller.syncWindows(
+      <DenialWindow>[
+        _window(
+          objectId: 1,
+          windowId: 11,
+          monitorId: 1,
+          geometry: Rect.fromLTWH(400, 0, 800, viewSize.height),
+        ),
+      ],
+      viewSize,
+      1,
+      snapshotSequence: 1,
+    );
+
+    final before = container.read(desktopWorkspaceProvider).placements[1]!;
+    expect(before.frame.top, 0.0, reason: 'titlebar must remain visible');
+    expect(before.contentRect.top, 35.0);
+
+    controller.beginMove(1);
+    controller.moveBy(1, const Offset(10, 0));
+    final after = container.read(desktopWorkspaceProvider).placements[1]!;
+    controller.endMove(1);
+
+    // A purely horizontal drag must not move the window vertically or resize
+    // it. Clamping the outer frame against a work area sized for client
+    // rectangles used to shove it down by the titlebar height and shrink it.
+    expect(after.frame.top, before.frame.top);
+    expect(after.frame.height, before.frame.height);
+    expect(after.frame.left, before.frame.left + 10.0);
+    expect(after.contentRect.top, before.contentRect.top);
+    expect(after.contentRect.height, before.contentRect.height);
+  });
+
+  test('dragging a window left hanging off an edge does not snap it back', () {
+    final container = ProviderContainer.test();
+    final controller = container.read(desktopWorkspaceProvider.notifier);
+
+    // Frames installed from native geometry are not clamped, so the compositor
+    // can leave a window hanging over an edge — by mapping it there, by driving
+    // an interactive move, or by restoring a position saved at another
+    // resolution. Clamping the shifted frame used to yank it back in by the
+    // whole overhang the moment the titlebar was dragged.
+    controller.syncWindows(
+      <DenialWindow>[
+        _window(
+          objectId: 1,
+          windowId: 11,
+          monitorId: 1,
+          geometry: const Rect.fromLTWH(4800, 200, 600, 400),
+        ),
+      ],
+      viewSize,
+      1,
+      snapshotSequence: 1,
+    );
+
+    final before = container.read(desktopWorkspaceProvider).placements[1]!;
+    expect(before.frame.right, greaterThan(viewSize.width));
+
+    controller.beginMove(1);
+    controller.moveBy(1, const Offset(-10, 0));
+    final nudged = container.read(desktopWorkspaceProvider).placements[1]!;
+    expect(nudged.frame.left, before.frame.left - 10.0);
+    expect(nudged.frame.size, before.frame.size);
+
+    // It may not be pushed further out than the gesture started, so an
+    // on-screen window still cannot be dragged off screen.
+    controller.moveBy(1, const Offset(40, 0));
+    expect(
+      container.read(desktopWorkspaceProvider).placements[1]!.frame.left,
+      before.frame.left,
+    );
+
+    // Within one gesture the window tracks the pointer over that whole range,
+    // rather than sticking at the furthest-in point it has reached.
+    controller.moveBy(1, const Offset(-300, 0));
+    expect(
+      container.read(desktopWorkspaceProvider).placements[1]!.frame.left,
+      before.frame.left - 300.0,
+    );
+    controller.moveBy(1, const Offset(120, 0));
+    expect(
+      container.read(desktopWorkspaceProvider).placements[1]!.frame.left,
+      before.frame.left - 180.0,
+    );
+
+    // The overhang is re-read when the next gesture begins, so once a drag has
+    // left the window wholly on screen it can no longer be dragged off it.
+    controller.moveBy(1, const Offset(-500, 0));
+    controller.endMove(1);
+    controller.beginMove(1);
+    controller.moveBy(1, const Offset(4000, 0));
+    controller.endMove(1);
+    final settled = container.read(desktopWorkspaceProvider).placements[1]!;
+    expect(settled.frame.right, lessThanOrEqualTo(viewSize.width + 1.0));
+    expect(settled.frame.size, before.frame.size);
+  });
+
+  test('dragging a window wider than the work area does not resize it', () {
+    final container = ProviderContainer.test();
+    final controller = container.read(desktopWorkspaceProvider.notifier);
+
+    controller.syncWindows(
+      <DenialWindow>[
+        _window(
+          objectId: 1,
+          windowId: 11,
+          monitorId: 1,
+          geometry: Rect.fromLTWH(-200, 200, viewSize.width + 280, 400),
+        ),
+      ],
+      viewSize,
+      1,
+      snapshotSequence: 1,
+    );
+
+    final before = container.read(desktopWorkspaceProvider).placements[1]!;
+
+    controller.beginMove(1);
+    controller.moveBy(1, const Offset(30, 25));
+    controller.endMove(1);
+    final after = container.read(desktopWorkspaceProvider).placements[1]!;
+
+    // A drag is never a resize. The window overhangs both side edges at once so
+    // it cannot move horizontally without worsening one of them, but that must
+    // pin it rather than shrink it, and the free axis still tracks the pointer.
+    expect(after.frame.size, before.frame.size);
+    expect(after.frame.left, before.frame.left);
+    expect(after.frame.top, before.frame.top + 25.0);
   });
 }
 

@@ -78,21 +78,25 @@ class HomeDragSessionController extends Notifier<HomeDragSession?> {
 class HomeGridState {
   HomeGridState({
     required List<HomeGridItem?> slots,
+    this.desktopApps = const <DesktopApp>[],
     this.page = 0,
     this.draggingSourceIndex,
   }) : slots = List.unmodifiable(slots);
 
   final List<HomeGridItem?> slots;
+  final List<DesktopApp> desktopApps;
   final int page;
   final int? draggingSourceIndex;
 
   HomeGridState copyWith({
     List<HomeGridItem?>? slots,
+    List<DesktopApp>? desktopApps,
     int? page,
     Object? draggingSourceIndex = _unset,
   }) {
     return HomeGridState(
       slots: slots ?? this.slots,
+      desktopApps: desktopApps ?? this.desktopApps,
       page: page ?? this.page,
       draggingSourceIndex: identical(draggingSourceIndex, _unset)
           ? this.draggingSourceIndex
@@ -147,14 +151,14 @@ class HomeGridController extends AsyncNotifier<HomeGridState> {
         savedLayout,
       );
       if (!_isBuildActive(generation)) {
-        return HomeGridState(slots: slots);
+        return HomeGridState(slots: slots, desktopApps: apps);
       }
       _lastDesktopRefresh = DateTime.now();
       if (_savedLayoutNeedsRefresh(apps, localApps, savedLayout, slots)) {
         unawaited(layoutRepository.saveLayout(slots));
       }
       _startDesktopRefreshTriggers(generation);
-      return HomeGridState(slots: slots);
+      return HomeGridState(slots: slots, desktopApps: apps);
     } on Object catch (error, stackTrace) {
       Error.throwWithStackTrace(error, stackTrace);
     }
@@ -227,7 +231,7 @@ class HomeGridController extends AsyncNotifier<HomeGridState> {
         apps,
         localApps,
       );
-      state = AsyncData(current.copyWith(slots: slots));
+      state = AsyncData(current.copyWith(slots: slots, desktopApps: apps));
       unawaited(ref.read(homeLayoutRepositoryProvider).saveLayout(slots));
     } finally {
       if (_isBuildActive(generation)) {

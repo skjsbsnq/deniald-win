@@ -40,6 +40,20 @@ class ShellPopupPlacement {
   final double height;
   final double margin;
 
+  /// Where the desktop start menu sits unless the user moves it.
+  ///
+  /// Windows 10 anchors the menu to the bottom-left corner so its left edge
+  /// lines up with the start button. Three separate literals used to spell this
+  /// out — the persisted default, the panel rect, and the hover trigger — and
+  /// nothing kept them in step, so a menu could open in one corner while its
+  /// hover target stayed in another.
+  static const ShellPopupPlacement desktopStartMenu = ShellPopupPlacement(
+    anchor: ShellPopupAnchor.bottomLeft,
+    width: 680,
+    height: 620,
+    margin: 14,
+  );
+
   ShellPopupPlacement copyWith({
     ShellPopupAnchor? anchor,
     double? width,

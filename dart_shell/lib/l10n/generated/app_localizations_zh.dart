@@ -2763,4 +2763,233 @@ class AppLocalizationsZh extends AppLocalizations {
   String windowUntitled(int windowId) {
     return '窗口 $windowId';
   }
+
+  @override
+  String get desktopCalendarTitle => '日历';
+
+  @override
+  String get desktopCalendarOpenPanel => '打开日历';
+
+  @override
+  String get desktopCalendarClosePanel => '关闭日历';
+
+  @override
+  String get desktopCalendarToday => '今天';
+
+  @override
+  String get desktopCalendarPreviousMonth => '上一月';
+
+  @override
+  String get desktopCalendarNextMonth => '下一月';
+
+  @override
+  String get desktopCalendarNoNotifications => '没有新通知';
+
+  @override
+  String get desktopCalendarViewAllNotifications => '查看全部';
+
+  @override
+  String get desktopStartButton => '开始';
+
+  @override
+  String get desktopStartButtonOpen => '打开开始菜单';
+
+  @override
+  String get desktopStartButtonClose => '关闭开始菜单';
+
+  @override
+  String get desktopStartMenuSearchHint => '在这里输入你要搜索的内容';
+
+  @override
+  String get desktopStartMenuExpandRail => '展开';
+
+  @override
+  String get desktopStartMenuCollapseRail => '收起';
+
+  @override
+  String get desktopStartMenuUser => '用户';
+
+  @override
+  String get desktopStartMenuDocuments => '文档';
+
+  @override
+  String get desktopStartMenuPictures => '图片';
+
+  @override
+  String get desktopStartMenuTilesHint => '在左侧应用上右键，即可固定到此处';
+
+  @override
+  String get desktopTilePinToStart => '固定到“开始”屏幕';
+
+  @override
+  String get desktopTileUnpinFromStart => '从“开始”屏幕取消固定';
+
+  @override
+  String get desktopTileResize => '调整大小';
+
+  @override
+  String get desktopTileSizeSmall => '小';
+
+  @override
+  String get desktopTileSizeMedium => '中';
+
+  @override
+  String get desktopTileSizeWide => '宽';
+
+  @override
+  String get desktopTileSizeLarge => '大';
+
+  @override
+  String get desktopTileGroupUnnamed => '命名分组';
+
+  @override
+  String get desktopTileGroupRename => '重命名磁贴分组';
+
+  @override
+  String desktopTilePinnedSemantics(String applicationName) {
+    return '磁贴：$applicationName';
+  }
+
+  @override
+  String get desktopRefreshWifi => '刷新 Wi-Fi 网络';
+
+  @override
+  String get desktopScanWifi => '扫描 Wi-Fi 网络';
+
+  @override
+  String get desktopScanningWifiNetworks => '正在扫描 Wi-Fi 网络…';
+
+  @override
+  String get settingsBarAlignmentCenter => '居中';
+
+  @override
+  String get settingsBarAlignmentLeading => '靠左（竖排时靠上）';
+
+  @override
+  String get settingsBarAlignmentTitle => '开始键与窗口按钮';
+
+  @override
+  String get windowClose => '关闭';
+
+  @override
+  String get windowMaximize => '最大化';
+
+  @override
+  String get windowMinimize => '最小化';
+
+  @override
+  String get windowRestore => '向下还原';
+
+  @override
+  String get statusCluster => '状态区域';
+
+  @override
+  String statusBatteryLevel(int percent) {
+    return '电池 $percent%';
+  }
+
+  @override
+  String statusBatteryLevelCharging(int percent) {
+    return '电池 $percent%，正在充电';
+  }
+
+  @override
+  String statusVolumeLevel(int percent) {
+    return '音量 $percent%';
+  }
+
+  @override
+  String get statusVolumeMuted => '音量已静音';
+
+  @override
+  String statusNetworkWifi(String network, int strength) {
+    return '无线网络：$network，信号强度 $strength%';
+  }
+
+  @override
+  String statusNetworkWifiNoSignal(String network) {
+    return '无线网络：$network';
+  }
+
+  @override
+  String get statusNetworkOnline => '网络已连接';
+
+  @override
+  String get statusNetworkConnecting => '正在连接网络';
+
+  @override
+  String get statusNetworkDisconnected => '网络已断开';
+
+  @override
+  String get statusNetworkDisabled => '无线网络已关闭';
+
+  @override
+  String get statusNetworkUnavailable => '网络不可用';
+
+  @override
+  String get statusClusterOpenControlCenter => '打开控制中心';
+
+  @override
+  String get statusClusterCloseControlCenter => '关闭控制中心';
+
+  @override
+  String get settingsEdgeHoverPanels => '屏幕边缘悬停展开面板';
+
+  @override
+  String get settingsEdgeHoverPanelsDescription =>
+      '鼠标悬停在屏幕边缘触发区域时自动展开启动器或控制中心。';
+
+  @override
+  String taskbarWindowButton(String windowTitle) {
+    return '窗口 $windowTitle';
+  }
+
+  @override
+  String taskbarWindowActive(String windowTitle) {
+    return '$windowTitle - 活动';
+  }
+
+  @override
+  String taskbarWindowMinimized(String windowTitle) {
+    return '$windowTitle - 最小化';
+  }
+
+  @override
+  String taskbarWindowMinimize(String windowTitle) {
+    return '最小化 $windowTitle';
+  }
+
+  @override
+  String taskbarWindowRestore(String windowTitle) {
+    return '恢复 $windowTitle';
+  }
+
+  @override
+  String taskbarPreviewTitle(String windowTitle) {
+    return '$windowTitle 预览';
+  }
+
+  @override
+  String taskbarPreviewClose(String windowTitle) {
+    return '关闭 $windowTitle';
+  }
+
+  @override
+  String get trayOverflowExpand => '显示隐藏的图标';
+
+  @override
+  String get trayOverflowCollapse => '隐藏图标';
+
+  @override
+  String get trayOverflowToggle => '隐藏的图标';
+
+  @override
+  String trayItemSemanticLabel(String name) {
+    return '托盘图标：$name';
+  }
+
+  @override
+  String trayItemNeedsAttention(String name) {
+    return '托盘图标：$name（需要注意）';
+  }
 }

@@ -2165,8 +2165,12 @@
   "@settingsDisplayPosition": {
     "description": "Logical position of one monitor in the desktop layout.",
     "placeholders": {
-      "x": { "type": "int" },
-      "y": { "type": "int" }
+      "x": {
+        "type": "int"
+      },
+      "y": {
+        "type": "int"
+      }
     }
   },
   "settingsDisplayRefreshRate": "Refresh rate",
@@ -2213,7 +2217,9 @@
   "@settingsDisplayZoomLevel": {
     "description": "Accessibility label for the current monitor canvas zoom.",
     "placeholders": {
-      "percent": { "type": "int" }
+      "percent": {
+        "type": "int"
+      }
     }
   },
   "settingsDisplayZoomOut": "Zoom out",
@@ -2232,7 +2238,9 @@
   "@settingsMonitorSemantics": {
     "description": "Accessibility label for one monitor tile.",
     "placeholders": {
-      "name": { "type": "String" }
+      "name": {
+        "type": "String"
+      }
     }
   },
   "settingsEdgeDistance": "Edge distance",
@@ -3969,6 +3977,348 @@
     "placeholders": {
       "windowId": {
         "type": "int"
+      }
+    }
+  },
+  "desktopCalendarTitle": "Calendar",
+  "@desktopCalendarTitle": {
+    "description": "English UI text for desktopCalendarTitle."
+  },
+  "desktopCalendarOpenPanel": "Open calendar",
+  "@desktopCalendarOpenPanel": {
+    "description": "English UI text for desktopCalendarOpenPanel."
+  },
+  "desktopCalendarClosePanel": "Close calendar",
+  "@desktopCalendarClosePanel": {
+    "description": "English UI text for desktopCalendarClosePanel."
+  },
+  "desktopCalendarToday": "Today",
+  "@desktopCalendarToday": {
+    "description": "English UI text for desktopCalendarToday."
+  },
+  "desktopCalendarPreviousMonth": "Previous month",
+  "@desktopCalendarPreviousMonth": {
+    "description": "English UI text for desktopCalendarPreviousMonth."
+  },
+  "desktopCalendarNextMonth": "Next month",
+  "@desktopCalendarNextMonth": {
+    "description": "English UI text for desktopCalendarNextMonth."
+  },
+  "desktopCalendarNoNotifications": "No new notifications",
+  "@desktopCalendarNoNotifications": {
+    "description": "English UI text for desktopCalendarNoNotifications."
+  },
+  "desktopCalendarViewAllNotifications": "View all",
+  "@desktopCalendarViewAllNotifications": {
+    "description": "English UI text for desktopCalendarViewAllNotifications."
+  },
+  "desktopStartButton": "Start",
+  "@desktopStartButton": {
+    "description": "English UI text for desktopStartButton."
+  },
+  "desktopStartButtonOpen": "Open Start menu",
+  "@desktopStartButtonOpen": {
+    "description": "English UI text for desktopStartButtonOpen."
+  },
+  "desktopStartButtonClose": "Close Start menu",
+  "@desktopStartButtonClose": {
+    "description": "English UI text for desktopStartButtonClose."
+  },
+  "desktopStartMenuSearchHint": "Type here to search",
+  "@desktopStartMenuSearchHint": {
+    "description": "English UI text for desktopStartMenuSearchHint."
+  },
+  "desktopStartMenuExpandRail": "Expand",
+  "@desktopStartMenuExpandRail": {
+    "description": "English UI text for desktopStartMenuExpandRail."
+  },
+  "desktopStartMenuCollapseRail": "Collapse",
+  "@desktopStartMenuCollapseRail": {
+    "description": "English UI text for desktopStartMenuCollapseRail."
+  },
+  "desktopStartMenuUser": "User",
+  "@desktopStartMenuUser": {
+    "description": "English UI text for desktopStartMenuUser."
+  },
+  "desktopStartMenuDocuments": "Documents",
+  "@desktopStartMenuDocuments": {
+    "description": "English UI text for desktopStartMenuDocuments."
+  },
+  "desktopStartMenuPictures": "Pictures",
+  "@desktopStartMenuPictures": {
+    "description": "English UI text for desktopStartMenuPictures."
+  },
+  "desktopStartMenuTilesHint": "Right-click an application on the left to pin it here",
+  "@desktopStartMenuTilesHint": {
+    "description": "English UI text for desktopStartMenuTilesHint."
+  },
+  "desktopTilePinToStart": "Pin to Start",
+  "@desktopTilePinToStart": {
+    "description": "Context menu entry that adds an application to the start menu tile board."
+  },
+  "desktopTileUnpinFromStart": "Unpin from Start",
+  "@desktopTileUnpinFromStart": {
+    "description": "Context menu entry that removes a tile from the start menu tile board."
+  },
+  "desktopTileResize": "Resize",
+  "@desktopTileResize": {
+    "description": "Heading above the tile size choices in a tile's context menu."
+  },
+  "desktopTileSizeSmall": "Small",
+  "@desktopTileSizeSmall": {
+    "description": "Tile size covering one cell."
+  },
+  "desktopTileSizeMedium": "Medium",
+  "@desktopTileSizeMedium": {
+    "description": "Tile size covering two by two cells."
+  },
+  "desktopTileSizeWide": "Wide",
+  "@desktopTileSizeWide": {
+    "description": "Tile size covering four by two cells."
+  },
+  "desktopTileSizeLarge": "Large",
+  "@desktopTileSizeLarge": {
+    "description": "Tile size covering four by four cells."
+  },
+  "desktopTileGroupUnnamed": "Name group",
+  "@desktopTileGroupUnnamed": {
+    "description": "Placeholder heading shown for a tile group the user has not named."
+  },
+  "desktopTileGroupRename": "Rename tile group",
+  "@desktopTileGroupRename": {
+    "description": "Accessibility label for the editable heading of a tile group."
+  },
+  "desktopTilePinnedSemantics": "Tile: {applicationName}",
+  "@desktopTilePinnedSemantics": {
+    "description": "Accessibility label for a pinned application tile.",
+    "placeholders": {
+      "applicationName": {
+        "type": "String"
+      }
+    }
+  },
+  "desktopRefreshWifi": "Refresh Wi-Fi networks",
+  "@desktopRefreshWifi": {
+    "description": "English UI text for desktopRefreshWifi."
+  },
+  "desktopScanWifi": "Scan Wi-Fi networks",
+  "@desktopScanWifi": {
+    "description": "English UI text for desktopScanWifi."
+  },
+  "desktopScanningWifiNetworks": "Scanning Wi-Fi networks…",
+  "@desktopScanningWifiNetworks": {
+    "description": "English UI text for desktopScanningWifiNetworks."
+  },
+  "settingsBarAlignmentCenter": "Centered",
+  "@settingsBarAlignmentCenter": {
+    "description": "English UI text for settingsBarAlignmentCenter."
+  },
+  "settingsBarAlignmentLeading": "Left (top when vertical)",
+  "@settingsBarAlignmentLeading": {
+    "description": "English UI text for settingsBarAlignmentLeading."
+  },
+  "settingsBarAlignmentTitle": "Start button and window buttons",
+  "@settingsBarAlignmentTitle": {
+    "description": "English UI text for settingsBarAlignmentTitle."
+  },
+  "windowClose": "Close",
+  "@windowClose": {
+    "description": "English UI text for windowClose."
+  },
+  "windowMaximize": "Maximize",
+  "@windowMaximize": {
+    "description": "English UI text for windowMaximize."
+  },
+  "windowMinimize": "Minimize",
+  "@windowMinimize": {
+    "description": "English UI text for windowMinimize."
+  },
+  "windowRestore": "Restore down",
+  "@windowRestore": {
+    "description": "English UI text for windowRestore."
+  },
+  "statusCluster": "Status",
+  "@statusCluster": {
+    "description": "Accessibility label for desktop system bar status cluster."
+  },
+  "statusBatteryLevel": "Battery {percent}%",
+  "@statusBatteryLevel": {
+    "description": "Accessibility label for battery status with percentage.",
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "statusBatteryLevelCharging": "Battery {percent}%, charging",
+  "@statusBatteryLevelCharging": {
+    "description": "Accessibility label for battery status while charging.",
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "statusVolumeLevel": "Volume {percent}%",
+  "@statusVolumeLevel": {
+    "description": "Accessibility label for volume status with percentage.",
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "statusVolumeMuted": "Volume muted",
+  "@statusVolumeMuted": {
+    "description": "Accessibility label for muted volume."
+  },
+  "statusNetworkWifi": "Wi-Fi: {network}, {strength}% signal",
+  "@statusNetworkWifi": {
+    "description": "Accessibility label for Wi-Fi connection with SSID and signal strength.",
+    "placeholders": {
+      "network": {
+        "type": "String"
+      },
+      "strength": {
+        "type": "int"
+      }
+    }
+  },
+  "statusNetworkWifiNoSignal": "Wi-Fi: {network}",
+  "@statusNetworkWifiNoSignal": {
+    "description": "Accessibility label for Wi-Fi connection with SSID.",
+    "placeholders": {
+      "network": {
+        "type": "String"
+      }
+    }
+  },
+  "statusNetworkOnline": "Network connected",
+  "@statusNetworkOnline": {
+    "description": "Accessibility label for connected network."
+  },
+  "statusNetworkConnecting": "Connecting to network",
+  "@statusNetworkConnecting": {
+    "description": "Accessibility label for connecting network status."
+  },
+  "statusNetworkDisconnected": "Network disconnected",
+  "@statusNetworkDisconnected": {
+    "description": "Accessibility label for disconnected network."
+  },
+  "statusNetworkDisabled": "Wi-Fi is off",
+  "@statusNetworkDisabled": {
+    "description": "Accessibility label for disabled wireless network."
+  },
+  "statusNetworkUnavailable": "Network unavailable",
+  "@statusNetworkUnavailable": {
+    "description": "Accessibility label for unavailable network service."
+  },
+  "statusClusterOpenControlCenter": "Open control center",
+  "@statusClusterOpenControlCenter": {
+    "description": "Accessibility label for the desktop status cluster when the control center is closed."
+  },
+  "statusClusterCloseControlCenter": "Close control center",
+  "@statusClusterCloseControlCenter": {
+    "description": "Accessibility label for the desktop status cluster when the control center is open."
+  },
+  "settingsEdgeHoverPanels": "Screen edge hover opens panels",
+  "@settingsEdgeHoverPanels": {
+    "description": "Label for settings toggle allowing edge hover to open launcher and dashboard panels."
+  },
+  "settingsEdgeHoverPanelsDescription": "Open the launcher or dashboard when hovering over screen edges.",
+  "@settingsEdgeHoverPanelsDescription": {
+    "description": "Description for settings toggle allowing edge hover to open launcher and dashboard panels."
+  },
+  "taskbarWindowButton": "Window {windowTitle}",
+  "@taskbarWindowButton": {
+    "description": "Accessibility label for an open window button on the desktop taskbar.",
+    "placeholders": {
+      "windowTitle": {
+        "type": "String"
+      }
+    }
+  },
+  "taskbarWindowActive": "{windowTitle} - Active",
+  "@taskbarWindowActive": {
+    "description": "Accessibility label for an active window button on the desktop taskbar.",
+    "placeholders": {
+      "windowTitle": {
+        "type": "String"
+      }
+    }
+  },
+  "taskbarWindowMinimized": "{windowTitle} - Minimized",
+  "@taskbarWindowMinimized": {
+    "description": "Accessibility label for a minimized window button on the desktop taskbar.",
+    "placeholders": {
+      "windowTitle": {
+        "type": "String"
+      }
+    }
+  },
+  "taskbarWindowMinimize": "Minimize {windowTitle}",
+  "@taskbarWindowMinimize": {
+    "description": "Accessibility action label to minimize a window from the desktop taskbar.",
+    "placeholders": {
+      "windowTitle": {
+        "type": "String"
+      }
+    }
+  },
+  "taskbarWindowRestore": "Restore {windowTitle}",
+  "@taskbarWindowRestore": {
+    "description": "Accessibility action label to restore a minimized window from the desktop taskbar.",
+    "placeholders": {
+      "windowTitle": {
+        "type": "String"
+      }
+    }
+  },
+  "taskbarPreviewTitle": "{windowTitle} preview",
+  "@taskbarPreviewTitle": {
+    "description": "Accessibility label for a desktop taskbar window preview card.",
+    "placeholders": {
+      "windowTitle": {
+        "type": "String"
+      }
+    }
+  },
+  "taskbarPreviewClose": "Close {windowTitle}",
+  "@taskbarPreviewClose": {
+    "description": "Accessibility label for the close button on a desktop taskbar window preview card.",
+    "placeholders": {
+      "windowTitle": {
+        "type": "String"
+      }
+    }
+  },
+  "trayOverflowExpand": "Show hidden icons",
+  "@trayOverflowExpand": {
+    "description": "Accessibility and tooltip label to expand the hidden tray overflow panel."
+  },
+  "trayOverflowCollapse": "Hide icons",
+  "@trayOverflowCollapse": {
+    "description": "Accessibility and tooltip label to collapse the hidden tray overflow panel."
+  },
+  "trayOverflowToggle": "Hidden icons",
+  "@trayOverflowToggle": {
+    "description": "Accessibility and tooltip label for the tray overflow chevron button."
+  },
+  "trayItemSemanticLabel": "Tray item {name}",
+  "@trayItemSemanticLabel": {
+    "description": "Accessibility label for a status notifier tray item.",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "trayItemNeedsAttention": "Tray item {name} (attention required)",
+  "@trayItemNeedsAttention": {
+    "description": "Accessibility label for a tray item requiring user attention.",
+    "placeholders": {
+      "name": {
+        "type": "String"
       }
     }
   }

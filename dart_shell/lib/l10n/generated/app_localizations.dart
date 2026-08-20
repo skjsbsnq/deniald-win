@@ -5133,6 +5133,402 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Window {windowId}'**
   String windowUntitled(int windowId);
+
+  /// English UI text for desktopCalendarTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Calendar'**
+  String get desktopCalendarTitle;
+
+  /// English UI text for desktopCalendarOpenPanel.
+  ///
+  /// In en, this message translates to:
+  /// **'Open calendar'**
+  String get desktopCalendarOpenPanel;
+
+  /// English UI text for desktopCalendarClosePanel.
+  ///
+  /// In en, this message translates to:
+  /// **'Close calendar'**
+  String get desktopCalendarClosePanel;
+
+  /// English UI text for desktopCalendarToday.
+  ///
+  /// In en, this message translates to:
+  /// **'Today'**
+  String get desktopCalendarToday;
+
+  /// English UI text for desktopCalendarPreviousMonth.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous month'**
+  String get desktopCalendarPreviousMonth;
+
+  /// English UI text for desktopCalendarNextMonth.
+  ///
+  /// In en, this message translates to:
+  /// **'Next month'**
+  String get desktopCalendarNextMonth;
+
+  /// English UI text for desktopCalendarNoNotifications.
+  ///
+  /// In en, this message translates to:
+  /// **'No new notifications'**
+  String get desktopCalendarNoNotifications;
+
+  /// English UI text for desktopCalendarViewAllNotifications.
+  ///
+  /// In en, this message translates to:
+  /// **'View all'**
+  String get desktopCalendarViewAllNotifications;
+
+  /// English UI text for desktopStartButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Start'**
+  String get desktopStartButton;
+
+  /// English UI text for desktopStartButtonOpen.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Start menu'**
+  String get desktopStartButtonOpen;
+
+  /// English UI text for desktopStartButtonClose.
+  ///
+  /// In en, this message translates to:
+  /// **'Close Start menu'**
+  String get desktopStartButtonClose;
+
+  /// English UI text for desktopStartMenuSearchHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Type here to search'**
+  String get desktopStartMenuSearchHint;
+
+  /// English UI text for desktopStartMenuExpandRail.
+  ///
+  /// In en, this message translates to:
+  /// **'Expand'**
+  String get desktopStartMenuExpandRail;
+
+  /// English UI text for desktopStartMenuCollapseRail.
+  ///
+  /// In en, this message translates to:
+  /// **'Collapse'**
+  String get desktopStartMenuCollapseRail;
+
+  /// English UI text for desktopStartMenuUser.
+  ///
+  /// In en, this message translates to:
+  /// **'User'**
+  String get desktopStartMenuUser;
+
+  /// English UI text for desktopStartMenuDocuments.
+  ///
+  /// In en, this message translates to:
+  /// **'Documents'**
+  String get desktopStartMenuDocuments;
+
+  /// English UI text for desktopStartMenuPictures.
+  ///
+  /// In en, this message translates to:
+  /// **'Pictures'**
+  String get desktopStartMenuPictures;
+
+  /// English UI text for desktopStartMenuTilesHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Right-click an application on the left to pin it here'**
+  String get desktopStartMenuTilesHint;
+
+  /// Context menu entry that adds an application to the start menu tile board.
+  ///
+  /// In en, this message translates to:
+  /// **'Pin to Start'**
+  String get desktopTilePinToStart;
+
+  /// Context menu entry that removes a tile from the start menu tile board.
+  ///
+  /// In en, this message translates to:
+  /// **'Unpin from Start'**
+  String get desktopTileUnpinFromStart;
+
+  /// Heading above the tile size choices in a tile's context menu.
+  ///
+  /// In en, this message translates to:
+  /// **'Resize'**
+  String get desktopTileResize;
+
+  /// Tile size covering one cell.
+  ///
+  /// In en, this message translates to:
+  /// **'Small'**
+  String get desktopTileSizeSmall;
+
+  /// Tile size covering two by two cells.
+  ///
+  /// In en, this message translates to:
+  /// **'Medium'**
+  String get desktopTileSizeMedium;
+
+  /// Tile size covering four by two cells.
+  ///
+  /// In en, this message translates to:
+  /// **'Wide'**
+  String get desktopTileSizeWide;
+
+  /// Tile size covering four by four cells.
+  ///
+  /// In en, this message translates to:
+  /// **'Large'**
+  String get desktopTileSizeLarge;
+
+  /// Placeholder heading shown for a tile group the user has not named.
+  ///
+  /// In en, this message translates to:
+  /// **'Name group'**
+  String get desktopTileGroupUnnamed;
+
+  /// Accessibility label for the editable heading of a tile group.
+  ///
+  /// In en, this message translates to:
+  /// **'Rename tile group'**
+  String get desktopTileGroupRename;
+
+  /// Accessibility label for a pinned application tile.
+  ///
+  /// In en, this message translates to:
+  /// **'Tile: {applicationName}'**
+  String desktopTilePinnedSemantics(String applicationName);
+
+  /// English UI text for desktopRefreshWifi.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh Wi-Fi networks'**
+  String get desktopRefreshWifi;
+
+  /// English UI text for desktopScanWifi.
+  ///
+  /// In en, this message translates to:
+  /// **'Scan Wi-Fi networks'**
+  String get desktopScanWifi;
+
+  /// English UI text for desktopScanningWifiNetworks.
+  ///
+  /// In en, this message translates to:
+  /// **'Scanning Wi-Fi networks…'**
+  String get desktopScanningWifiNetworks;
+
+  /// English UI text for settingsBarAlignmentCenter.
+  ///
+  /// In en, this message translates to:
+  /// **'Centered'**
+  String get settingsBarAlignmentCenter;
+
+  /// English UI text for settingsBarAlignmentLeading.
+  ///
+  /// In en, this message translates to:
+  /// **'Left (top when vertical)'**
+  String get settingsBarAlignmentLeading;
+
+  /// English UI text for settingsBarAlignmentTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Start button and window buttons'**
+  String get settingsBarAlignmentTitle;
+
+  /// English UI text for windowClose.
+  ///
+  /// In en, this message translates to:
+  /// **'Close'**
+  String get windowClose;
+
+  /// English UI text for windowMaximize.
+  ///
+  /// In en, this message translates to:
+  /// **'Maximize'**
+  String get windowMaximize;
+
+  /// English UI text for windowMinimize.
+  ///
+  /// In en, this message translates to:
+  /// **'Minimize'**
+  String get windowMinimize;
+
+  /// English UI text for windowRestore.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore down'**
+  String get windowRestore;
+
+  /// Accessibility label for desktop system bar status cluster.
+  ///
+  /// In en, this message translates to:
+  /// **'Status'**
+  String get statusCluster;
+
+  /// Accessibility label for battery status with percentage.
+  ///
+  /// In en, this message translates to:
+  /// **'Battery {percent}%'**
+  String statusBatteryLevel(int percent);
+
+  /// Accessibility label for battery status while charging.
+  ///
+  /// In en, this message translates to:
+  /// **'Battery {percent}%, charging'**
+  String statusBatteryLevelCharging(int percent);
+
+  /// Accessibility label for volume status with percentage.
+  ///
+  /// In en, this message translates to:
+  /// **'Volume {percent}%'**
+  String statusVolumeLevel(int percent);
+
+  /// Accessibility label for muted volume.
+  ///
+  /// In en, this message translates to:
+  /// **'Volume muted'**
+  String get statusVolumeMuted;
+
+  /// Accessibility label for Wi-Fi connection with SSID and signal strength.
+  ///
+  /// In en, this message translates to:
+  /// **'Wi-Fi: {network}, {strength}% signal'**
+  String statusNetworkWifi(String network, int strength);
+
+  /// Accessibility label for Wi-Fi connection with SSID.
+  ///
+  /// In en, this message translates to:
+  /// **'Wi-Fi: {network}'**
+  String statusNetworkWifiNoSignal(String network);
+
+  /// Accessibility label for connected network.
+  ///
+  /// In en, this message translates to:
+  /// **'Network connected'**
+  String get statusNetworkOnline;
+
+  /// Accessibility label for connecting network status.
+  ///
+  /// In en, this message translates to:
+  /// **'Connecting to network'**
+  String get statusNetworkConnecting;
+
+  /// Accessibility label for disconnected network.
+  ///
+  /// In en, this message translates to:
+  /// **'Network disconnected'**
+  String get statusNetworkDisconnected;
+
+  /// Accessibility label for disabled wireless network.
+  ///
+  /// In en, this message translates to:
+  /// **'Wi-Fi is off'**
+  String get statusNetworkDisabled;
+
+  /// Accessibility label for unavailable network service.
+  ///
+  /// In en, this message translates to:
+  /// **'Network unavailable'**
+  String get statusNetworkUnavailable;
+
+  /// Accessibility label for the desktop status cluster when the control center is closed.
+  ///
+  /// In en, this message translates to:
+  /// **'Open control center'**
+  String get statusClusterOpenControlCenter;
+
+  /// Accessibility label for the desktop status cluster when the control center is open.
+  ///
+  /// In en, this message translates to:
+  /// **'Close control center'**
+  String get statusClusterCloseControlCenter;
+
+  /// Label for settings toggle allowing edge hover to open launcher and dashboard panels.
+  ///
+  /// In en, this message translates to:
+  /// **'Screen edge hover opens panels'**
+  String get settingsEdgeHoverPanels;
+
+  /// Description for settings toggle allowing edge hover to open launcher and dashboard panels.
+  ///
+  /// In en, this message translates to:
+  /// **'Open the launcher or dashboard when hovering over screen edges.'**
+  String get settingsEdgeHoverPanelsDescription;
+
+  /// Accessibility label for an open window button on the desktop taskbar.
+  ///
+  /// In en, this message translates to:
+  /// **'Window {windowTitle}'**
+  String taskbarWindowButton(String windowTitle);
+
+  /// Accessibility label for an active window button on the desktop taskbar.
+  ///
+  /// In en, this message translates to:
+  /// **'{windowTitle} - Active'**
+  String taskbarWindowActive(String windowTitle);
+
+  /// Accessibility label for a minimized window button on the desktop taskbar.
+  ///
+  /// In en, this message translates to:
+  /// **'{windowTitle} - Minimized'**
+  String taskbarWindowMinimized(String windowTitle);
+
+  /// Accessibility action label to minimize a window from the desktop taskbar.
+  ///
+  /// In en, this message translates to:
+  /// **'Minimize {windowTitle}'**
+  String taskbarWindowMinimize(String windowTitle);
+
+  /// Accessibility action label to restore a minimized window from the desktop taskbar.
+  ///
+  /// In en, this message translates to:
+  /// **'Restore {windowTitle}'**
+  String taskbarWindowRestore(String windowTitle);
+
+  /// Accessibility label for a desktop taskbar window preview card.
+  ///
+  /// In en, this message translates to:
+  /// **'{windowTitle} preview'**
+  String taskbarPreviewTitle(String windowTitle);
+
+  /// Accessibility label for the close button on a desktop taskbar window preview card.
+  ///
+  /// In en, this message translates to:
+  /// **'Close {windowTitle}'**
+  String taskbarPreviewClose(String windowTitle);
+
+  /// Accessibility and tooltip label to expand the hidden tray overflow panel.
+  ///
+  /// In en, this message translates to:
+  /// **'Show hidden icons'**
+  String get trayOverflowExpand;
+
+  /// Accessibility and tooltip label to collapse the hidden tray overflow panel.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide icons'**
+  String get trayOverflowCollapse;
+
+  /// Accessibility and tooltip label for the tray overflow chevron button.
+  ///
+  /// In en, this message translates to:
+  /// **'Hidden icons'**
+  String get trayOverflowToggle;
+
+  /// Accessibility label for a status notifier tray item.
+  ///
+  /// In en, this message translates to:
+  /// **'Tray item {name}'**
+  String trayItemSemanticLabel(String name);
+
+  /// Accessibility label for a tray item requiring user attention.
+  ///
+  /// In en, this message translates to:
+  /// **'Tray item {name} (attention required)'**
+  String trayItemNeedsAttention(String name);
 }
 
 class _AppLocalizationsDelegate

@@ -9,6 +9,7 @@ import '../models/denial_window.dart';
 import '../models/denial_window_event.dart';
 import '../models/shell_popup_placement.dart';
 import 'desktop_overview_layout.dart';
+import 'desktop_window_titlebar.dart';
 
 abstract final class DesktopMetrics {
   static const double frameBorder = 1.0;
@@ -16,6 +17,16 @@ abstract final class DesktopMetrics {
   static const double panelMargin = 14.0;
   static const double edgeTriggerWidth = 8.0;
   static const double edgeTriggerExtent = 96.0;
+
+  /// Height of the control centre panel.
+  ///
+  /// [DesktopDashboard] is a fixed-height column whose only flexible children
+  /// are the Wi-Fi and Bluetooth cards, and both bottom out at an empty state
+  /// that cannot be compressed. This is therefore a content measurement, not a
+  /// taste one: it is the height at which those two cards still clear that
+  /// floor, and `desktop_dashboard_test.dart` asserts they do. Every fixed card
+  /// added above them has to be paid for here.
+  static const double dashboardHeight = 820.0;
 
   /// Clamps the configured system bar strip to the visible canvas. The strip
   /// itself comes from [DisplayLayout.systemBarRect]; hidden bars stay
@@ -31,41 +42,84 @@ abstract final class DesktopMetrics {
   static Rect launcherRect(
     Size viewSize, {
     Rect? outputRect,
-    ShellPopupPlacement placement = const ShellPopupPlacement(
-      anchor: ShellPopupAnchor.topLeft,
-      width: 680,
-      height: 620,
-      margin: panelMargin,
-    ),
+    Rect? systemBarRect,
+    SystemBarSide? systemBarSide,
+    ShellPopupPlacement placement = ShellPopupPlacement.desktopStartMenu,
   }) {
-    return placement.resolve(_outputBounds(viewSize, outputRect));
+    return placement.resolve(
+      _outputBounds(
+        viewSize,
+        outputRect,
+        systemBarRect: systemBarRect,
+        systemBarSide: systemBarSide,
+      ),
+    );
   }
 
   static Rect dashboardRect(
     Size viewSize, {
     Rect? outputRect,
+    Rect? systemBarRect,
+    SystemBarSide? systemBarSide,
     ShellPopupPlacement placement = const ShellPopupPlacement(
       anchor: ShellPopupAnchor.bottomLeft,
       width: 470,
-      height: 620,
+      height: dashboardHeight,
       margin: panelMargin,
     ),
   }) {
-    return placement.resolve(_outputBounds(viewSize, outputRect));
+    final bounds = _outputBounds(
+      viewSize,
+      outputRect,
+      systemBarRect: systemBarRect,
+      systemBarSide: systemBarSide,
+    );
+    final effectiveHeight = placement.height <= 640.0
+        ? math.min(dashboardHeight, math.max(620.0, bounds.height - 80.0))
+        : placement.height;
+    final effectivePlacement = placement.copyWith(height: effectiveHeight);
+    return effectivePlacement.resolve(bounds);
+  }
+
+  static Rect calendarRect(
+    Size viewSize, {
+    Rect? outputRect,
+    Rect? systemBarRect,
+    SystemBarSide? systemBarSide,
+    ShellPopupPlacement placement = const ShellPopupPlacement(
+      anchor: ShellPopupAnchor.bottomRight,
+      width: 360,
+      height: 560,
+      margin: panelMargin,
+    ),
+  }) {
+    final bounds = _outputBounds(
+      viewSize,
+      outputRect,
+      systemBarRect: systemBarRect,
+      systemBarSide: systemBarSide,
+    );
+    final effectiveHeight = placement.height <= 480.0
+        ? math.min(560.0, math.max(400.0, bounds.height - 80.0))
+        : placement.height;
+    final effectivePlacement = placement.copyWith(height: effectiveHeight);
+    return effectivePlacement.resolve(bounds);
   }
 
   static Rect launcherTriggerRect(
     Size viewSize, {
     Rect? outputRect,
-    ShellPopupPlacement placement = const ShellPopupPlacement(
-      anchor: ShellPopupAnchor.topLeft,
-      width: 680,
-      height: 620,
-      margin: panelMargin,
-    ),
+    Rect? systemBarRect,
+    SystemBarSide? systemBarSide,
+    ShellPopupPlacement placement = ShellPopupPlacement.desktopStartMenu,
   }) {
     return placement.edgeTrigger(
-      _outputBounds(viewSize, outputRect),
+      _outputBounds(
+        viewSize,
+        outputRect,
+        systemBarRect: systemBarRect,
+        systemBarSide: systemBarSide,
+      ),
       thickness: edgeTriggerWidth,
       extent: edgeTriggerExtent,
     );
@@ -74,23 +128,97 @@ abstract final class DesktopMetrics {
   static Rect dashboardTriggerRect(
     Size viewSize, {
     Rect? outputRect,
+    Rect? systemBarRect,
+    SystemBarSide? systemBarSide,
     ShellPopupPlacement placement = const ShellPopupPlacement(
       anchor: ShellPopupAnchor.bottomLeft,
       width: 470,
-      height: 620,
+      height: dashboardHeight,
       margin: panelMargin,
     ),
   }) {
-    return placement.edgeTrigger(
-      _outputBounds(viewSize, outputRect),
+    final bounds = _outputBounds(
+      viewSize,
+      outputRect,
+      systemBarRect: systemBarRect,
+      systemBarSide: systemBarSide,
+    );
+    final effectiveHeight = placement.height <= 640.0
+        ? math.min(dashboardHeight, math.max(620.0, bounds.height - 80.0))
+        : placement.height;
+    final effectivePlacement = placement.copyWith(height: effectiveHeight);
+    return effectivePlacement.edgeTrigger(
+      bounds,
       thickness: edgeTriggerWidth,
       extent: edgeTriggerExtent,
     );
   }
 
-  static Rect _outputBounds(Size viewSize, Rect? outputRect) {
+  static Rect _outputBounds(
+    Size viewSize,
+    Rect? outputRect, {
+    Rect? systemBarRect,
+    SystemBarSide? systemBarSide,
+  }) {
     final canvas = Offset.zero & viewSize;
-    return (outputRect ?? canvas).intersect(canvas);
+    final bounds = (outputRect ?? canvas).intersect(canvas);
+    if (bounds.isEmpty) {
+      return Rect.zero;
+    }
+    if (systemBarRect != null &&
+        !systemBarRect.isEmpty &&
+        systemBarSide != null &&
+        systemBarSide != SystemBarSide.hidden) {
+      switch (systemBarSide) {
+        case SystemBarSide.left:
+          final safeLeft = math.min(
+            bounds.right,
+            math.max(bounds.left, systemBarRect.right),
+          );
+          return Rect.fromLTRB(
+            safeLeft,
+            bounds.top,
+            bounds.right,
+            bounds.bottom,
+          );
+        case SystemBarSide.top:
+          final safeTop = math.min(
+            bounds.bottom,
+            math.max(bounds.top, systemBarRect.bottom),
+          );
+          return Rect.fromLTRB(
+            bounds.left,
+            safeTop,
+            bounds.right,
+            bounds.bottom,
+          );
+        case SystemBarSide.right:
+          final safeRight = math.max(
+            bounds.left,
+            math.min(bounds.right, systemBarRect.left),
+          );
+          return Rect.fromLTRB(
+            bounds.left,
+            bounds.top,
+            safeRight,
+            bounds.bottom,
+          );
+        case SystemBarSide.bottom:
+          final safeBottom = math.max(
+            bounds.top,
+            math.min(bounds.bottom, systemBarRect.top),
+          );
+          return Rect.fromLTRB(
+            bounds.left,
+            bounds.top,
+            bounds.right,
+            safeBottom,
+          );
+        case SystemBarSide.hidden:
+          return bounds;
+      }
+    }
+    return bounds;
   }
 
   static Rect windowWorkArea(Size viewSize) {
@@ -98,7 +226,7 @@ abstract final class DesktopMetrics {
   }
 }
 
-enum DesktopPanel { none, launcher, dashboard }
+enum DesktopPanel { none, launcher, dashboard, calendar }
 
 @immutable
 class DesktopOverviewState {
@@ -135,9 +263,11 @@ class DesktopWindowPlacement {
     this.fullscreen = false,
     this.serverSideDecorated = true,
     this.dragging = false,
+    this.shellCorrectedInitialGeometry = false,
+    bool nativeGrab = false,
     this.restoreFrame,
     this.fullscreenRestoreFrame,
-  });
+  }) : nativeGrab = dragging && nativeGrab;
 
   final int objectId;
   final Rect frame;
@@ -149,13 +279,40 @@ class DesktopWindowPlacement {
   final bool fullscreen;
   final bool serverSideDecorated;
   final bool dragging;
+  final bool shellCorrectedInitialGeometry;
+
+  /// Whether the compositor, not the shell, authors the frame while [dragging].
+  ///
+  /// A titlebar drag and a client-requested interactive move both set
+  /// [dragging], but they place the window from opposite sides: the shell owns
+  /// the rectangle during the first and Rust owns it during the second. Only
+  /// Rust's own grab may be left unreported — a titlebar drag that never
+  /// reaches Rust leaves the compositor's window position at the pre-drag
+  /// origin, and the next grab it starts itself teleports the window back
+  /// there. Cannot be set without [dragging]; the constructor enforces it so
+  /// every site that ends a drag also ends its ownership.
+  final bool nativeGrab;
+
   final Rect? restoreFrame;
   final Rect? fullscreenRestoreFrame;
 
-  double get frameBorder =>
-      fullscreen || !serverSideDecorated ? 0.0 : DesktopMetrics.frameBorder;
+  /// Whether the shell is mid-drag and still owes Rust the resulting position.
+  bool get shellDragging => dragging && !nativeGrab;
 
-  Rect get contentRect => frame.deflate(frameBorder);
+  bool get decorated => !fullscreen && serverSideDecorated;
+
+  double get frameBorder => decorated ? DesktopMetrics.frameBorder : 0.0;
+
+  double get titlebarHeight => decorated ? DesktopTitlebarMetrics.height : 0.0;
+
+  EdgeInsets get frameInsets => EdgeInsets.fromLTRB(
+    frameBorder,
+    frameBorder + titlebarHeight,
+    frameBorder,
+    frameBorder,
+  );
+
+  Rect get contentRect => frameInsets.deflateRect(frame);
 
   DesktopWindowPlacement copyWith({
     Rect? frame,
@@ -167,6 +324,8 @@ class DesktopWindowPlacement {
     bool? fullscreen,
     bool? serverSideDecorated,
     bool? dragging,
+    bool? shellCorrectedInitialGeometry,
+    bool? nativeGrab,
     Rect? restoreFrame,
     bool clearRestoreFrame = false,
     Rect? fullscreenRestoreFrame,
@@ -183,6 +342,9 @@ class DesktopWindowPlacement {
       fullscreen: fullscreen ?? this.fullscreen,
       serverSideDecorated: serverSideDecorated ?? this.serverSideDecorated,
       dragging: dragging ?? this.dragging,
+      shellCorrectedInitialGeometry:
+          shellCorrectedInitialGeometry ?? this.shellCorrectedInitialGeometry,
+      nativeGrab: nativeGrab ?? this.nativeGrab,
       restoreFrame: clearRestoreFrame
           ? null
           : restoreFrame ?? this.restoreFrame,
@@ -269,6 +431,7 @@ class DesktopWorkspaceState {
 
   bool get launcherOpen => panel == DesktopPanel.launcher;
   bool get dashboardOpen => panel == DesktopPanel.dashboard;
+  bool get calendarOpen => panel == DesktopPanel.calendar;
   bool get overviewActive => overview != null;
 
   bool isInOverview(int objectId) => overview?.contains(objectId) ?? false;
@@ -373,7 +536,14 @@ class DesktopWorkspaceController extends Notifier<DesktopWorkspaceState> {
   @override
   DesktopWorkspaceState build() => DesktopWorkspaceState.initial();
 
-  final Map<int, Offset> _moveRemainders = <int, Offset>{};
+  /// Live state for one drag: the sub-pixel remainder not yet applied, and the
+  /// frame the gesture started from. The origin fixes how far the window is
+  /// allowed to overhang an edge for the rest of the gesture, so a window the
+  /// compositor left hanging over one tracks the pointer instead of being
+  /// snapped back — see [_clampMovedFrame]. Both live and die together, hence
+  /// one map.
+  final Map<int, ({Offset remainder, Rect origin})> _moveGestures =
+      <int, ({Offset remainder, Rect origin})>{};
   final Map<int, Rect> _pendingNativeFrames = <int, Rect>{};
   // Native ordering prevents stale placement events but has no visual effect,
   // so keep it outside provider state and its widget rebuild boundary.
@@ -447,12 +617,12 @@ class DesktopWorkspaceController extends Notifier<DesktopWorkspaceState> {
     final viewMetricsChanged = pixelRatioChanged || state.viewSize != viewSize;
     if (pixelRatioChanged) {
       _devicePixelRatio = nextPixelRatio;
-      _moveRemainders.clear();
+      _moveGestures.clear();
     }
 
     final userWindows = windows.where((window) => window.isUserApp).toList();
     final activeIds = {for (final window in userWindows) window.objectId};
-    _moveRemainders.removeWhere((objectId, _) => !activeIds.contains(objectId));
+    _moveGestures.removeWhere((objectId, _) => !activeIds.contains(objectId));
     _pendingNativeFrames.removeWhere(
       (objectId, _) => !activeIds.contains(objectId),
     );
@@ -473,16 +643,28 @@ class DesktopWorkspaceController extends Notifier<DesktopWorkspaceState> {
         if (nativeGeometry == null) {
           continue;
         }
+        final rawFrame = _initialFrame(
+          nativeGeometry,
+          serverSideDecorated: window.serverSideDecorated,
+        );
+        final frame = _ensureTitlebarVisible(
+          rawFrame,
+          contentTop: nativeGeometry.top,
+        );
         next[window.objectId] = DesktopWindowPlacement(
           objectId: window.objectId,
-          frame: _initialFrame(
-            nativeGeometry,
-            serverSideDecorated: window.serverSideDecorated,
-          ),
+          frame: frame,
           z: nextZ++,
           monitorId: window.monitorId,
           serverSideDecorated: window.serverSideDecorated,
+          shellCorrectedInitialGeometry: frame != rawFrame,
         );
+        // The compositor does not know about the shell titlebar. Keep the
+        // shell frame stable until it echoes this one-time corrected client
+        // geometry back through the normal snapshot path.
+        if (frame != rawFrame) {
+          _pendingNativeFrames[window.objectId] = frame;
+        }
         _nativeSequences[window.objectId] = snapshotSequence;
         changed = true;
         continue;
@@ -495,6 +677,7 @@ class DesktopWorkspaceController extends Notifier<DesktopWorkspaceState> {
         var frame = existing.frame;
         var fullscreenRestoreFrame = existing.fullscreenRestoreFrame;
         var monitorId = existing.monitorId;
+        var nativeAcknowledgedPending = false;
         final decorationChanged =
             existing.serverSideDecorated != window.serverSideDecorated;
         if (nativeGeometry != null) {
@@ -505,7 +688,7 @@ class DesktopWorkspaceController extends Notifier<DesktopWorkspaceState> {
                   serverSideDecorated: window.serverSideDecorated,
                 );
           final pendingFrame = _pendingNativeFrames[window.objectId];
-          final nativeAcknowledgedPending =
+          nativeAcknowledgedPending =
               pendingFrame != null &&
               _framesApproximatelyEqual(nativeFrame, pendingFrame);
           if (nativeAcknowledgedPending) {
@@ -528,10 +711,16 @@ class DesktopWorkspaceController extends Notifier<DesktopWorkspaceState> {
             }
           }
         } else if (decorationChanged && !existing.fullscreen) {
-          frame = _initialFrame(
-            existing.contentRect,
-            serverSideDecorated: window.serverSideDecorated,
+          frame = _ensureTitlebarVisible(
+            _initialFrame(
+              existing.contentRect,
+              serverSideDecorated: window.serverSideDecorated,
+            ),
+            contentTop: existing.contentRect.top,
           );
+          if (frame != existing.frame) {
+            _pendingNativeFrames[window.objectId] = frame;
+          }
           monitorId = window.monitorId;
         } else if (_pendingNativeFrames[window.objectId] == null) {
           monitorId = window.monitorId;
@@ -541,11 +730,16 @@ class DesktopWorkspaceController extends Notifier<DesktopWorkspaceState> {
           monitorId: monitorId,
           serverSideDecorated: window.serverSideDecorated,
           fullscreenRestoreFrame: fullscreenRestoreFrame,
+          shellCorrectedInitialGeometry: nativeAcknowledgedPending
+              ? false
+              : existing.shellCorrectedInitialGeometry,
         );
         if (current.frame != existing.frame ||
             current.monitorId != existing.monitorId ||
             current.serverSideDecorated != existing.serverSideDecorated ||
-            current.fullscreenRestoreFrame != existing.fullscreenRestoreFrame) {
+            current.fullscreenRestoreFrame != existing.fullscreenRestoreFrame ||
+            current.shellCorrectedInitialGeometry !=
+                existing.shellCorrectedInitialGeometry) {
           next[window.objectId] = current;
           changed = true;
         }
@@ -556,10 +750,10 @@ class DesktopWorkspaceController extends Notifier<DesktopWorkspaceState> {
       }
 
       final frame = current.fullscreen
-          ? _clampFrame(current.frame, viewSize)
+          ? _clampFrame(current.frame, viewSize, insets: current.frameInsets)
           : current.maximized
           ? _maximizedFrame(current.monitorId, viewSize)
-          : _clampFrame(current.frame, viewSize);
+          : _clampFrame(current.frame, viewSize, insets: current.frameInsets);
       if (frame != current.frame) {
         _pendingNativeFrames[window.objectId] = frame;
         next[window.objectId] = current.copyWith(frame: frame);
@@ -667,7 +861,7 @@ class DesktopWorkspaceController extends Notifier<DesktopWorkspaceState> {
       return;
     }
 
-    _moveRemainders.clear();
+    _moveGestures.clear();
     _overviewDragOrigins.clear();
     final settledPlacements = <int, DesktopWindowPlacement>{
       for (final placement in state.placements.values)
@@ -747,7 +941,11 @@ class DesktopWorkspaceController extends Notifier<DesktopWorkspaceState> {
       return;
     }
     final frames = Map<int, Rect>.of(overview.frames);
-    frames[objectId] = _clampFrame(previewFrame.shift(delta), state.viewSize);
+    frames[objectId] = _clampFrame(
+      previewFrame.shift(delta),
+      state.viewSize,
+      enforceMinimumSize: false,
+    );
     state = state.copyWith(
       overview: DesktopOverviewState(
         monitorId: overview.monitorId,
@@ -794,14 +992,18 @@ class DesktopWorkspaceController extends Notifier<DesktopWorkspaceState> {
     final sourceOutput =
         outputBounds[placement.monitorId] ?? overview.backgroundBounds;
     final outputDelta = targetOutput.topLeft - sourceOutput.topLeft;
-    Rect? shiftedRestoreFrame(Rect? frame) {
+    Rect? shiftedRestoreFrame(Rect? frame, {bool isFullscreenRestore = false}) {
       if (frame == null) {
         return null;
       }
+      final insets = isFullscreenRestore
+          ? placement.copyWith(fullscreen: false).frameInsets
+          : placement.frameInsets;
       return _clampFrame(
         frame.shift(outputDelta),
         state.viewSize,
         bounds: targetWorkArea,
+        insets: insets,
       );
     }
 
@@ -817,10 +1019,14 @@ class DesktopWorkspaceController extends Notifier<DesktopWorkspaceState> {
             ),
             state.viewSize,
             bounds: targetWorkArea,
+            insets: placement.frameInsets,
           );
     final fullscreenRestoreFrame = placement.fullscreen && placement.maximized
         ? targetWorkArea
-        : shiftedRestoreFrame(placement.fullscreenRestoreFrame);
+        : shiftedRestoreFrame(
+            placement.fullscreenRestoreFrame,
+            isFullscreenRestore: true,
+          );
     final next = Map<int, DesktopWindowPlacement>.of(state.placements);
     final transferred = placement.copyWith(
       frame: destinationFrame,
@@ -882,16 +1088,20 @@ class DesktopWorkspaceController extends Notifier<DesktopWorkspaceState> {
       return;
     }
 
-    final pendingDelta = (_moveRemainders[objectId] ?? Offset.zero) + delta;
+    final gesture = _moveGestures[objectId];
+    final origin = gesture?.origin ?? placement.frame;
+    final pendingDelta = (gesture?.remainder ?? Offset.zero) + delta;
     final snappedDelta = _snapOffset(pendingDelta);
     if (snappedDelta == Offset.zero) {
-      _moveRemainders[objectId] = pendingDelta;
+      _moveGestures[objectId] = (remainder: pendingDelta, origin: origin);
       return;
     }
 
-    final frame = _clampFrame(
+    final frame = _clampMovedFrame(
       placement.frame.shift(snappedDelta),
+      origin,
       state.viewSize,
+      insets: placement.frameInsets,
     );
     final appliedDelta = frame.topLeft - placement.frame.topLeft;
     var remainder = pendingDelta - appliedDelta;
@@ -901,7 +1111,7 @@ class DesktopWorkspaceController extends Notifier<DesktopWorkspaceState> {
     if ((appliedDelta.dy - snappedDelta.dy).abs() > 0.000001) {
       remainder = Offset(remainder.dx, 0.0);
     }
-    _moveRemainders[objectId] = remainder;
+    _moveGestures[objectId] = (remainder: remainder, origin: origin);
 
     if (frame == placement.frame) {
       return;
@@ -923,17 +1133,70 @@ class DesktopWorkspaceController extends Notifier<DesktopWorkspaceState> {
         placement.minimized) {
       return;
     }
-    _moveRemainders[objectId] = Offset.zero;
+    _moveGestures[objectId] = (remainder: Offset.zero, origin: placement.frame);
     final next = Map<int, DesktopWindowPlacement>.of(state.placements);
-    next[objectId] = placement.copyWith(dragging: true);
+    next[objectId] = placement.copyWith(dragging: true, nativeGrab: false);
     state = state.copyWith(placements: next);
+  }
+
+  void beginMaximizedDrag(
+    int objectId, {
+    required Offset pointerPosition,
+    required double pointerFractionX,
+    double pointerOffsetY = DesktopTitlebarMetrics.height / 2,
+  }) {
+    if (state.overviewActive) {
+      return;
+    }
+    final placement = state.placements[objectId];
+    if (placement == null || !placement.maximized || placement.fullscreen) {
+      return;
+    }
+    final restoreSize =
+        placement.restoreFrame?.size ??
+        _clampFrame(
+          const Rect.fromLTWH(0, 0, 800, 600),
+          state.viewSize,
+          insets: placement.frameInsets,
+        ).size;
+    final clampedFractionX = pointerFractionX.clamp(0.05, 0.95);
+    final targetLeft =
+        pointerPosition.dx - (restoreSize.width * clampedFractionX);
+    final targetTop = pointerPosition.dy - pointerOffsetY;
+    final targetFrame = _clampFrame(
+      Rect.fromLTWH(
+        targetLeft,
+        targetTop,
+        restoreSize.width,
+        restoreSize.height,
+      ),
+      state.viewSize,
+      insets: placement.frameInsets,
+    );
+    // Tearing a maximized window off the top starts a drag from a frame this
+    // method just clamped, so the gesture begins with no overhang to preserve.
+    _moveGestures[objectId] = (remainder: Offset.zero, origin: targetFrame);
+    final next = Map<int, DesktopWindowPlacement>.of(state.placements);
+    final restored = placement.copyWith(
+      frame: targetFrame,
+      maximized: false,
+      dragging: true,
+      nativeGrab: false,
+      clearRestoreFrame: true,
+    );
+    next[objectId] = restored;
+    _pendingNativeFrames[objectId] = targetFrame;
+    state = state.copyWith(
+      placements: next,
+      clearOverview: state.overviewActive,
+    );
   }
 
   void endMove(int objectId) {
     if (state.overviewActive) {
       return;
     }
-    _moveRemainders.remove(objectId);
+    _moveGestures.remove(objectId);
     final placement = state.placements[objectId];
     if (placement == null || !placement.dragging) {
       return;
@@ -984,6 +1247,7 @@ class DesktopWorkspaceController extends Notifier<DesktopWorkspaceState> {
         monitorId: event.monitorId,
         workspaceId: event.workspaceId,
         dragging: event.phase != DenialWindowPlacementPhase.end,
+        nativeGrab: true,
         fullscreenRestoreFrame: monitorChanged
             ? placement.fullscreenRestoreFrame?.shift(delta)
             : placement.fullscreenRestoreFrame,
@@ -999,6 +1263,7 @@ class DesktopWorkspaceController extends Notifier<DesktopWorkspaceState> {
     final frame = _initialFrame(
       event.contentRect,
       serverSideDecorated: placement.serverSideDecorated,
+      fullscreen: placement.fullscreen,
     );
     final next = Map<int, DesktopWindowPlacement>.of(state.placements);
     next[objectId] = placement.copyWith(
@@ -1009,6 +1274,7 @@ class DesktopWorkspaceController extends Notifier<DesktopWorkspaceState> {
       maximized: false,
       fullscreen: false,
       dragging: event.phase != DenialWindowPlacementPhase.end,
+      nativeGrab: true,
       clearRestoreFrame: true,
       clearFullscreenRestoreFrame: true,
     );
@@ -1084,13 +1350,14 @@ class DesktopWorkspaceController extends Notifier<DesktopWorkspaceState> {
     if (placement == null || placement.fullscreen) {
       return;
     }
-    _moveRemainders.remove(objectId);
+    _moveGestures.remove(objectId);
     final next = Map<int, DesktopWindowPlacement>.of(state.placements);
     if (placement.maximized) {
       final restored = placement.copyWith(
         frame: _clampFrame(
           placement.restoreFrame ?? placement.frame,
           state.viewSize,
+          insets: placement.frameInsets,
         ),
         maximized: false,
         dragging: false,
@@ -1138,7 +1405,7 @@ class DesktopWorkspaceController extends Notifier<DesktopWorkspaceState> {
       return;
     }
 
-    _moveRemainders.remove(objectId);
+    _moveGestures.remove(objectId);
     final next = Map<int, DesktopWindowPlacement>.of(state.placements);
     final fullscreen = placement.copyWith(
       frame: fullscreenFrame,
@@ -1156,12 +1423,14 @@ class DesktopWorkspaceController extends Notifier<DesktopWorkspaceState> {
   }
 
   void _exitFullscreen(int objectId, DesktopWindowPlacement placement) {
-    _moveRemainders.remove(objectId);
+    _moveGestures.remove(objectId);
     final next = Map<int, DesktopWindowPlacement>.of(state.placements);
+    final restoredPlacement = placement.copyWith(fullscreen: false);
     final restored = placement.copyWith(
       frame: _clampFrame(
         placement.fullscreenRestoreFrame ?? placement.frame,
         state.viewSize,
+        insets: restoredPlacement.frameInsets,
       ),
       fullscreen: false,
       dragging: false,
@@ -1183,30 +1452,86 @@ class DesktopWorkspaceController extends Notifier<DesktopWorkspaceState> {
     showPanel(DesktopPanel.none);
   }
 
-  Rect _initialFrame(Rect contentRect, {required bool serverSideDecorated}) {
-    if (!serverSideDecorated) {
+  Rect _initialFrame(
+    Rect contentRect, {
+    required bool serverSideDecorated,
+    bool fullscreen = false,
+  }) {
+    if (!serverSideDecorated || fullscreen) {
       return contentRect;
     }
     return Rect.fromLTRB(
       contentRect.left - DesktopMetrics.frameBorder,
-      contentRect.top - DesktopMetrics.frameBorder,
+      contentRect.top -
+          DesktopMetrics.frameBorder -
+          DesktopTitlebarMetrics.height,
       contentRect.right + DesktopMetrics.frameBorder,
       contentRect.bottom + DesktopMetrics.frameBorder,
     );
   }
 
-  Rect _clampFrame(Rect frame, Size viewSize, {Rect? bounds}) {
+  /// Keeps a newly mapped decorated window's titlebar on the visible canvas.
+  /// The client size is intentionally unchanged; the resulting content
+  /// overhangs the bottom edge for a full-height client rather than being
+  /// resized to fit.
+  Rect _ensureTitlebarVisible(Rect frame, {required double contentTop}) {
+    // Negative global coordinates belong to an output positioned above the
+    // current canvas; do not move those windows just because their titlebar is
+    // outside this output's local viewport.
+    if (frame.top >= 0.0 || contentTop < 0.0) {
+      return frame;
+    }
+    return frame.shift(Offset(0.0, -frame.top));
+  }
+
+  Rect _clampFrame(
+    Rect frame,
+    Size viewSize, {
+    Rect? bounds,
+    EdgeInsets insets = EdgeInsets.zero,
+    bool enforceMinimumSize = true,
+  }) {
     final canvas = Offset.zero & viewSize;
     final requestedBounds = bounds?.intersect(canvas);
     final workArea = requestedBounds == null || requestedBounds.isEmpty
         ? DesktopMetrics.windowWorkArea(viewSize)
         : requestedBounds;
-    final workLeft = _snapToPixel(workArea.left);
-    final workTop = _snapToPixel(workArea.top);
-    final workRight = _snapToPixel(workArea.right);
-    final workBottom = _snapToPixel(workArea.bottom);
-    final width = _snapToPixel(math.min(frame.width, workRight - workLeft));
-    final height = _snapToPixel(math.min(frame.height, workBottom - workTop));
+    // `frame` is the shell's outer frame, which extends `insets` beyond the
+    // client rectangle the work area describes — 35 px above it once a
+    // titlebar exists. Outsetting the work area by the same insets keeps this
+    // a clamp on the client content, which is what it meant when the insets
+    // were a symmetric 1 px border. Clamping the frame directly instead would
+    // shove any window whose content starts at the top of the screen down by
+    // the titlebar height, and shrink a full-height window. Drags do not come
+    // through here at all; see [_clampMovedFrame].
+    final workLeft = _snapToPixel(workArea.left - insets.left);
+    final workTop = _snapToPixel(workArea.top - insets.top);
+    final workRight = _snapToPixel(workArea.right + insets.right);
+    final workBottom = _snapToPixel(workArea.bottom + insets.bottom);
+    final maxAvailableWidth = math.max(0.0, workRight - workLeft);
+    final maxAvailableHeight = math.max(0.0, workBottom - workTop);
+    final width = enforceMinimumSize
+        ? _snapToPixel(
+            frame.width.clamp(
+              math.min(
+                _snapToPixel(insets.horizontal + 64.0),
+                maxAvailableWidth,
+              ),
+              maxAvailableWidth,
+            ),
+          )
+        : _snapToPixel(math.min(frame.width, maxAvailableWidth));
+    final height = enforceMinimumSize
+        ? _snapToPixel(
+            frame.height.clamp(
+              math.min(
+                _snapToPixel(insets.vertical + 64.0),
+                maxAvailableHeight,
+              ),
+              maxAvailableHeight,
+            ),
+          )
+        : _snapToPixel(math.min(frame.height, maxAvailableHeight));
     final left = _snapToPixel(
       frame.left,
     ).clamp(workLeft, math.max(workLeft, workRight - width)).toDouble();
@@ -1214,6 +1539,64 @@ class DesktopWorkspaceController extends Notifier<DesktopWorkspaceState> {
       frame.top,
     ).clamp(workTop, math.max(workTop, workBottom - height)).toDouble();
     return Rect.fromLTWH(left, top, width, height);
+  }
+
+  /// Position-only clamp for a drag in progress.
+  ///
+  /// A drag must neither resize the window nor teleport it. Frames installed
+  /// from native geometry never pass through [_clampFrame], so the compositor
+  /// is free to map a window partly off an edge or larger than the work area;
+  /// running the shifted frame through [_clampFrame] then yanked it back in —
+  /// and shrank it — on the first drag. This keeps [frame]'s size and only
+  /// forbids overhanging an edge further than [origin] already does, so a
+  /// window that starts fully on screen still cannot be dragged off it, and one
+  /// that starts off screen converges back as it is dragged in.
+  Rect _clampMovedFrame(
+    Rect frame,
+    Rect origin,
+    Size viewSize, {
+    EdgeInsets insets = EdgeInsets.zero,
+  }) {
+    final workArea = DesktopMetrics.windowWorkArea(viewSize);
+    return Rect.fromLTWH(
+      _clampAlongAxis(
+        _snapToPixel(frame.left),
+        origin: origin.left,
+        extent: frame.width,
+        lower: _snapToPixel(workArea.left - insets.left),
+        upper: _snapToPixel(workArea.right + insets.right),
+      ),
+      _clampAlongAxis(
+        _snapToPixel(frame.top),
+        origin: origin.top,
+        extent: frame.height,
+        lower: _snapToPixel(workArea.top - insets.top),
+        upper: _snapToPixel(workArea.bottom + insets.bottom),
+      ),
+      frame.width,
+      frame.height,
+    );
+  }
+
+  /// Clamps one axis so an [extent]-long span never overhangs [lower] or
+  /// [upper] by more than the same span placed at [origin] already does. A span
+  /// longer than the work area overhangs both ends at once and so cannot move
+  /// without worsening one of them; it stays put rather than being resized.
+  double _clampAlongAxis(
+    double value, {
+    required double origin,
+    required double extent,
+    required double lower,
+    required double upper,
+  }) {
+    final leadingOverhang = math.max(0.0, lower - origin);
+    final trailingOverhang = math.max(0.0, origin + extent - upper);
+    final low = lower - leadingOverhang;
+    final high = upper + trailingOverhang - extent;
+    if (high <= low) {
+      return origin;
+    }
+    return value.clamp(low, high).toDouble();
   }
 
   Offset _snapOffset(Offset offset) {

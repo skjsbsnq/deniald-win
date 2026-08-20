@@ -2887,4 +2887,234 @@ class AppLocalizationsEn extends AppLocalizations {
   String windowUntitled(int windowId) {
     return 'Window $windowId';
   }
+
+  @override
+  String get desktopCalendarTitle => 'Calendar';
+
+  @override
+  String get desktopCalendarOpenPanel => 'Open calendar';
+
+  @override
+  String get desktopCalendarClosePanel => 'Close calendar';
+
+  @override
+  String get desktopCalendarToday => 'Today';
+
+  @override
+  String get desktopCalendarPreviousMonth => 'Previous month';
+
+  @override
+  String get desktopCalendarNextMonth => 'Next month';
+
+  @override
+  String get desktopCalendarNoNotifications => 'No new notifications';
+
+  @override
+  String get desktopCalendarViewAllNotifications => 'View all';
+
+  @override
+  String get desktopStartButton => 'Start';
+
+  @override
+  String get desktopStartButtonOpen => 'Open Start menu';
+
+  @override
+  String get desktopStartButtonClose => 'Close Start menu';
+
+  @override
+  String get desktopStartMenuSearchHint => 'Type here to search';
+
+  @override
+  String get desktopStartMenuExpandRail => 'Expand';
+
+  @override
+  String get desktopStartMenuCollapseRail => 'Collapse';
+
+  @override
+  String get desktopStartMenuUser => 'User';
+
+  @override
+  String get desktopStartMenuDocuments => 'Documents';
+
+  @override
+  String get desktopStartMenuPictures => 'Pictures';
+
+  @override
+  String get desktopStartMenuTilesHint =>
+      'Right-click an application on the left to pin it here';
+
+  @override
+  String get desktopTilePinToStart => 'Pin to Start';
+
+  @override
+  String get desktopTileUnpinFromStart => 'Unpin from Start';
+
+  @override
+  String get desktopTileResize => 'Resize';
+
+  @override
+  String get desktopTileSizeSmall => 'Small';
+
+  @override
+  String get desktopTileSizeMedium => 'Medium';
+
+  @override
+  String get desktopTileSizeWide => 'Wide';
+
+  @override
+  String get desktopTileSizeLarge => 'Large';
+
+  @override
+  String get desktopTileGroupUnnamed => 'Name group';
+
+  @override
+  String get desktopTileGroupRename => 'Rename tile group';
+
+  @override
+  String desktopTilePinnedSemantics(String applicationName) {
+    return 'Tile: $applicationName';
+  }
+
+  @override
+  String get desktopRefreshWifi => 'Refresh Wi-Fi networks';
+
+  @override
+  String get desktopScanWifi => 'Scan Wi-Fi networks';
+
+  @override
+  String get desktopScanningWifiNetworks => 'Scanning Wi-Fi networks…';
+
+  @override
+  String get settingsBarAlignmentCenter => 'Centered';
+
+  @override
+  String get settingsBarAlignmentLeading => 'Left (top when vertical)';
+
+  @override
+  String get settingsBarAlignmentTitle => 'Start button and window buttons';
+
+  @override
+  String get windowClose => 'Close';
+
+  @override
+  String get windowMaximize => 'Maximize';
+
+  @override
+  String get windowMinimize => 'Minimize';
+
+  @override
+  String get windowRestore => 'Restore down';
+
+  @override
+  String get statusCluster => 'Status';
+
+  @override
+  String statusBatteryLevel(int percent) {
+    return 'Battery $percent%';
+  }
+
+  @override
+  String statusBatteryLevelCharging(int percent) {
+    return 'Battery $percent%, charging';
+  }
+
+  @override
+  String statusVolumeLevel(int percent) {
+    return 'Volume $percent%';
+  }
+
+  @override
+  String get statusVolumeMuted => 'Volume muted';
+
+  @override
+  String statusNetworkWifi(String network, int strength) {
+    return 'Wi-Fi: $network, $strength% signal';
+  }
+
+  @override
+  String statusNetworkWifiNoSignal(String network) {
+    return 'Wi-Fi: $network';
+  }
+
+  @override
+  String get statusNetworkOnline => 'Network connected';
+
+  @override
+  String get statusNetworkConnecting => 'Connecting to network';
+
+  @override
+  String get statusNetworkDisconnected => 'Network disconnected';
+
+  @override
+  String get statusNetworkDisabled => 'Wi-Fi is off';
+
+  @override
+  String get statusNetworkUnavailable => 'Network unavailable';
+
+  @override
+  String get statusClusterOpenControlCenter => 'Open control center';
+
+  @override
+  String get statusClusterCloseControlCenter => 'Close control center';
+
+  @override
+  String get settingsEdgeHoverPanels => 'Screen edge hover opens panels';
+
+  @override
+  String get settingsEdgeHoverPanelsDescription =>
+      'Open the launcher or dashboard when hovering over screen edges.';
+
+  @override
+  String taskbarWindowButton(String windowTitle) {
+    return 'Window $windowTitle';
+  }
+
+  @override
+  String taskbarWindowActive(String windowTitle) {
+    return '$windowTitle - Active';
+  }
+
+  @override
+  String taskbarWindowMinimized(String windowTitle) {
+    return '$windowTitle - Minimized';
+  }
+
+  @override
+  String taskbarWindowMinimize(String windowTitle) {
+    return 'Minimize $windowTitle';
+  }
+
+  @override
+  String taskbarWindowRestore(String windowTitle) {
+    return 'Restore $windowTitle';
+  }
+
+  @override
+  String taskbarPreviewTitle(String windowTitle) {
+    return '$windowTitle preview';
+  }
+
+  @override
+  String taskbarPreviewClose(String windowTitle) {
+    return 'Close $windowTitle';
+  }
+
+  @override
+  String get trayOverflowExpand => 'Show hidden icons';
+
+  @override
+  String get trayOverflowCollapse => 'Hide icons';
+
+  @override
+  String get trayOverflowToggle => 'Hidden icons';
+
+  @override
+  String trayItemSemanticLabel(String name) {
+    return 'Tray item $name';
+  }
+
+  @override
+  String trayItemNeedsAttention(String name) {
+    return 'Tray item $name (attention required)';
+  }
 }

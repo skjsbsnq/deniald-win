@@ -18,6 +18,7 @@ import '../input/shell_interaction_registry.dart';
 import '../localization/denial_localizations.dart';
 import '../models/display_layout.dart';
 import '../models/denial_window.dart';
+import 'desktop_window_titlebar.dart';
 import '../platform/denial_bridge.dart';
 import '../services/bluetooth_service.dart';
 import '../services/desktop_power_modes_service.dart';
@@ -2459,7 +2460,14 @@ class _DesktopWindowFrame extends ConsumerWidget {
         ? theme.focusedWindowOpacity
         : theme.unfocusedWindowOpacity;
     final targetContentSize = drawsServerFrame
-        ? frame.deflate(DesktopMetrics.frameBorder).size
+        ? (placement.decorated
+              ? Size(
+                  frame.width - DesktopMetrics.frameBorder * 2,
+                  frame.height -
+                      DesktopMetrics.frameBorder * 2 -
+                      DesktopTitlebarMetrics.height,
+                )
+              : frame.deflate(DesktopMetrics.frameBorder).size)
         : frame.size;
     final resizing = desktopTextureNeedsResizeSmoothing(
       targetSize: targetContentSize,
@@ -2530,19 +2538,108 @@ class _DesktopWindowFrame extends ConsumerWidget {
                                     DesktopMetrics.frameBorder,
                                   )
                                 : EdgeInsets.zero,
-                            child: SizedBox.expand(
-                              child: _DesktopWindowContent(
-                                window: window,
-                                smooth:
-                                    transformed ||
-                                    resizing ||
-                                    placement.dragging,
-                                active: active && !minimized,
-                                localLayoutSize: window.isLocalFlutter
-                                    ? placement.contentRect.size
-                                    : null,
-                              ),
-                            ),
+                            child: placement.decorated
+                                ? Column(
+                                    children: [
+                                      SizedBox(
+                                        height: DesktopTitlebarMetrics.height,
+                                        child: DesktopWindowTitlebar(
+                                          window: window,
+                                          active: active,
+                                          maximized: placement.maximized,
+                                          fullscreen: placement.fullscreen,
+                                          overviewActive: overviewActive,
+                                          onActivate: () => ref
+                                              .read(
+                                                desktopWorkspaceProvider
+                                                    .notifier,
+                                              )
+                                              .activate(window.objectId),
+                                          onBeginMove: () => ref
+                                              .read(
+                                                desktopWorkspaceProvider
+                                                    .notifier,
+                                              )
+                                              .beginMove(window.objectId),
+                                          onMoveBy: (delta) => ref
+                                              .read(
+                                                desktopWorkspaceProvider
+                                                    .notifier,
+                                              )
+                                              .moveBy(window.objectId, delta),
+                                          onEndMove: () => ref
+                                              .read(
+                                                desktopWorkspaceProvider
+                                                    .notifier,
+                                              )
+                                              .endMove(window.objectId),
+                                          onBeginMaximizedDrag:
+                                              ({
+                                                required pointerPosition,
+                                                required pointerFractionX,
+                                                required pointerOffsetY,
+                                              }) => ref
+                                                  .read(
+                                                    desktopWorkspaceProvider
+                                                        .notifier,
+                                                  )
+                                                  .beginMaximizedDrag(
+                                                    window.objectId,
+                                                    pointerPosition:
+                                                        pointerPosition,
+                                                    pointerFractionX:
+                                                        pointerFractionX,
+                                                    pointerOffsetY:
+                                                        pointerOffsetY,
+                                                  ),
+                                          onMinimize: () => ref
+                                              .read(
+                                                desktopWorkspaceProvider
+                                                    .notifier,
+                                              )
+                                              .minimize(window.objectId),
+                                          onToggleMaximize: () => ref
+                                              .read(
+                                                desktopWorkspaceProvider
+                                                    .notifier,
+                                              )
+                                              .toggleMaximized(window.objectId),
+                                          onClose: () => ref
+                                              .read(
+                                                shellControllerProvider
+                                                    .notifier,
+                                              )
+                                              .closeWindow(window),
+                                        ),
+                                      ),
+                                      Expanded(
+                                        child: _DesktopWindowContent(
+                                          window: window,
+                                          smooth:
+                                              transformed ||
+                                              resizing ||
+                                              placement.dragging,
+                                          active: active && !minimized,
+                                          localLayoutSize: window.isLocalFlutter
+                                              ? placement.contentRect.size
+                                              : null,
+                                        ),
+                                      ),
+                                    ],
+                                  )
+                                : SizedBox.expand(
+                                    child: _DesktopWindowContent(
+                                      window: window,
+                                      smooth:
+                                          transformed ||
+                                          resizing ||
+                                          placement.dragging,
+                                      active: active && !minimized,
+                                      localLayoutSize: window.isLocalFlutter
+                                          ? placement.contentRect.size
+                                          : null,
+                                    ),
+                                  ),
                           ),
                         );
                         if (!drawsServerFrame) {
