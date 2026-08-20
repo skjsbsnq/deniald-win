@@ -83,6 +83,14 @@ const FLUTTER_MOUSE_WHEEL_SCROLL_PIXELS: f64 = 53.0;
 const V120_UNITS_PER_WHEEL_STEP: f64 = 120.0;
 const MAX_CACHED_DMABUF_BINDINGS_PER_TEXTURE: usize = 8;
 const MAX_CACHED_SHM_BINDINGS: usize = 32;
+const DMABUF_BYTES_PER_PIXEL: usize = 4;
+const DMABUF_CACHE_ATLAS_MULTIPLIER: usize = 4;
+const MIN_DMABUF_CACHE_BUDGET_BYTES: usize = 96 * 1024 * 1024;
+const MAX_DMABUF_CACHE_BUDGET_BYTES: usize = 256 * 1024 * 1024;
+const SHM_TEXTURE_BYTES_PER_PIXEL: usize = 4;
+const SHM_TEXTURE_CACHE_ATLAS_MULTIPLIER: usize = 3;
+const MIN_SHM_TEXTURE_CACHE_BUDGET_BYTES: usize = 48 * 1024 * 1024;
+const MAX_SHM_TEXTURE_CACHE_BUDGET_BYTES: usize = 192 * 1024 * 1024;
 const MAX_CACHED_EXTERNAL_TEXTURE_LEASES: usize = 256;
 const MAX_RECYCLED_SAMPLED_BUFFER_BATCHES: usize = 8;
 const MAX_RECYCLED_SHM_BUFFERS: usize = 8;
@@ -101,7 +109,7 @@ const MAX_PENDING_BRIGHTNESS_REQUESTS: usize = 128;
 const MAX_PENDING_UI_DEVELOPMENT_COMMANDS: usize = 64;
 const WINDOW_CLOSE_LEASE_TIMEOUT: Duration = Duration::from_secs(5);
 const RENDER_AUDIT_INTERVAL: Duration = Duration::from_secs(1);
-const FLUTTER_RESOURCE_CACHE_MAX_BYTES_THRESHOLD: usize = 256 * 1024 * 1024;
+const FLUTTER_RESOURCE_CACHE_MAX_BYTES_THRESHOLD: usize = 128 * 1024 * 1024;
 
 #[derive(Debug)]
 struct RenderDamageAudit {
@@ -1759,9 +1767,76 @@ impl ExternalTextureLease {
     }
 }
 
+/// Approximate the GPU memory an imported client buffer keeps alive.
+///
+/// The cache key owns its [`Dmabuf`], and that handle owns the file
+/// descriptors, so a cached entry pins the client's buffer for as long as it
+/// stays resident.
+fn dmabuf_byte_len(dmabuf: &Dmabuf) -> usize {
+    let width = usize::try_from(dmabuf.width()).unwrap_or_default();
+    let height = usize::try_from(dmabuf.height()).unwrap_or_default();
+    width
+        .checked_mul(height)
+        .and_then(|pixels| pixels.checked_mul(DMABUF_BYTES_PER_PIXEL))
+        .unwrap_or(0)
+}
+
+/// Scale the imported-buffer cache with the atlas, mirroring
+/// `shm_cache_budget_for_atlas`. Client buffers are display-sized, so bounding
+/// this cache by entry count alone lets a handful of large windows pin several
+/// hundred megabytes of GPU memory that their clients can never reclaim.
+fn dmabuf_cache_budget_for_atlas(size: PixelSize) -> usize {
+    usize::try_from(size.width)
+        .ok()
+        .zip(usize::try_from(size.height).ok())
+        .and_then(|(width, height)| width.checked_mul(height))
+        .and_then(|pixels| pixels.checked_mul(DMABUF_BYTES_PER_PIXEL))
+        .unwrap_or(MAX_DMABUF_CACHE_BUDGET_BYTES)
+        .saturating_mul(DMABUF_CACHE_ATLAS_MULTIPLIER)
+        .clamp(MIN_DMABUF_CACHE_BUDGET_BYTES, MAX_DMABUF_CACHE_BUDGET_BYTES)
+}
+
+/// Approximate the GPU memory a cached SHM upload keeps alive.
+///
+/// Unlike an imported dma-buf, this texture is the compositor's own allocation:
+/// the client pays for its pixels in CPU memory and never learns that a GPU
+/// copy exists, so nothing outside this cache can ever release it.
+fn shm_texture_byte_len(width: usize, height: usize) -> usize {
+    width
+        .checked_mul(height)
+        .and_then(|pixels| pixels.checked_mul(SHM_TEXTURE_BYTES_PER_PIXEL))
+        .unwrap_or(0)
+}
+
+/// Scale the SHM upload cache with the atlas, mirroring
+/// `dmabuf_cache_budget_for_atlas`. Every SHM attach mints a fresh revision and
+/// so a fresh full-size upload, while only the newest revision is ever read
+/// back; bounding this cache by entry count alone therefore lets the dead
+/// revisions of a single display-sized window pin hundreds of megabytes.
+///
+/// The floor deliberately wins on a single 1600p panel: the atlas-derived value
+/// is 46.9 MiB and clamps up to 48 MiB. Three display-sized uploads is the
+/// current frame plus one in flight plus slack, which is where thrashing
+/// starts, so raising `SHM_TEXTURE_CACHE_ATLAS_MULTIPLIER` alone changes
+/// nothing on such a panel until the floor moves with it.
+fn shm_texture_cache_budget_for_atlas(size: PixelSize) -> usize {
+    usize::try_from(size.width)
+        .ok()
+        .zip(usize::try_from(size.height).ok())
+        .and_then(|(width, height)| width.checked_mul(height))
+        .and_then(|pixels| pixels.checked_mul(SHM_TEXTURE_BYTES_PER_PIXEL))
+        .unwrap_or(MAX_SHM_TEXTURE_CACHE_BUDGET_BYTES)
+        .saturating_mul(SHM_TEXTURE_CACHE_ATLAS_MULTIPLIER)
+        .clamp(
+            MIN_SHM_TEXTURE_CACHE_BUDGET_BYTES,
+            MAX_SHM_TEXTURE_CACHE_BUDGET_BYTES,
+        )
+}
+
 struct RecencyEntry<K, V> {
     key: K,
     value: V,
+    weight: usize,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
@@ -1776,20 +1851,37 @@ struct RecencyCacheStats {
 /// normally visits external textures in the same order every frame, making
 /// each oldest-to-newest rotation O(1), while the bounded linear lookup keeps
 /// dma-buf identity as Smithay's Arc identity without a second hash-key model.
+///
+/// Entries can additionally carry a weight so a cache whose values pin GPU
+/// memory can be bounded by bytes as well as by count. Callers that do not
+/// weigh their entries keep a purely count-bounded cache.
 struct RecencyCache<K, V> {
     entries: VecDeque<RecencyEntry<K, V>>,
     capacity: usize,
+    byte_budget: usize,
+    bytes: usize,
     stats: RecencyCacheStats,
 }
 
 impl<K: Eq, V: Clone> RecencyCache<K, V> {
-    fn new(capacity: usize) -> Self {
+    fn with_byte_budget(capacity: usize, byte_budget: usize) -> Self {
         assert!(capacity > 0, "recency cache capacity must be positive");
         Self {
             entries: VecDeque::with_capacity(capacity),
             capacity,
+            byte_budget,
+            bytes: 0,
             stats: RecencyCacheStats::default(),
         }
+    }
+
+    fn new(capacity: usize) -> Self {
+        Self::with_byte_budget(capacity, usize::MAX)
+    }
+
+    #[cfg(test)]
+    fn bytes(&self) -> usize {
+        self.bytes
     }
 
     fn get_by(&mut self, mut matches: impl FnMut(&K) -> bool) -> Option<V> {
@@ -1813,29 +1905,49 @@ impl<K: Eq, V: Clone> RecencyCache<K, V> {
         Some(value)
     }
 
+    #[cfg(test)]
     fn insert(&mut self, key: K, value: V) -> Option<V> {
+        self.insert_weighted(key, value, 0).into_iter().next()
+    }
+
+    /// Insert an entry that accounts for `weight` bytes against the budget.
+    ///
+    /// Returns every value the insertion retired. A byte-bounded eviction can
+    /// release several entries at once, so callers must drop the whole batch.
+    fn insert_weighted(&mut self, key: K, value: V, weight: usize) -> Vec<V> {
+        let mut retired = Vec::new();
         if let Some(index) = self.entries.iter().position(|entry| entry.key == key) {
             let mut entry = self
                 .entries
                 .remove(index)
                 .expect("located recency entry disappeared");
+            self.bytes = self.bytes.saturating_sub(entry.weight);
+            entry.weight = weight;
+            self.bytes = self.bytes.saturating_add(weight);
             let previous = mem::replace(&mut entry.value, value);
             self.entries.push_back(entry);
-            return Some(previous);
+            retired.push(previous);
+        } else {
+            self.entries.push_back(RecencyEntry { key, value, weight });
+            self.bytes = self.bytes.saturating_add(weight);
         }
-        self.entries.push_back(RecencyEntry { key, value });
-        if self.entries.len() <= self.capacity {
-            return None;
-        }
-        if cfg!(test) {
-            self.stats.capacity_evictions = self.stats.capacity_evictions.saturating_add(1);
-        }
-        Some(
-            self.entries
+        // The length guard keeps a single entry larger than the whole budget
+        // cacheable; evicting it here would make its texture uncacheable and
+        // force a re-import every frame.
+        while self.entries.len() > self.capacity
+            || (self.bytes > self.byte_budget && self.entries.len() > 1)
+        {
+            let evicted = self
+                .entries
                 .pop_front()
-                .expect("over-capacity recency cache is non-empty")
-                .value,
-        )
+                .expect("over-capacity recency cache is non-empty");
+            self.bytes = self.bytes.saturating_sub(evicted.weight);
+            if cfg!(test) {
+                self.stats.capacity_evictions = self.stats.capacity_evictions.saturating_add(1);
+            }
+            retired.push(evicted.value);
+        }
+        retired
     }
 
     fn remove_where(&mut self, mut predicate: impl FnMut(&K) -> bool) -> Vec<V> {
@@ -1843,12 +1955,12 @@ impl<K: Eq, V: Clone> RecencyCache<K, V> {
         let mut index = 0;
         while index < self.entries.len() {
             if predicate(&self.entries[index].key) {
-                removed.push(
-                    self.entries
-                        .remove(index)
-                        .expect("indexed recency entry disappeared")
-                        .value,
-                );
+                let entry = self
+                    .entries
+                    .remove(index)
+                    .expect("indexed recency entry disappeared");
+                self.bytes = self.bytes.saturating_sub(entry.weight);
+                removed.push(entry.value);
             } else {
                 index += 1;
             }
@@ -1868,6 +1980,7 @@ impl<K: Eq, V: Clone> RecencyCache<K, V> {
     }
 
     fn drain(&mut self) -> Vec<V> {
+        self.bytes = 0;
         self.entries.drain(..).map(|entry| entry.value).collect()
     }
 }
@@ -1882,40 +1995,119 @@ impl<K: Eq, V: Clone> RecencyCache<K, V> {
 /// `ExternalTextureResourceBudget` remains the hard ownership bound.
 struct PartitionedRecencyCache<O, K, V> {
     partitions: HashMap<O, RecencyCache<K, V>>,
+    owner_order: VecDeque<O>,
     capacity_per_partition: usize,
+    byte_budget: usize,
+    total_bytes: usize,
 }
 
-impl<O: Eq + Hash, K: Eq, V: Clone> PartitionedRecencyCache<O, K, V> {
+impl<O: Eq + Hash + Clone, K: Eq, V: Clone> PartitionedRecencyCache<O, K, V> {
+    #[cfg(test)]
     fn new(capacity_per_partition: usize) -> Self {
+        Self::with_byte_budget(capacity_per_partition, usize::MAX)
+    }
+
+    fn with_byte_budget(capacity_per_partition: usize, byte_budget: usize) -> Self {
         assert!(
             capacity_per_partition > 0,
             "partitioned recency cache capacity must be positive"
         );
         Self {
             partitions: HashMap::new(),
+            owner_order: VecDeque::new(),
             capacity_per_partition,
+            byte_budget,
+            total_bytes: 0,
         }
     }
 
-    fn get_by(&mut self, owner: &O, matches: impl FnMut(&K) -> bool) -> Option<V> {
-        self.partitions.get_mut(owner)?.get_by(matches)
+    #[cfg(test)]
+    fn total_bytes(&self) -> usize {
+        self.total_bytes
     }
 
+    fn get_by(&mut self, owner: &O, matches: impl FnMut(&K) -> bool) -> Option<V> {
+        let partition = self.partitions.get_mut(owner)?;
+        let value = partition.get_by(matches)?;
+        if let Some(pos) = self.owner_order.iter().position(|o| o == owner) {
+            let o = self.owner_order.remove(pos).expect("owner in order");
+            self.owner_order.push_back(o);
+        }
+        Some(value)
+    }
+
+    #[cfg(test)]
     fn insert(&mut self, owner: O, key: K, value: V) -> Option<V> {
+        self.insert_weighted(owner, key, value, 0)
+            .into_iter()
+            .next()
+    }
+
+    fn insert_weighted(&mut self, owner: O, key: K, value: V, weight: usize) -> Vec<V> {
         let capacity = self.capacity_per_partition;
-        self.partitions
+        if let Some(pos) = self.owner_order.iter().position(|o| o == &owner) {
+            self.owner_order.remove(pos);
+        }
+        self.owner_order.push_back(owner.clone());
+
+        let partition = self
+            .partitions
             .entry(owner)
-            .or_insert_with(|| RecencyCache::new(capacity))
-            .insert(key, value)
+            .or_insert_with(|| RecencyCache::new(capacity));
+
+        let old_partition_bytes = partition.bytes;
+        let mut retired = partition.insert_weighted(key, value, weight);
+        let new_partition_bytes = partition.bytes;
+        self.total_bytes = self
+            .total_bytes
+            .saturating_sub(old_partition_bytes)
+            .saturating_add(new_partition_bytes);
+
+        let total_entries = self
+            .partitions
+            .values()
+            .map(|p| p.entries.len())
+            .sum::<usize>();
+        let mut remaining_entries = total_entries;
+        while self.total_bytes > self.byte_budget && remaining_entries > 1 {
+            let Some(oldest_owner) = self.owner_order.front().cloned() else {
+                break;
+            };
+            let mut remove_partition = false;
+            if let Some(oldest_partition) = self.partitions.get_mut(&oldest_owner) {
+                if let Some(evicted) = oldest_partition.entries.pop_front() {
+                    oldest_partition.bytes = oldest_partition.bytes.saturating_sub(evicted.weight);
+                    self.total_bytes = self.total_bytes.saturating_sub(evicted.weight);
+                    remaining_entries = remaining_entries.saturating_sub(1);
+                    retired.push(evicted.value);
+                }
+                if oldest_partition.entries.is_empty() {
+                    remove_partition = true;
+                }
+            } else {
+                remove_partition = true;
+            }
+            if remove_partition {
+                self.partitions.remove(&oldest_owner);
+                self.owner_order.pop_front();
+            }
+        }
+        retired
     }
 
     fn remove(&mut self, owner: &O) -> Vec<V> {
+        self.owner_order.retain(|o| o != owner);
         self.partitions
             .remove(owner)
-            .map_or_else(Vec::new, |mut partition| partition.drain())
+            .map_or_else(Vec::new, |mut partition| {
+                self.total_bytes = self.total_bytes.saturating_sub(partition.bytes);
+                partition.drain()
+            })
     }
 
     fn drain(&mut self) -> Vec<V> {
+        self.owner_order.clear();
+        self.total_bytes = 0;
         self.partitions
             .drain()
             .flat_map(|(_, mut partition)| partition.drain())
@@ -2904,13 +3096,18 @@ impl FlutterGlHandler {
             sampled_buffer_batch_pool: Arc::new(Mutex::new(Vec::with_capacity(
                 MAX_RECYCLED_SAMPLED_BUFFER_BATCHES,
             ))),
-            dmabuf_texture_cache: Mutex::new(PartitionedRecencyCache::new(
+            dmabuf_texture_cache: Mutex::new(PartitionedRecencyCache::with_byte_budget(
                 MAX_CACHED_DMABUF_BINDINGS_PER_TEXTURE,
+                dmabuf_cache_budget_for_atlas(size),
             )),
-            retained_native_texture_cache: Mutex::new(PartitionedRecencyCache::new(
+            retained_native_texture_cache: Mutex::new(PartitionedRecencyCache::with_byte_budget(
                 MAX_CACHED_DMABUF_BINDINGS_PER_TEXTURE,
+                dmabuf_cache_budget_for_atlas(size),
             )),
-            shm_texture_cache: Mutex::new(RecencyCache::new(MAX_CACHED_SHM_BINDINGS)),
+            shm_texture_cache: Mutex::new(RecencyCache::with_byte_budget(
+                MAX_CACHED_SHM_BINDINGS,
+                shm_texture_cache_budget_for_atlas(size),
+            )),
             retired_external_bindings: Arc::new(RetiredExternalBindingQueue::new()),
             retired_external_binding_scratch: Mutex::new(Vec::new()),
             external_texture_lease_pool: Arc::new(Mutex::new(Vec::with_capacity(
@@ -3130,7 +3327,9 @@ impl FlutterGlHandler {
         dmabuf: Dmabuf,
         binding: Arc<CachedTextureBinding>,
     ) {
-        let retired = lock(&self.dmabuf_texture_cache).insert(texture_id, dmabuf, binding);
+        let weight = dmabuf_byte_len(&dmabuf);
+        let retired =
+            lock(&self.dmabuf_texture_cache).insert_weighted(texture_id, dmabuf, binding, weight);
         drop(retired);
     }
 
@@ -3147,10 +3346,13 @@ impl FlutterGlHandler {
         &self,
         texture_id: i64,
         revision: u64,
+        width: usize,
+        height: usize,
         binding: Arc<CachedTextureBinding>,
     ) {
-        let retired =
-            lock(&self.retained_native_texture_cache).insert(texture_id, revision, binding);
+        let weight = shm_texture_byte_len(width, height);
+        let retired = lock(&self.retained_native_texture_cache)
+            .insert_weighted(texture_id, revision, binding, weight);
         drop(retired);
     }
 
@@ -3167,9 +3369,13 @@ impl FlutterGlHandler {
         &self,
         texture_id: i64,
         revision: u64,
+        width: usize,
+        height: usize,
         binding: Arc<CachedTextureBinding>,
     ) {
-        let retired = lock(&self.shm_texture_cache).insert((texture_id, revision), binding);
+        let weight = shm_texture_byte_len(width, height);
+        let retired =
+            lock(&self.shm_texture_cache).insert_weighted((texture_id, revision), binding, weight);
         drop(retired);
     }
 
@@ -3304,8 +3510,6 @@ impl FlutterGlHandler {
         // copy path on this Adreno and eventually faults while reading IOVA 0.
         let width = self.size.width as i32;
         let height = self.size.height as i32;
-        // SAFETY: Flutter invokes present with this handler's render context
-        // current, and every GL object below remains live in this handler.
         let mut previous_draw_framebuffer = 0;
         let mut previous_program = 0;
         let mut previous_active_texture = 0;
@@ -3313,6 +3517,8 @@ impl FlutterGlHandler {
         let mut previous_viewport = [0; 4];
         let mut previous_color_mask = [gl::FALSE; 4];
         let mut previous_capabilities = [false; 5];
+        // SAFETY: Flutter invokes present with this handler's render context
+        // current; all queried and restored GL state belongs to this context.
         unsafe {
             for _ in 0..8 {
                 if (self.gl.get_error)() == gl::NO_ERROR {
@@ -3387,6 +3593,7 @@ impl FlutterGlHandler {
                 }
             }
         }
+        // SAFETY: the same render context remains current after restoring GL state.
         let restore_error = unsafe { (self.gl.get_error)() };
         let error = if draw_error != gl::NO_ERROR {
             draw_error
@@ -3898,6 +4105,7 @@ impl OpenGlHandler for FlutterGlHandler {
                             // Complete outstanding sampling only so teardown
                             // can release imported client buffers safely. This
                             // frame is not published as an unfenced fallback.
+                            // SAFETY: present runs with the raster context current on this thread.
                             unsafe { (self.gl.finish)() };
                             let sampled = self.seal_sampled_buffers();
                             let _ = self.publish_sampled_buffer_release(None, sampled);
@@ -3916,6 +4124,7 @@ impl OpenGlHandler for FlutterGlHandler {
                     // Complete outstanding sampling only so teardown can
                     // release imported client buffers safely. This frame is
                     // not published as an unfenced fallback.
+                    // SAFETY: present runs with the raster context current on this thread.
                     unsafe { (self.gl.finish)() };
                     let sampled = self.seal_sampled_buffers();
                     let _ = self.publish_sampled_buffer_release(None, sampled);
@@ -4207,6 +4416,8 @@ impl OpenGlHandler for FlutterGlHandler {
                         self.cache_retained_native_binding(
                             texture_id,
                             revision,
+                            dmabuf_width as usize,
+                            dmabuf_height as usize,
                             Arc::clone(&retained),
                         );
                         self.destroy_retired_external_bindings();
@@ -4342,7 +4553,13 @@ impl OpenGlHandler for FlutterGlHandler {
                         }),
                         retirements: Arc::clone(&self.retired_external_bindings),
                     });
-                    self.cache_shm_binding(texture_id, revision, Arc::clone(&binding));
+                    self.cache_shm_binding(
+                        texture_id,
+                        revision,
+                        width,
+                        height,
+                        Arc::clone(&binding),
+                    );
                     self.destroy_retired_external_bindings();
                     binding
                 };
@@ -6501,7 +6718,7 @@ fn project_from_bundle(
 fn locale_from_environment(mut read: impl FnMut(&str) -> Option<String>) -> Option<EngineLocale> {
     ["LC_ALL", "LC_MESSAGES", "LANG"]
         .into_iter()
-        .filter_map(|name| read(name))
+        .filter_map(&mut read)
         .find_map(|value| parse_posix_locale(&value))
 }
 
@@ -7265,6 +7482,139 @@ mod tests {
     }
 
     #[test]
+    fn recency_cache_evicts_until_the_byte_budget_is_met() {
+        let mut cache = RecencyCache::with_byte_budget(8, 100);
+        assert!(cache.insert_weighted(1, "one", 40).is_empty());
+        assert!(cache.insert_weighted(2, "two", 40).is_empty());
+
+        // 40 + 40 + 90 overshoots the budget by enough that one eviction is
+        // not sufficient; both older entries have to retire together.
+        assert_eq!(cache.insert_weighted(3, "three", 90), ["one", "two"]);
+        assert_eq!(cache.get_by(|key| *key == 1), None);
+        assert_eq!(cache.get_by(|key| *key == 2), None);
+        assert_eq!(cache.get_by(|key| *key == 3), Some("three"));
+    }
+
+    #[test]
+    fn recency_cache_rebalances_when_a_replacement_grows() {
+        let mut cache = RecencyCache::with_byte_budget(8, 100);
+        assert!(cache.insert_weighted(1, "one", 30).is_empty());
+        assert!(cache.insert_weighted(2, "two", 30).is_empty());
+
+        // Replacing an entry with a much heavier value has to retire its
+        // neighbours too, not just hand back the value it displaced.
+        assert_eq!(cache.insert_weighted(2, "two-big", 90), ["two", "one"]);
+        assert_eq!(cache.get_by(|key| *key == 1), None);
+        assert_eq!(cache.get_by(|key| *key == 2), Some("two-big"));
+    }
+
+    #[test]
+    fn recency_cache_keeps_one_entry_larger_than_its_whole_budget() {
+        // Evicting it would make the texture uncacheable and force a
+        // re-import on every frame.
+        let mut cache = RecencyCache::with_byte_budget(4, 100);
+        assert!(cache.insert_weighted(1, "huge", 500).is_empty());
+        assert_eq!(cache.get_by(|key| *key == 1), Some("huge"));
+    }
+
+    #[test]
+    fn recency_cache_releases_bytes_when_entries_are_removed() {
+        let mut cache = RecencyCache::with_byte_budget(8, 100);
+        assert!(cache.insert_weighted((7, 1), "seven", 80).is_empty());
+        assert_eq!(
+            cache.remove_where(|(texture_id, _)| *texture_id == 7),
+            ["seven"]
+        );
+
+        // The budget must be free again, otherwise the next insert would
+        // immediately evict itself down to a single entry.
+        assert!(cache.insert_weighted((8, 1), "eight", 80).is_empty());
+        assert!(cache.insert_weighted((9, 1), "nine", 10).is_empty());
+        assert_eq!(cache.get_by(|key| *key == (8, 1)), Some("eight"));
+    }
+
+    #[test]
+    fn dmabuf_cache_budget_tracks_the_atlas_within_bounds() {
+        assert_eq!(
+            dmabuf_cache_budget_for_atlas(PixelSize::new(3840, 2160)),
+            3840 * 2160 * DMABUF_BYTES_PER_PIXEL * DMABUF_CACHE_ATLAS_MULTIPLIER
+        );
+        // A 1600p panel is the case the multiplier cannot reach: 62.5 MiB of
+        // atlas-derived budget sits under the floor, so the floor is the value
+        // such a machine actually runs with. Asserting it here is what keeps
+        // "this multiplier is inert at 1600p" visible; retuning the multiplier
+        // without moving the floor must fail this test rather than pass
+        // silently at some other resolution.
+        let unscaled_dmabuf = 2560 * 1600 * DMABUF_BYTES_PER_PIXEL * DMABUF_CACHE_ATLAS_MULTIPLIER;
+        assert!(unscaled_dmabuf < MIN_DMABUF_CACHE_BUDGET_BYTES);
+        assert_eq!(
+            dmabuf_cache_budget_for_atlas(PixelSize::new(2560, 1600)),
+            MIN_DMABUF_CACHE_BUDGET_BYTES
+        );
+        assert_eq!(
+            dmabuf_cache_budget_for_atlas(PixelSize::new(320, 240)),
+            MIN_DMABUF_CACHE_BUDGET_BYTES
+        );
+        assert_eq!(
+            dmabuf_cache_budget_for_atlas(PixelSize::new(15360, 8640)),
+            MAX_DMABUF_CACHE_BUDGET_BYTES
+        );
+    }
+
+    #[test]
+    fn shm_texture_cache_budget_tracks_the_atlas_within_bounds() {
+        assert_eq!(
+            shm_texture_cache_budget_for_atlas(PixelSize::new(3840, 2160)),
+            3840 * 2160 * SHM_TEXTURE_BYTES_PER_PIXEL * SHM_TEXTURE_CACHE_ATLAS_MULTIPLIER
+        );
+        // 46.9 MiB at 1600p, which the floor lifts to 48 MiB. The floor winning
+        // here is intended, not an oversight, so it is asserted rather than
+        // left for the next reader to rediscover.
+        let unscaled_shm =
+            2560 * 1600 * SHM_TEXTURE_BYTES_PER_PIXEL * SHM_TEXTURE_CACHE_ATLAS_MULTIPLIER;
+        assert!(unscaled_shm < MIN_SHM_TEXTURE_CACHE_BUDGET_BYTES);
+        assert_eq!(
+            shm_texture_cache_budget_for_atlas(PixelSize::new(2560, 1600)),
+            MIN_SHM_TEXTURE_CACHE_BUDGET_BYTES
+        );
+        assert_eq!(
+            shm_texture_cache_budget_for_atlas(PixelSize::new(320, 240)),
+            MIN_SHM_TEXTURE_CACHE_BUDGET_BYTES
+        );
+        assert_eq!(
+            shm_texture_cache_budget_for_atlas(PixelSize::new(15360, 8640)),
+            MAX_SHM_TEXTURE_CACHE_BUDGET_BYTES
+        );
+        assert_eq!(
+            shm_texture_cache_budget_for_atlas(PixelSize::new(0, 0)),
+            MIN_SHM_TEXTURE_CACHE_BUDGET_BYTES
+        );
+    }
+
+    #[test]
+    fn shm_texture_cache_budget_bounds_the_dead_revisions_of_one_window() {
+        // Every SHM attach mints a revision and each revision owns a full-size
+        // upload, but only the newest is ever read back. Bounded by count
+        // alone this loop left all MAX_CACHED_SHM_BINDINGS uploads resident:
+        // 32 x 15.6 MiB of GPU memory an SHM client cannot reclaim, because it
+        // never knew the copy existed.
+        let atlas = PixelSize::new(2560, 1600);
+        let budget = shm_texture_cache_budget_for_atlas(atlas);
+        let weight = shm_texture_byte_len(2560, 1600);
+        let mut cache = RecencyCache::with_byte_budget(MAX_CACHED_SHM_BINDINGS, budget);
+        let newest = u64::try_from(MAX_CACHED_SHM_BINDINGS).unwrap() - 1;
+        for revision in 0..=newest {
+            drop(cache.insert_weighted((7_i64, revision), revision, weight));
+        }
+
+        assert!(cache.bytes() <= budget);
+        assert!(cache.entries.len() < MAX_CACHED_SHM_BINDINGS);
+        // Eviction is worthless if it drops the revision Flutter is about to
+        // ask for, since that turns every frame into a fresh upload.
+        assert_eq!(cache.get_by(|key| *key == (7, newest)), Some(newest));
+    }
+
+    #[test]
     fn recency_cache_can_retire_every_binding_owned_by_a_texture() {
         let mut cache = RecencyCache::new(4);
         assert!(cache.insert((7, 1), "seven-a").is_none());
@@ -7323,6 +7673,46 @@ mod tests {
         assert_eq!(retired, ["seven-b", "seven-c"]);
         assert_eq!(cache.get_by(&7, |_| true), None);
         assert_eq!(cache.drain().len(), 2);
+    }
+
+    #[test]
+    fn partitioned_recency_cache_evicts_until_the_byte_budget_is_met() {
+        let mut cache = PartitionedRecencyCache::with_byte_budget(4, 100);
+        assert!(cache.insert_weighted(7, 1, "seven-1", 40).is_empty());
+        assert!(cache.insert_weighted(8, 1, "eight-1", 40).is_empty());
+        assert_eq!(cache.total_bytes(), 80);
+
+        // Inserting 50 bytes into owner 9 overshoots the total budget of 100 (80+50=130).
+        // The oldest owner (7) should have its entry evicted.
+        assert_eq!(cache.insert_weighted(9, 1, "nine-1", 50), ["seven-1"]);
+        assert_eq!(cache.total_bytes(), 90);
+        assert_eq!(cache.get_by(&7, |key| *key == 1), None);
+        assert_eq!(cache.get_by(&8, |key| *key == 1), Some("eight-1"));
+        assert_eq!(cache.get_by(&9, |key| *key == 1), Some("nine-1"));
+    }
+
+    #[test]
+    fn partitioned_recency_cache_releases_bytes_on_remove_and_drain() {
+        let mut cache = PartitionedRecencyCache::with_byte_budget(4, 200);
+        assert!(cache.insert_weighted(7, 1, "seven-1", 60).is_empty());
+        assert!(cache.insert_weighted(8, 1, "eight-1", 70).is_empty());
+        assert_eq!(cache.total_bytes(), 130);
+
+        let retired = cache.remove(&7);
+        assert_eq!(retired, ["seven-1"]);
+        assert_eq!(cache.total_bytes(), 70);
+
+        let drained = cache.drain();
+        assert_eq!(drained, ["eight-1"]);
+        assert_eq!(cache.total_bytes(), 0);
+    }
+
+    #[test]
+    fn byte_len_edge_cases_zero_and_overflow() {
+        assert_eq!(shm_texture_byte_len(0, 0), 0);
+        assert_eq!(shm_texture_byte_len(0, 1000), 0);
+        assert_eq!(shm_texture_byte_len(1000, 0), 0);
+        assert_eq!(shm_texture_byte_len(usize::MAX, 2), 0);
     }
 
     fn rect(left: f64, top: f64, right: f64, bottom: f64) -> sys::FlutterRect {
