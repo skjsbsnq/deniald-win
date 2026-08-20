@@ -2,12 +2,15 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../input/shell_interaction_registry.dart';
 import '../models/display_layout.dart';
 import '../localization/denial_localizations.dart';
 import '../services/media_player_service.dart';
+import '../settings/settings_controller.dart';
+import '../settings/shell_settings.dart';
 import '../state/system_status.dart';
 import '../theme/motion.dart';
 import '../theme/shell_theme.dart';
@@ -16,35 +19,151 @@ import '../wallpaper/state/wallpaper_accent.dart';
 import '../widgets/notification_media.dart';
 import '../widgets/shell_backdrop_blur.dart';
 import '../widgets/shell_cursor.dart';
+import 'desktop_start_button.dart';
+import 'desktop_status_cluster.dart';
+import 'desktop_system_bar_layout.dart';
+import 'desktop_taskbar.dart';
 
 /// The desktop system bar. Its strip is reserved from the window work area,
 /// so windows maximize beside it while true fullscreen covers it.
 ///
 /// The strip itself paints nothing: modules float as borderless pill cards
 /// over the bare wallpaper, and every card follows the wallpaper's extracted
-/// accent. Cards cluster at the trailing edge of the strip and spring in one
-/// after another when the bar mounts.
+/// accent. The bar uses a tripartite layout (leading, center, trailing). The
+/// Start card and taskbar window buttons travel between the leading and center
+/// zones according to [ShellLayoutSettings.systemBarAlignment]: centered they
+/// are absolutely centered across the bar and degrade gracefully when space is
+/// constrained, leading they sit flush against the bar's first edge.
 class DesktopSystemBar extends ConsumerWidget {
-  const DesktopSystemBar({required this.side, super.key});
+  const DesktopSystemBar({
+    required this.side,
+    this.monitorId,
+    this.showHardwareMeters = false,
+    this.onToggleLauncher,
+    this.onToggleDashboard,
+    this.onToggleCalendar,
+    super.key,
+  });
 
   static const double _edgePadding = 8.0;
-  static const double _cardMargin = 5.0;
+  static const double _cardMargin = 4.0;
   static const double _cardGap = 8.0;
 
   final SystemBarSide side;
+  final int? monitorId;
+  final bool showHardwareMeters;
+  final VoidCallback? onToggleLauncher;
+  final VoidCallback? onToggleDashboard;
+  final VoidCallback? onToggleCalendar;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    if (side == SystemBarSide.hidden) {
+      return const SizedBox.shrink();
+    }
+
     final accent = ref.watch(shellAccentProvider);
-    final now = ref.watch(clockProvider).value ?? DateTime.now();
-    final cpu = ref.watch(cpuUsageProvider);
-    final gpus = ref.watch(gpuUsageProvider);
-    final media =
-        ref.watch(mediaPlaybackProvider).value ??
-        MprisPlaybackState.unavailable();
+    final alignment = ref.watch(
+      shellSettingsProvider.select(
+        (settings) => settings.layout.systemBarAlignment,
+      ),
+    );
     final horizontal = side.isHorizontal;
-    final cpuVisible = cpu.current != null;
-    final mediaVisible = media.available;
+    final clusterLeads = alignment == SystemBarAlignment.leading;
+
+    // Cards slide in from the bar's own edge, one 60 ms beat apart, so the
+    // sweep runs inward from that edge: the clock leads it and the Start card
+    // closes it. When the Start card leads the bar it opens the sweep instead
+    // and everything else shifts one beat later, which keeps a single unbroken
+    // run in both modes rather than making the first card wait out five beats.
+    final clockBeat = clusterLeads ? 1 : 0;
+    final statusBeat = clockBeat + 1;
+    final trayBeat = statusBeat + 1;
+    final cpuBeat = trayBeat + 1;
+    final mediaBeat = cpuBeat + 1;
+    final startBeat = clusterLeads ? 0 : mediaBeat + 1;
+    // The GPU band spans one beat per adapter, a count only the meters module
+    // knows, so it takes the tail: every other beat then stays fixed instead of
+    // colliding with a second adapter's card.
+    final gpuBeat = math.max(startBeat, mediaBeat) + 1;
+
+    final clusterWidgets = <Widget>[
+      _SystemBarEntrance(
+        key: const ValueKey('system-bar-start-button'),
+        index: startBeat,
+        horizontal: horizontal,
+        child: Padding(
+          padding: horizontal
+              ? const EdgeInsets.only(right: _cardGap)
+              : const EdgeInsets.only(bottom: _cardGap),
+          child: _SystemBarCard(
+            accent: accent,
+            child: DesktopStartButton(side: side, onTap: onToggleLauncher),
+          ),
+        ),
+      ),
+      DesktopTaskbar(side: side, monitorId: monitorId),
+    ];
+
+    final trailingWidgets = <Widget>[
+      _SystemBarMediaEntrance(
+        accent: accent,
+        side: side,
+        horizontal: horizontal,
+        cardGap: _cardGap,
+        index: mediaBeat,
+      ),
+      if (showHardwareMeters) ...[
+        _SystemBarGpuMeters(
+          accent: accent,
+          horizontal: horizontal,
+          cardGap: _cardGap,
+          index: gpuBeat,
+        ),
+        _SystemBarCpuEntrance(
+          accent: accent,
+          horizontal: horizontal,
+          cardGap: _cardGap,
+          index: cpuBeat,
+        ),
+      ],
+      _SystemBarTrayEntrance(
+        accent: accent,
+        side: side,
+        horizontal: horizontal,
+        cardGap: _cardGap,
+        index: trayBeat,
+      ),
+      _SystemBarEntrance(
+        key: const ValueKey('system-bar-status-cluster'),
+        index: statusBeat,
+        horizontal: horizontal,
+        child: Padding(
+          padding: horizontal
+              ? const EdgeInsets.only(right: _cardGap)
+              : const EdgeInsets.only(bottom: _cardGap),
+          child: _SystemBarCard(
+            accent: accent,
+            onTap: onToggleDashboard,
+            child: DesktopStatusCluster(
+              horizontal: horizontal,
+              onTap: onToggleDashboard,
+            ),
+          ),
+        ),
+      ),
+      _SystemBarEntrance(
+        key: const ValueKey('system-bar-clock'),
+        index: clockBeat,
+        horizontal: horizontal,
+        child: _SystemBarCard(
+          accent: accent,
+          onTap: onToggleCalendar,
+          child: _ClockModule(accent: accent, onTap: onToggleCalendar),
+        ),
+      ),
+    ];
+
     return Padding(
       padding: horizontal
           ? const EdgeInsets.symmetric(
@@ -55,80 +174,167 @@ class DesktopSystemBar extends ConsumerWidget {
               horizontal: _cardMargin,
               vertical: _edgePadding,
             ),
-      child: Flex(
-        direction: horizontal ? Axis.horizontal : Axis.vertical,
-        mainAxisAlignment: MainAxisAlignment.end,
-        children: [
-          if (mediaVisible)
-            _SystemBarEntrance(
-              key: const ValueKey('system-bar-media'),
-              index: (cpuVisible ? 1 : 0) + gpus.length + 1,
-              horizontal: horizontal,
-              child: Padding(
-                padding: horizontal
-                    ? const EdgeInsets.only(right: _cardGap)
-                    : const EdgeInsets.only(bottom: _cardGap),
-                child: _SystemBarCard(
-                  accent: accent,
-                  child: _MediaStatusModule(
-                    accent: accent,
-                    side: side,
-                    playback: media,
-                  ),
-                ),
-              ),
-            ),
-          for (int i = 0; i < gpus.length; i += 1)
-            _SystemBarEntrance(
-              key: ValueKey('system-bar-gpu-${gpus[i].id}'),
-              index: (cpuVisible ? 1 : 0) + (gpus.length - i),
-              horizontal: horizontal,
-              // The gap rides inside the entrance so the neighbouring pill
-              // slides over smoothly when this one appears.
-              child: Padding(
-                padding: horizontal
-                    ? const EdgeInsets.only(right: _cardGap)
-                    : const EdgeInsets.only(bottom: _cardGap),
-                child: _SystemBarCard(
-                  accent: accent,
-                  child: _MeterModule(
-                    accent: accent,
-                    label: gpus[i].label,
-                    series: gpus[i].series,
-                  ),
-                ),
-              ),
-            ),
-          if (cpuVisible)
-            _SystemBarEntrance(
-              key: const ValueKey('system-bar-cpu'),
-              index: 1,
-              horizontal: horizontal,
-              child: Padding(
-                padding: horizontal
-                    ? const EdgeInsets.only(right: _cardGap)
-                    : const EdgeInsets.only(bottom: _cardGap),
-                child: _SystemBarCard(
-                  accent: accent,
-                  child: _MeterModule(
-                    accent: accent,
-                    label: context.l10n.metricCpu,
-                    series: cpu,
-                  ),
-                ),
-              ),
-            ),
+      child: DesktopSystemBarLayout(
+        side: side,
+        leading: clusterLeads ? clusterWidgets : const <Widget>[],
+        center: clusterLeads ? const <Widget>[] : clusterWidgets,
+        trailing: trailingWidgets,
+        gap: _cardGap,
+      ),
+    );
+  }
+}
+
+class _SystemBarMediaEntrance extends ConsumerWidget {
+  const _SystemBarMediaEntrance({
+    required this.accent,
+    required this.side,
+    required this.horizontal,
+    required this.cardGap,
+    required this.index,
+  });
+
+  final WallpaperAccent accent;
+  final SystemBarSide side;
+  final bool horizontal;
+  final double cardGap;
+  final int index;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final media =
+        ref.watch(mediaPlaybackProvider).value ??
+        MprisPlaybackState.unavailable();
+    if (!media.available) {
+      return const SizedBox.shrink();
+    }
+    return _SystemBarEntrance(
+      key: const ValueKey('system-bar-media'),
+      index: index,
+      horizontal: horizontal,
+      child: Padding(
+        padding: horizontal
+            ? EdgeInsets.only(right: cardGap)
+            : EdgeInsets.only(bottom: cardGap),
+        child: _SystemBarCard(
+          accent: accent,
+          child: _MediaStatusModule(
+            accent: accent,
+            side: side,
+            playback: media,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SystemBarTrayEntrance extends StatelessWidget {
+  const _SystemBarTrayEntrance({
+    required this.accent,
+    required this.side,
+    required this.horizontal,
+    required this.cardGap,
+    required this.index,
+  });
+
+  final WallpaperAccent accent;
+  final SystemBarSide side;
+  final bool horizontal;
+  final double cardGap;
+  final int index;
+
+  @override
+  Widget build(BuildContext context) {
+    return const SizedBox.shrink();
+  }
+}
+
+class _SystemBarCpuEntrance extends ConsumerWidget {
+  const _SystemBarCpuEntrance({
+    required this.accent,
+    required this.horizontal,
+    required this.cardGap,
+    required this.index,
+  });
+
+  final WallpaperAccent accent;
+  final bool horizontal;
+  final double cardGap;
+  final int index;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cpu = ref.watch(cpuUsageProvider);
+    if (cpu.current == null) {
+      return const SizedBox.shrink();
+    }
+    return _SystemBarEntrance(
+      key: const ValueKey('system-bar-cpu'),
+      index: index,
+      horizontal: horizontal,
+      child: Padding(
+        padding: horizontal
+            ? EdgeInsets.only(right: cardGap)
+            : EdgeInsets.only(bottom: cardGap),
+        child: _SystemBarCard(
+          accent: accent,
+          child: _MeterModule(
+            accent: accent,
+            label: context.l10n.metricCpu,
+            series: cpu,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SystemBarGpuMeters extends ConsumerWidget {
+  const _SystemBarGpuMeters({
+    required this.accent,
+    required this.horizontal,
+    required this.cardGap,
+    required this.index,
+  });
+
+  final WallpaperAccent accent;
+  final bool horizontal;
+  final double cardGap;
+
+  /// First beat of the band this row occupies; it spans one beat per adapter.
+  final int index;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final gpus = ref.watch(gpuUsageProvider);
+    if (gpus.isEmpty) {
+      return const SizedBox.shrink();
+    }
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        for (int i = 0; i < gpus.length; i += 1)
           _SystemBarEntrance(
-            key: const ValueKey('system-bar-clock'),
-            index: 0,
+            key: ValueKey('system-bar-gpu-${gpus[i].id}'),
+            index: index + (gpus.length - 1 - i),
             horizontal: horizontal,
-            child: _SystemBarCard(
-              accent: accent,
-              child: _ClockModule(accent: accent, now: now),
+            child: Padding(
+              padding: horizontal
+                  ? EdgeInsets.only(right: cardGap)
+                  : EdgeInsets.only(bottom: cardGap),
+              child: _SystemBarCard(
+                accent: accent,
+                child: _MeterModule(
+                  accent: accent,
+                  label: gpus[i].label,
+                  series: gpus[i].series,
+                ),
+              ),
             ),
           ),
-        ],
-      ),
+      ],
     );
   }
 }
@@ -764,25 +970,40 @@ String _formatMediaTime(Duration value) {
 
 /// Date caption plus the ticking clock. The caption re-tints with the
 /// wallpaper accent; minute changes crossfade with a small upward slide.
-class _ClockModule extends StatelessWidget {
-  const _ClockModule({required this.accent, required this.now});
+/// Interactive tap toggles the desktop calendar panel.
+class _ClockModule extends ConsumerStatefulWidget {
+  const _ClockModule({required this.accent, this.onTap});
 
   final WallpaperAccent accent;
-  final DateTime now;
+  final VoidCallback? onTap;
+
+  @override
+  ConsumerState<_ClockModule> createState() => _ClockModuleState();
+}
+
+class _ClockModuleState extends ConsumerState<_ClockModule> {
+  bool _focused = false;
 
   @override
   Widget build(BuildContext context) {
+    final now = ref.watch(clockProvider).value ?? DateTime.now();
+    final accent = widget.accent;
     final time = localizedTime(context, now);
-    return Row(
+    final shortDate = localizedShortDate(context, now);
+    final l10n = context.l10n;
+
+    Widget child = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         AnimatedDefaultTextStyle(
           duration: Motion.wallpaperReveal,
           curve: Motion.standard,
           style: ShellText.systemBarCaption.copyWith(
+            fontSize: 12.0,
             color: accent.captionColor,
+            fontWeight: FontWeight.w500,
           ),
-          child: Text(localizedShortDate(context, now)),
+          child: Text(shortDate),
         ),
         const SizedBox(width: 8),
         AnimatedSwitcher(
@@ -802,11 +1023,50 @@ class _ClockModule extends StatelessWidget {
           child: Text(
             time,
             key: ValueKey<String>(time),
-            style: ShellText.systemBarValue,
+            style: ShellText.systemBarValue.copyWith(
+              fontSize: 14.0,
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ),
       ],
     );
+
+    if (widget.onTap != null) {
+      child = Tooltip(
+        message:
+            '${localizedLongDate(context, now)}\n${l10n.desktopCalendarTitle}',
+        waitDuration: const Duration(milliseconds: 600),
+        child: Semantics(
+          button: true,
+          label: '$shortDate, $time · ${l10n.desktopCalendarOpenPanel}',
+          child: Focus(
+            onFocusChange: (focused) => setState(() => _focused = focused),
+            onKeyEvent: (node, event) {
+              if (event is KeyDownEvent &&
+                  (event.logicalKey == LogicalKeyboardKey.enter ||
+                      event.logicalKey == LogicalKeyboardKey.space)) {
+                widget.onTap?.call();
+                return KeyEventResult.handled;
+              }
+              return KeyEventResult.ignored;
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: _focused
+                  ? BoxDecoration(
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(color: accent.color, width: 1.5),
+                    )
+                  : null,
+              child: child,
+            ),
+          ),
+        ),
+      );
+    }
+
+    return child;
   }
 }
 
@@ -833,14 +1093,16 @@ class _MeterModule extends StatelessWidget {
           duration: Motion.wallpaperReveal,
           curve: Motion.standard,
           style: ShellText.systemBarCaption.copyWith(
+            fontSize: 12.0,
             color: accent.captionColor,
+            fontWeight: FontWeight.w500,
           ),
           child: Text(label),
         ),
         const SizedBox(width: 6),
         RepaintBoundary(
           child: CustomPaint(
-            size: const Size(38, 14),
+            size: const Size(42, 16),
             painter: _SparklinePainter(
               history: series.history,
               accent: accent.color,
@@ -853,15 +1115,16 @@ class _MeterModule extends StatelessWidget {
           duration: Motion.pill,
           curve: Motion.standard,
           builder: (context, value, _) => SizedBox(
-            width: 34,
+            width: 36,
             child: Text.rich(
               TextSpan(
                 text: context.l10n.numberValue((value * 100).round()),
-                style: ShellText.systemBarValue,
+                style: ShellText.systemBarValue.copyWith(fontSize: 13.5),
                 children: [
                   TextSpan(
                     text: context.l10n.percentSign,
                     style: ShellText.systemBarCaption.copyWith(
+                      fontSize: 11.5,
                       color: accent.captionColor,
                     ),
                   ),
@@ -911,16 +1174,17 @@ class _TemperatureValue extends StatelessWidget {
 /// top-lit gradient animates between wallpaper accents at the wallpaper
 /// reveal's pace so the bar re-themes as part of the same gesture.
 class _SystemBarCard extends StatelessWidget {
-  const _SystemBarCard({required this.accent, required this.child});
+  const _SystemBarCard({required this.accent, required this.child, this.onTap});
 
   final WallpaperAccent accent;
   final Widget child;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     const radius = BorderRadius.all(Radius.circular(999));
     final theme = ShellTheme.of(context);
-    return ShellBackdropBlur(
+    Widget card = ShellBackdropBlur(
       borderRadius: radius,
       child: AnimatedContainer(
         duration: Motion.wallpaperReveal,
@@ -941,6 +1205,22 @@ class _SystemBarCard extends StatelessWidget {
         child: child,
       ),
     );
+
+    if (onTap != null) {
+      card = ShellInputRegion(
+        debugLabel: 'System bar card',
+        child: MouseRegion(
+          cursor: SystemMouseCursors.click,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: onTap,
+            child: card,
+          ),
+        ),
+      );
+    }
+
+    return card;
   }
 }
 

@@ -118,6 +118,8 @@ class QuickSettingsController extends Notifier<QuickSettingsState>
   static const Duration _brightnessCommitInterval = Duration(milliseconds: 90);
   static const Duration _volumeCommitInterval = Duration(milliseconds: 90);
   static const Duration _volumeAcknowledgementTimeout = Duration(seconds: 2);
+  static const Duration _initialReadRetryDelay = Duration(seconds: 1);
+  static const int _initialReadAttempts = 12;
   static const Duration _screenshotSettleDelay = Duration(milliseconds: 260);
 
   late BrightnessService _brightness;
@@ -144,28 +146,71 @@ class QuickSettingsController extends Notifier<QuickSettingsState>
   AudioLevelState? _deferredAudioState;
 
   Future<void> _loadInitial(int generation) async {
-    final level = await _brightness.readLevel();
-    if (!isBuildGenerationActive(generation)) {
+    // Read the three controls concurrently. A retrying read must not delay the
+    // others, or a slow backend leaves the remaining panels on their initial
+    // values for as long as it keeps failing.
+    await Future.wait<void>(<Future<void>>[
+      _loadInitialBrightness(generation),
+      _loadInitialVolume(generation),
+      _loadInitialPowerProfile(generation),
+    ]);
+  }
+
+  Future<void> _loadInitialBrightness(int generation) async {
+    final level = await _readWithRetry(_brightness.readLevel, generation);
+    if (level == null || !isBuildGenerationActive(generation)) {
       return;
     }
-    if (level != null) {
-      _lastAppliedBrightness = (level * 100).round().clamp(1, 100);
-      state = state.copyWith(brightness: level);
-    }
-    final volume = await _audio.readLevel();
-    if (!isBuildGenerationActive(generation)) {
+    _lastAppliedBrightness = (level * 100).round().clamp(1, 100);
+    state = state.copyWith(brightness: level);
+  }
+
+  Future<void> _loadInitialVolume(int generation) async {
+    final volume = await _readWithRetry(_audio.readLevel, generation);
+    if (volume == null || !isBuildGenerationActive(generation)) {
       return;
     }
-    if (volume != null) {
-      _handleAudioState(
-        AudioLevelState(level: volume, requestSerial: 0),
-        generation,
-      );
-    }
+    _handleAudioState(
+      AudioLevelState(level: volume, requestSerial: 0),
+      generation,
+    );
+  }
+
+  Future<void> _loadInitialPowerProfile(int generation) async {
     final profile = await _power.read();
     if (isBuildGenerationActive(generation) && profile != null) {
       state = state.copyWith(profile: profile);
     }
+  }
+
+  /// The compositor's audio and brightness workers can legitimately fail the
+  /// shell's first read. PipeWire publishes its default sink a second or two
+  /// after the session starts, and libddcutil spends several seconds probing
+  /// I2C buses — both longer than the bridge's per-request timeout. Each worker
+  /// reconnects when the next request arrives, so keep asking. Giving up after
+  /// one attempt leaves the panel showing [QuickSettingsState.initial]'s
+  /// placeholder for the rest of the session, which reads as "the volume reset
+  /// itself on every boot".
+  Future<double?> _readWithRetry(
+    Future<double?> Function() read,
+    int generation,
+  ) async {
+    for (var attempt = 0; attempt < _initialReadAttempts; attempt += 1) {
+      final value = await read();
+      if (!isBuildGenerationActive(generation)) {
+        return null;
+      }
+      if (value != null) {
+        return value;
+      }
+      if (attempt + 1 < _initialReadAttempts) {
+        await Future<void>.delayed(_initialReadRetryDelay);
+        if (!isBuildGenerationActive(generation)) {
+          return null;
+        }
+      }
+    }
+    return null;
   }
 
   void _handleBrightnessState(DenialBrightnessState update, int generation) {
@@ -223,11 +268,15 @@ class QuickSettingsController extends Notifier<QuickSettingsState>
           return;
         }
         _pendingBrightness = -1;
-        await _brightness.apply(pending);
-        if (!isBuildGenerationActive(generation)) {
-          return;
+        try {
+          await _brightness.apply(pending);
+          if (!isBuildGenerationActive(generation)) {
+            return;
+          }
+          _lastAppliedBrightness = pending;
+        } on Object catch (error) {
+          debugPrint('Unable to apply brightness: $error');
         }
-        _lastAppliedBrightness = pending;
         if (_pendingBrightness <= 0 ||
             _pendingBrightness == _lastAppliedBrightness) {
           _brightnessFlushRequested = false;
@@ -242,6 +291,9 @@ class QuickSettingsController extends Notifier<QuickSettingsState>
     } finally {
       if (isBuildGenerationActive(generation)) {
         _brightnessApplying = false;
+        if (_pendingBrightness > 0) {
+          unawaited(_drainBrightnessApplies(generation));
+        }
       }
     }
   }

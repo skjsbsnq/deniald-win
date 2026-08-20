@@ -22,9 +22,7 @@ import 'desktop_taskbar_preview.dart';
 import 'desktop_window_titlebar.dart';
 import '../platform/denial_bridge.dart';
 import '../services/bluetooth_service.dart';
-import '../services/desktop_power_modes_service.dart';
 import '../services/haptics_service.dart';
-import '../services/lact_service.dart';
 import '../services/audio_service.dart';
 import '../services/power_profile_service.dart';
 import '../settings/settings_application.dart';
@@ -61,6 +59,8 @@ import '../widgets/window_surface_tree.dart';
 import '../widgets/shade/range_bar.dart';
 import '../wallpaper/state/wallpaper_controller.dart';
 import '../wallpaper/widgets/wallpaper_selector_surface.dart';
+import 'desktop_calendar_panel.dart';
+import 'desktop_dashboard_wifi_card.dart';
 import 'desktop_overview_layout.dart';
 import 'desktop_overview_target.dart';
 import 'desktop_home_layout.dart';
@@ -177,6 +177,7 @@ class _DesktopShellState extends ConsumerState<DesktopShell> {
   static const Duration _hoverCloseDelay = Duration(milliseconds: 220);
 
   Timer? _panelCloseTimer;
+  int _panelCloseSession = 0;
   Timer? _wallpaperOpenTimer;
   Timer? _windowSwitcherHoldTimer;
   Timer? _windowSwitcherCleanupTimer;
@@ -496,6 +497,7 @@ class _DesktopShellState extends ConsumerState<DesktopShell> {
   }
 
   void _closePanels() {
+    _panelCloseSession++;
     _panelCloseTimer?.cancel();
     _panelCloseTimer = null;
     ref.read(desktopWorkspaceProvider.notifier).closePanels();
@@ -504,13 +506,50 @@ class _DesktopShellState extends ConsumerState<DesktopShell> {
 
   void _openDashboard() {
     ref.read(clipboardTrayProvider.notifier).close();
-    _panelCloseTimer?.cancel();
+    _cancelPanelClose();
     _applicationSearchFocusNode.unfocus();
     ref
         .read(desktopWorkspaceProvider.notifier)
         .showPanel(DesktopPanel.dashboard);
     unawaited(ref.read(bluetoothProvider.notifier).refresh());
     unawaited(ref.read(desktopPowerModesProvider.notifier).refresh());
+  }
+
+  void _toggleDashboard() {
+    if (ref.read(desktopWorkspaceProvider).dashboardOpen) {
+      _closePanels();
+      return;
+    }
+    _openDashboard();
+  }
+
+  void _openCalendar() {
+    ref.read(clipboardTrayProvider.notifier).close();
+    _cancelPanelClose();
+    _applicationSearchFocusNode.unfocus();
+    ref
+        .read(desktopWorkspaceProvider.notifier)
+        .showPanel(DesktopPanel.calendar);
+  }
+
+  void _toggleCalendar() {
+    if (ref.read(desktopWorkspaceProvider).calendarOpen) {
+      _closePanels();
+      return;
+    }
+    _openCalendar();
+  }
+
+  void _openNotificationCenter() {
+    _closePanels();
+    ref
+        .read(shellSurfaceControllerProvider.notifier)
+        .show(
+          keyName: 'desktop-notification-center',
+          debugLabel: 'Notification center',
+          builder: (context, handle) =>
+              _DesktopNotificationCenterDialog(handle: handle),
+        );
   }
 
   void _openWallpaperSelector() {
@@ -563,14 +602,16 @@ class _DesktopShellState extends ConsumerState<DesktopShell> {
   }
 
   void _cancelPanelClose() {
+    _panelCloseSession++;
     _panelCloseTimer?.cancel();
     _panelCloseTimer = null;
   }
 
   void _schedulePanelClose() {
     _panelCloseTimer?.cancel();
+    final session = ++_panelCloseSession;
     _panelCloseTimer = Timer(_hoverCloseDelay, () {
-      if (mounted) {
+      if (mounted && _panelCloseSession == session) {
         _closePanels();
       }
     });
@@ -736,8 +777,12 @@ class _DesktopShellState extends ConsumerState<DesktopShell> {
             mainOutputRect: mainOutput?.logicalRect,
             applicationSearchFocusNode: _applicationSearchFocusNode,
             onOpenLauncher: _openLauncher,
-            onDismissLauncher: _closePanels,
+            onToggleLauncher: _toggleLauncher,
+            onClosePanels: _closePanels,
             onOpenDashboard: _openDashboard,
+            onToggleDashboard: _toggleDashboard,
+            onToggleCalendar: _toggleCalendar,
+            onOpenNotifications: _openNotificationCenter,
             onOpenWallpaperSelector: _openWallpaperSelector,
             onCloseWallpaperSelector: _closeWallpaperSelector,
             onOpenAppVolumeManager: _openAppVolumeManager,
@@ -1078,8 +1123,12 @@ class _DesktopScene extends ConsumerStatefulWidget {
     required this.mainOutputRect,
     required this.applicationSearchFocusNode,
     required this.onOpenLauncher,
-    required this.onDismissLauncher,
+    required this.onToggleLauncher,
+    required this.onClosePanels,
     required this.onOpenDashboard,
+    required this.onToggleDashboard,
+    required this.onToggleCalendar,
+    required this.onOpenNotifications,
     required this.onOpenWallpaperSelector,
     required this.onCloseWallpaperSelector,
     required this.onOpenAppVolumeManager,
@@ -1111,8 +1160,12 @@ class _DesktopScene extends ConsumerStatefulWidget {
   final Rect? mainOutputRect;
   final FocusNode applicationSearchFocusNode;
   final VoidCallback onOpenLauncher;
-  final VoidCallback onDismissLauncher;
+  final VoidCallback onToggleLauncher;
+  final VoidCallback onClosePanels;
   final VoidCallback onOpenDashboard;
+  final VoidCallback onToggleDashboard;
+  final VoidCallback onToggleCalendar;
+  final VoidCallback onOpenNotifications;
   final VoidCallback onOpenWallpaperSelector;
   final VoidCallback onCloseWallpaperSelector;
   final VoidCallback onOpenAppVolumeManager;
@@ -1215,8 +1268,12 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
     final mainOutputRect = widget.mainOutputRect;
     final applicationSearchFocusNode = widget.applicationSearchFocusNode;
     final onOpenLauncher = widget.onOpenLauncher;
-    final onDismissLauncher = widget.onDismissLauncher;
+    final onToggleLauncher = widget.onToggleLauncher;
+    final onClosePanels = widget.onClosePanels;
     final onOpenDashboard = widget.onOpenDashboard;
+    final onToggleDashboard = widget.onToggleDashboard;
+    final onToggleCalendar = widget.onToggleCalendar;
+    final onOpenNotifications = widget.onOpenNotifications;
     final onOpenSettings = widget.onOpenSettings;
     final onOpenWallpaperSelector = widget.onOpenWallpaperSelector;
     final onCloseWallpaperSelector = widget.onCloseWallpaperSelector;
@@ -1272,24 +1329,40 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
         .where((placement) => !placement.minimized)
         .fold<int>(0, (value, placement) => math.max(value, placement.z));
     final systemBars = _systemBarGeometries(viewSize, displayLayout);
+    final primaryBarRect = systemBars.firstOrNull?.rect;
+    final primaryBarSide = displayLayout?.systemBarSide ?? SystemBarSide.hidden;
     final launcherRect = DesktopMetrics.launcherRect(
       viewSize,
       outputRect: shellOutputRect,
+      systemBarRect: primaryBarRect,
+      systemBarSide: primaryBarSide,
       placement: overlaySettings.launcher,
     );
     final dashboardRect = DesktopMetrics.dashboardRect(
       viewSize,
       outputRect: shellOutputRect,
+      systemBarRect: primaryBarRect,
+      systemBarSide: primaryBarSide,
       placement: overlaySettings.dashboard,
+    );
+    final calendarRect = DesktopMetrics.calendarRect(
+      viewSize,
+      outputRect: shellOutputRect,
+      systemBarRect: primaryBarRect,
+      systemBarSide: primaryBarSide,
     );
     final launcherTriggerRect = DesktopMetrics.launcherTriggerRect(
       viewSize,
       outputRect: shellOutputRect,
+      systemBarRect: primaryBarRect,
+      systemBarSide: primaryBarSide,
       placement: overlaySettings.launcher,
     );
     final dashboardTriggerRect = DesktopMetrics.dashboardTriggerRect(
       viewSize,
       outputRect: shellOutputRect,
+      systemBarRect: primaryBarRect,
+      systemBarSide: primaryBarSide,
       placement: overlaySettings.dashboard,
     );
     // True fullscreen owns the complete output, so the bar yields instead of
@@ -1359,14 +1432,6 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
                     onEndOverviewDrag: onEndOverviewDrag,
                     onCancelOverviewDrag: onCancelOverviewDrag,
                   ),
-                  // The bar belongs to the wallpaper plane. Any window moved
-                  // into its reserved strip paints and receives input above it.
-                  for (final bar in visibleSystemBars)
-                    Positioned.fromRect(
-                      key: ValueKey<String>('system-bar-${bar.monitorId}'),
-                      rect: bar.rect,
-                      child: DesktopSystemBar(side: bar.side),
-                    ),
                   Positioned.fill(
                     child: ShellInputRegion(
                       debugLabel: 'Desktop overview',
@@ -1427,16 +1492,28 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
                     ),
                   Positioned.fill(
                     key: const ValueKey<String>(
-                      'desktop-launcher-dismiss-barrier',
+                      'desktop-panel-dismiss-barrier',
                     ),
                     child: IgnorePointer(
-                      ignoring: !desktop.launcherOpen,
+                      ignoring: desktop.panel == DesktopPanel.none,
                       child: GestureDetector(
                         behavior: HitTestBehavior.opaque,
-                        onTap: onDismissLauncher,
+                        onTap: onClosePanels,
                       ),
                     ),
                   ),
+                  for (final bar in visibleSystemBars)
+                    Positioned.fromRect(
+                      key: ValueKey<String>('system-bar-${bar.monitorId}'),
+                      rect: bar.rect,
+                      child: DesktopSystemBar(
+                        side: bar.side,
+                        monitorId: bar.monitorId,
+                        onToggleLauncher: onToggleLauncher,
+                        onToggleDashboard: onToggleDashboard,
+                        onToggleCalendar: onToggleCalendar,
+                      ),
+                    ),
                   if (!launcherRect.isEmpty)
                     Positioned.fromRect(
                       key: const ValueKey<String>('desktop-launcher-position'),
@@ -1476,7 +1553,7 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
                         ),
                         entryDistance: widget.panelTravel,
                         durationScale: widget.panelDurationScale,
-                        child: _DesktopDashboard(
+                        child: DesktopDashboard(
                           onEnter: onCancelPanelClose,
                           onExit: onSchedulePanelClose,
                           onOpenWallpaper: onOpenWallpaperSelector,
@@ -1485,7 +1562,32 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
                         ),
                       ),
                     ),
-                  if (!desktop.overviewActive && !launcherTriggerRect.isEmpty)
+                  if (!calendarRect.isEmpty)
+                    Positioned.fromRect(
+                      key: const ValueKey<String>('desktop-calendar-position'),
+                      rect: calendarRect,
+                      child: _DesktopPanelTransition(
+                        key: const ValueKey<String>('desktop-calendar-panel'),
+                        inputDebugLabel: 'Desktop calendar',
+                        keyboardPolicy: ShellKeyboardPolicy.capture,
+                        visible: desktop.calendarOpen,
+                        entryDirection: const Offset(1, 0),
+                        entryDistance: widget.panelTravel,
+                        durationScale: widget.panelDurationScale,
+                        child: DesktopCalendarPanel(
+                          onEnter: onCancelPanelClose,
+                          onExit: onSchedulePanelClose,
+                          onClose: onClosePanels,
+                          onOpenNotifications: onOpenNotifications,
+                          side:
+                              displayLayout?.systemBarSide ??
+                              SystemBarSide.bottom,
+                        ),
+                      ),
+                    ),
+                  if (!desktop.overviewActive &&
+                      !launcherTriggerRect.isEmpty &&
+                      overlaySettings.edgeHoverPanels)
                     Positioned.fromRect(
                       rect: launcherTriggerRect,
                       child: ShellInputRegion(
@@ -1496,7 +1598,9 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
                         ),
                       ),
                     ),
-                  if (!desktop.overviewActive && !dashboardTriggerRect.isEmpty)
+                  if (!desktop.overviewActive &&
+                      !dashboardTriggerRect.isEmpty &&
+                      overlaySettings.edgeHoverPanels)
                     Positioned.fromRect(
                       rect: dashboardTriggerRect,
                       child: ShellInputRegion(
@@ -3057,8 +3161,9 @@ class _DesktopWindowBorderPainter extends CustomPainter {
   }
 }
 
-class _DesktopDashboard extends ConsumerWidget {
-  const _DesktopDashboard({
+class DesktopDashboard extends ConsumerWidget {
+  const DesktopDashboard({
+    super.key,
     required this.onEnter,
     required this.onExit,
     required this.onOpenWallpaper,
@@ -3203,7 +3308,58 @@ class _DesktopDashboard extends ConsumerWidget {
                   ),
                 ),
                 const SizedBox(height: 12),
+                // The header row is a bare Row rather than the volume card's
+                // 34 px pill, because that pill is a button and brightness has
+                // nowhere to lead. Its 21 px is also what makes the row
+                // affordable: the column is a fixed height and full, so the row
+                // plus its gap comes straight out of the two Expanded cards
+                // below, and 34 px would leave the Bluetooth empty state half a
+                // pixel short. See desktop_dashboard_test.dart.
+                _DashboardCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.brightness_6_rounded,
+                            size: 21,
+                            color: theme.accent,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              l10n.brightnessTitle,
+                              style: ShellText.cardTitle,
+                            ),
+                          ),
+                          Text(
+                            l10n.settingsPercent(
+                              (quickSettings.brightness * 100).round(),
+                            ),
+                            style: ShellText.cardTitle.copyWith(
+                              color: ShellColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      RangeBar(
+                        icon: Icons.brightness_6_rounded,
+                        value: quickSettings.brightness,
+                        activeColor: theme.accent,
+                        inactiveColor: ShellColors.brightnessTrack,
+                        onChanged: quickSettingsController.setBrightness,
+                        onChangeEnd: quickSettingsController.commitBrightness,
+                        height: 48,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
                 const _DesktopPowerModesCard(),
+                const SizedBox(height: 12),
+                const Expanded(child: DesktopDashboardWifiCard()),
                 const SizedBox(height: 12),
                 Expanded(
                   child: _DashboardCard(
@@ -3373,8 +3529,6 @@ class _DesktopPowerModesCard extends ConsumerWidget {
     final modes = ref.watch(desktopPowerModesProvider);
     final controller = ref.read(desktopPowerModesProvider.notifier);
     final systemEnabled = modes.systemAvailable && !modes.systemChanging;
-    final pboEnabled = modes.pboAvailable && !modes.pboChanging;
-    final gpuEnabled = modes.gpuAvailable && !modes.gpuChanging;
     final accent = ShellTheme.of(context).accent;
     final l10n = context.l10n;
 
@@ -3396,10 +3550,7 @@ class _DesktopPowerModesCard extends ConsumerWidget {
                 semanticLabel: l10n.desktopRefreshPowerModes,
                 icon: Icons.refresh_rounded,
                 busy: modes.refreshing,
-                enabled:
-                    !modes.systemChanging &&
-                    !modes.pboChanging &&
-                    !modes.gpuChanging,
+                enabled: !modes.systemChanging,
                 onTap: () => unawaited(controller.refresh()),
               ),
             ],
@@ -3444,111 +3595,6 @@ class _DesktopPowerModesCard extends ConsumerWidget {
                 enabled: systemEnabled,
                 onTap: () => unawaited(
                   controller.selectSystemProfile(PowerProfile.performance),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          _PowerModeRow(
-            label: l10n.desktopPboLabel,
-            available: modes.pboAvailable,
-            checking: modes.refreshing,
-            children: [
-              _PowerModeOption(
-                semanticLabel: l10n.desktopPboSilent,
-                icon: Icons.bedtime_rounded,
-                selected: modes.pboProfile == DesktopPboProfile.silent,
-                busy:
-                    modes.pboChanging &&
-                    modes.pboProfile == DesktopPboProfile.silent,
-                enabled: pboEnabled,
-                secondary: true,
-                onTap: () => unawaited(
-                  controller.selectPboProfile(DesktopPboProfile.silent),
-                ),
-              ),
-              _PowerModeOption(
-                semanticLabel: l10n.desktopPboBalanced,
-                icon: Icons.balance_rounded,
-                selected: modes.pboProfile == DesktopPboProfile.balanced,
-                busy:
-                    modes.pboChanging &&
-                    modes.pboProfile == DesktopPboProfile.balanced,
-                enabled: pboEnabled,
-                secondary: true,
-                onTap: () => unawaited(
-                  controller.selectPboProfile(DesktopPboProfile.balanced),
-                ),
-              ),
-              _PowerModeOption(
-                semanticLabel: l10n.desktopPboPerformance,
-                icon: Icons.speed_rounded,
-                selected: modes.pboProfile == DesktopPboProfile.performance,
-                busy:
-                    modes.pboChanging &&
-                    modes.pboProfile == DesktopPboProfile.performance,
-                enabled: pboEnabled,
-                secondary: true,
-                onTap: () => unawaited(
-                  controller.selectPboProfile(DesktopPboProfile.performance),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          _PowerModeRow(
-            label: l10n.desktopGpuLabel,
-            available: modes.gpuAvailable,
-            checking: modes.refreshing,
-            children: [
-              _PowerModeOption(
-                semanticLabel: l10n.desktopGpuPresetLow,
-                icon: Icons.keyboard_double_arrow_down_rounded,
-                selected:
-                    modes.gpuPerformancePreset == LactPerformancePreset.low,
-                busy:
-                    modes.gpuChanging &&
-                    modes.gpuPerformancePreset == LactPerformancePreset.low,
-                enabled: gpuEnabled,
-                secondary: true,
-                onTap: () => unawaited(
-                  controller.selectGpuPerformancePreset(
-                    LactPerformancePreset.low,
-                  ),
-                ),
-              ),
-              _PowerModeOption(
-                semanticLabel: l10n.desktopGpuPresetAutomatic,
-                icon: Icons.auto_mode_rounded,
-                selected:
-                    modes.gpuPerformancePreset ==
-                    LactPerformancePreset.automatic,
-                busy:
-                    modes.gpuChanging &&
-                    modes.gpuPerformancePreset ==
-                        LactPerformancePreset.automatic,
-                enabled: gpuEnabled,
-                secondary: true,
-                onTap: () => unawaited(
-                  controller.selectGpuPerformancePreset(
-                    LactPerformancePreset.automatic,
-                  ),
-                ),
-              ),
-              _PowerModeOption(
-                semanticLabel: l10n.desktopGpuPresetHigh,
-                icon: Icons.keyboard_double_arrow_up_rounded,
-                selected:
-                    modes.gpuPerformancePreset == LactPerformancePreset.high,
-                busy:
-                    modes.gpuChanging &&
-                    modes.gpuPerformancePreset == LactPerformancePreset.high,
-                enabled: gpuEnabled,
-                secondary: true,
-                onTap: () => unawaited(
-                  controller.selectGpuPerformancePreset(
-                    LactPerformancePreset.high,
-                  ),
                 ),
               ),
             ],
@@ -3633,7 +3679,6 @@ class _PowerModeOption extends StatefulWidget {
     required this.busy,
     required this.enabled,
     required this.onTap,
-    this.secondary = false,
   });
 
   final String semanticLabel;
@@ -3642,7 +3687,6 @@ class _PowerModeOption extends StatefulWidget {
   final bool busy;
   final bool enabled;
   final VoidCallback onTap;
-  final bool secondary;
 
   @override
   State<_PowerModeOption> createState() => _PowerModeOptionState();
@@ -3656,12 +3700,8 @@ class _PowerModeOptionState extends State<_PowerModeOption> {
   Widget build(BuildContext context) {
     final actionable = widget.enabled && !widget.busy;
     final accent = ShellTheme.of(context).accentPalette;
-    final selectedBackground = widget.secondary
-        ? accent.mutedContainer
-        : accent.container;
-    final selectedForeground = widget.secondary
-        ? accent.onMutedContainer
-        : accent.onContainer;
+    final selectedBackground = accent.container;
+    final selectedForeground = accent.onContainer;
 
     return Semantics(
       button: true,

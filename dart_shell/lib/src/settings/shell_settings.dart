@@ -14,6 +14,13 @@ enum ShellOverlaySurface { launcher, dashboard, notifications, systemHud }
 
 enum ClipboardTrayEdge { left, right, top, bottom }
 
+/// Where the Start card and the taskbar window buttons sit along the bar.
+///
+/// [center] is the Windows 11 form the bar was built around; [leading] pins the
+/// cluster to the bar's first edge — its left in a horizontal bar, its top in a
+/// vertical one — for the Windows 10 form.
+enum SystemBarAlignment { leading, center }
+
 const double clipboardTrayMinimumExtent = 100;
 const double clipboardTrayMaximumExtent = 300;
 const double clipboardTrayDefaultExtent = 250;
@@ -187,6 +194,7 @@ class ShellLayoutSettings {
     this.systemBarSide,
     this.systemBarOutputNames = const <String>[],
     this.systemBarThickness = 32,
+    this.systemBarAlignment = SystemBarAlignment.center,
     this.maximizePadding = 10,
     this.clipboardTrayEdge = ClipboardTrayEdge.right,
     this.clipboardTrayExtent = clipboardTrayDefaultExtent,
@@ -195,6 +203,7 @@ class ShellLayoutSettings {
   final SystemBarSide? systemBarSide;
   final List<String> systemBarOutputNames;
   final double systemBarThickness;
+  final SystemBarAlignment systemBarAlignment;
   final double maximizePadding;
   final ClipboardTrayEdge clipboardTrayEdge;
   final double clipboardTrayExtent;
@@ -204,6 +213,7 @@ class ShellLayoutSettings {
     bool clearSystemBarSide = false,
     List<String>? systemBarOutputNames,
     double? systemBarThickness,
+    SystemBarAlignment? systemBarAlignment,
     double? maximizePadding,
     ClipboardTrayEdge? clipboardTrayEdge,
     double? clipboardTrayExtent,
@@ -216,6 +226,7 @@ class ShellLayoutSettings {
         systemBarOutputNames ?? this.systemBarOutputNames,
       ),
       systemBarThickness: systemBarThickness ?? this.systemBarThickness,
+      systemBarAlignment: systemBarAlignment ?? this.systemBarAlignment,
       maximizePadding: maximizePadding ?? this.maximizePadding,
       clipboardTrayEdge: clipboardTrayEdge ?? this.clipboardTrayEdge,
       clipboardTrayExtent: clipboardTrayExtent ?? this.clipboardTrayExtent,
@@ -228,6 +239,7 @@ class ShellLayoutSettings {
         other.systemBarSide == systemBarSide &&
         listEquals(other.systemBarOutputNames, systemBarOutputNames) &&
         other.systemBarThickness == systemBarThickness &&
+        other.systemBarAlignment == systemBarAlignment &&
         other.maximizePadding == maximizePadding &&
         other.clipboardTrayEdge == clipboardTrayEdge &&
         other.clipboardTrayExtent == clipboardTrayExtent;
@@ -238,6 +250,7 @@ class ShellLayoutSettings {
     systemBarSide,
     Object.hashAll(systemBarOutputNames),
     systemBarThickness,
+    systemBarAlignment,
     maximizePadding,
     clipboardTrayEdge,
     clipboardTrayExtent,
@@ -271,12 +284,14 @@ class ShellOverlaySettings {
       height: 74,
       margin: 28,
     ),
+    this.edgeHoverPanels = false,
   });
 
   final ShellPopupPlacement launcher;
   final ShellPopupPlacement dashboard;
   final ShellPopupPlacement notifications;
   final ShellPopupPlacement systemHud;
+  final bool edgeHoverPanels;
 
   ShellPopupPlacement placementFor(ShellOverlaySurface surface) {
     return switch (surface) {
@@ -302,6 +317,23 @@ class ShellOverlaySettings {
       systemHud: surface == ShellOverlaySurface.systemHud
           ? placement
           : systemHud,
+      edgeHoverPanels: edgeHoverPanels,
+    );
+  }
+
+  ShellOverlaySettings copyWith({
+    ShellPopupPlacement? launcher,
+    ShellPopupPlacement? dashboard,
+    ShellPopupPlacement? notifications,
+    ShellPopupPlacement? systemHud,
+    bool? edgeHoverPanels,
+  }) {
+    return ShellOverlaySettings(
+      launcher: launcher ?? this.launcher,
+      dashboard: dashboard ?? this.dashboard,
+      notifications: notifications ?? this.notifications,
+      systemHud: systemHud ?? this.systemHud,
+      edgeHoverPanels: edgeHoverPanels ?? this.edgeHoverPanels,
     );
   }
 
@@ -311,12 +343,18 @@ class ShellOverlaySettings {
         other.launcher == launcher &&
         other.dashboard == dashboard &&
         other.notifications == notifications &&
-        other.systemHud == systemHud;
+        other.systemHud == systemHud &&
+        other.edgeHoverPanels == edgeHoverPanels;
   }
 
   @override
-  int get hashCode =>
-      Object.hash(launcher, dashboard, notifications, systemHud);
+  int get hashCode => Object.hash(
+    launcher,
+    dashboard,
+    notifications,
+    systemHud,
+    edgeHoverPanels,
+  );
 }
 
 @immutable
@@ -469,6 +507,7 @@ class ShellSettings {
         if (layout.systemBarSide case final side?) 'systemBarSide': side.name,
         'systemBarOutputs': layout.systemBarOutputNames,
         'systemBarThickness': layout.systemBarThickness,
+        'systemBarAlignment': layout.systemBarAlignment.name,
         'maximizePadding': layout.maximizePadding,
         'clipboardTrayEdge': layout.clipboardTrayEdge.name,
         'clipboardTrayExtent': layout.clipboardTrayExtent,
@@ -478,6 +517,7 @@ class ShellSettings {
         'dashboard': _placementToJson(overlays.dashboard),
         'notifications': _placementToJson(overlays.notifications),
         'systemHud': _placementToJson(overlays.systemHud),
+        'edgeHoverPanels': overlays.edgeHoverPanels,
       },
       'animations': <String, Object>{
         'windowCloseEffect': animations.windowCloseEffect.name,
@@ -594,6 +634,11 @@ class ShellSettings {
           24,
           112,
         ),
+        systemBarAlignment: _enumValue(
+          SystemBarAlignment.values,
+          layoutJson['systemBarAlignment'],
+          defaults.layout.systemBarAlignment,
+        ),
         maximizePadding: _number(
           layoutJson['maximizePadding'],
           defaults.layout.maximizePadding,
@@ -637,6 +682,9 @@ class ShellSettings {
           minWidth: 220,
           minHeight: 64,
         ),
+        edgeHoverPanels: overlaysJson['edgeHoverPanels'] is bool
+            ? overlaysJson['edgeHoverPanels'] as bool
+            : defaults.overlays.edgeHoverPanels,
       ),
       animations: ShellAnimationSettings(
         windowCloseEffect: _enumValue(
