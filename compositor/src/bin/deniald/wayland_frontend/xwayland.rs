@@ -1171,6 +1171,43 @@ mod tests {
         );
     }
 
+    /// The compositor rounds an output's logical size to whole units before it
+    /// configures X11 windows, so this panel's 2560/1.5 = 1706.67 logical width
+    /// configures at 1707 and lands back on 2561 physical pixels. That
+    /// one-column residue is accepted; what this test exists to catch is the
+    /// residue growing back to the 853 columns that rounding the Xwayland scale
+    /// up to 2 used to produce.
+    #[test]
+    fn fullscreen_x11_geometry_stays_within_a_pixel_of_the_panel() {
+        use denial_core::topology::{
+            LogicalPoint, OutputId, OutputSpec, OutputTransform, PixelSize,
+        };
+
+        let spec = OutputSpec {
+            id: OutputId(1),
+            name: "eDP-1".to_owned(),
+            position: LogicalPoint::new(0, 0),
+            mode: PixelSize::new(2560, 1600),
+            scale_120: 180,
+            refresh_millihz: 239_998,
+            transform: OutputTransform::Normal,
+        };
+
+        let logical = super::super::topology::output_logical_bounds(&spec);
+        let scale = scale_factor(scale_120_for_engine(spec.scale_120));
+        let configured_width = (f64::from(logical.size.w) * scale).round() as i64;
+        let configured_height = (f64::from(logical.size.h) * scale).round() as i64;
+
+        assert!(
+            (configured_width - 2560).abs() <= 1,
+            "X11 width {configured_width} drifted from the panel's 2560"
+        );
+        assert!(
+            (configured_height - 1600).abs() <= 1,
+            "X11 height {configured_height} drifted from the panel's 1600"
+        );
+    }
+
     #[test]
     fn xwayland_scale_keeps_the_output_scale_verbatim() {
         assert_eq!(scale_120_for_engine(180), 180);
