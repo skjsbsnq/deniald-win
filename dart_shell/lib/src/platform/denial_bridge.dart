@@ -736,8 +736,8 @@ class DenialBridge {
       return;
     }
     final geometry = Rect.fromLTWH(
-      contentRect.left.round().clamp(0, 16384).toDouble(),
-      contentRect.top.round().clamp(0, 16384).toDouble(),
+      contentRect.left.round().clamp(-16384, 16384).toDouble(),
+      contentRect.top.round().clamp(-16384, 16384).toDouble(),
       contentRect.width.round().clamp(64, 16384).toDouble(),
       contentRect.height.round().clamp(64, 16384).toDouble(),
     );

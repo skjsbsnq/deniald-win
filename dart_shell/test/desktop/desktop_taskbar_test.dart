@@ -62,18 +62,20 @@ void main() {
     ) async {
       var tapped = false;
       await tester.pumpWidget(
-        MaterialApp(
-          home: DenialLocalizationScope(
-            child: Scaffold(
-              body: DesktopTaskbarButton(
-                icon: const Icon(Icons.terminal),
-                title: 'Terminal - denial@box',
-                active: true,
-                minimized: false,
-                compact: false,
-                side: SystemBarSide.bottom,
-                accent: const WallpaperAccent(Color(0xff64d8cb)),
-                onTap: () => tapped = true,
+        ProviderScope(
+          child: MaterialApp(
+            home: DenialLocalizationScope(
+              child: Scaffold(
+                body: DesktopTaskbarButton(
+                  icon: const Icon(Icons.terminal),
+                  title: 'Terminal - denial@box',
+                  active: true,
+                  minimized: false,
+                  compact: false,
+                  side: SystemBarSide.bottom,
+                  accent: const WallpaperAccent(Color(0xff64d8cb)),
+                  onTap: () => tapped = true,
+                ),
               ),
             ),
           ),
@@ -91,17 +93,19 @@ void main() {
       tester,
     ) async {
       await tester.pumpWidget(
-        MaterialApp(
-          home: DenialLocalizationScope(
-            child: Scaffold(
-              body: DesktopTaskbarButton(
-                icon: const Icon(Icons.web),
-                title: 'Web Browser',
-                active: false,
-                minimized: false,
-                compact: true,
-                side: SystemBarSide.bottom,
-                onTap: () {},
+        ProviderScope(
+          child: MaterialApp(
+            home: DenialLocalizationScope(
+              child: Scaffold(
+                body: DesktopTaskbarButton(
+                  icon: const Icon(Icons.web),
+                  title: 'Web Browser',
+                  active: false,
+                  minimized: false,
+                  compact: true,
+                  side: SystemBarSide.bottom,
+                  onTap: () {},
+                ),
               ),
             ),
           ),
@@ -114,17 +118,19 @@ void main() {
 
     testWidgets('minimized window renders dimmed content', (tester) async {
       await tester.pumpWidget(
-        MaterialApp(
-          home: DenialLocalizationScope(
-            child: Scaffold(
-              body: DesktopTaskbarButton(
-                icon: const Icon(Icons.folder),
-                title: 'Files',
-                active: false,
-                minimized: true,
-                compact: false,
-                side: SystemBarSide.bottom,
-                onTap: () {},
+        ProviderScope(
+          child: MaterialApp(
+            home: DenialLocalizationScope(
+              child: Scaffold(
+                body: DesktopTaskbarButton(
+                  icon: const Icon(Icons.folder),
+                  title: 'Files',
+                  active: false,
+                  minimized: true,
+                  compact: false,
+                  side: SystemBarSide.bottom,
+                  onTap: () {},
+                ),
               ),
             ),
           ),
@@ -143,17 +149,19 @@ void main() {
 
     testWidgets('vertical system bar renders side indicator', (tester) async {
       await tester.pumpWidget(
-        MaterialApp(
-          home: DenialLocalizationScope(
-            child: Scaffold(
-              body: DesktopTaskbarButton(
-                icon: const Icon(Icons.settings),
-                title: 'Settings',
-                active: true,
-                minimized: false,
-                compact: true,
-                side: SystemBarSide.left,
-                onTap: () {},
+        ProviderScope(
+          child: MaterialApp(
+            home: DenialLocalizationScope(
+              child: Scaffold(
+                body: DesktopTaskbarButton(
+                  icon: const Icon(Icons.settings),
+                  title: 'Settings',
+                  active: true,
+                  minimized: false,
+                  compact: true,
+                  side: SystemBarSide.left,
+                  onTap: () {},
+                ),
               ),
             ),
           ),

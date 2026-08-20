@@ -305,8 +305,8 @@ class DesktopWindowConfigureTracker {
     bool configureInitial = false,
   }) {
     final geometry = (
-      left: contentRect.left.round().clamp(0, 16384),
-      top: contentRect.top.round().clamp(0, 16384),
+      left: contentRect.left.round().clamp(-16384, 16384),
+      top: contentRect.top.round().clamp(-16384, 16384),
       width: contentRect.width.round().clamp(64, 16384),
       height: contentRect.height.round().clamp(64, 16384),
     );

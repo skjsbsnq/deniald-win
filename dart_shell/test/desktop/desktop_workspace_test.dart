@@ -1525,21 +1525,22 @@ void main() {
         .frame
         .left;
 
-    // Move by 0.3 px multiple times
-    controller.moveBy(1, const Offset(0.3, 0.0));
-    // 0.3 snaps to 0 in whole pixels, so frame hasn't jumped
+    // Move by 0.2 px multiple times
+    controller.moveBy(1, const Offset(0.2, 0.0));
+    // 0.2 snaps to 0 in whole pixels, so frame hasn't jumped
     expect(
       container.read(desktopWorkspaceProvider).placements[1]!.frame.left,
       startLeft,
     );
 
-    controller.moveBy(1, const Offset(0.3, 0.0));
+    controller.moveBy(1, const Offset(0.2, 0.0));
+    // 0.4 still snaps to 0 in whole pixels
     expect(
       container.read(desktopWorkspaceProvider).placements[1]!.frame.left,
       startLeft,
     );
 
-    // After 4th step (total 1.2 px accumulated), frame shifts by 1 px
+    // After 3rd step (total 0.8 px accumulated), frame shifts by 1 px
     controller.moveBy(1, const Offset(0.4, 0.0));
     expect(
       container.read(desktopWorkspaceProvider).placements[1]!.frame.left,

@@ -369,6 +369,7 @@ void main() {
 
         await gesture.up();
         expect(endMoveCount, 1);
+        await tester.pump(const Duration(milliseconds: 500));
       },
     );
 
@@ -416,6 +417,7 @@ void main() {
       await gesture.moveBy(const Offset(15, 10));
       await gesture.cancel();
       expect(endMoveCount, 1);
+      await tester.pump(const Duration(milliseconds: 500));
     });
 
     testWidgets('dragging on buttons does NOT trigger window move', (
@@ -574,6 +576,7 @@ void main() {
       final gesture = await tester.startGesture(const Offset(250, 15));
       await gesture.moveBy(const Offset(10, 10));
       await gesture.up();
+      await tester.pump(const Duration(milliseconds: 500));
 
       expect(dragMaximizedCalled, isTrue);
       expect(capturedFractionX, isNotNull);
