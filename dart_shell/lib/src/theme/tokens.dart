@@ -49,6 +49,13 @@ abstract final class ShellColors {
   static const Color focusedWindowBorder = primaryContainer;
   static const Color pinnedWindowBorder = Color(0xff432f76);
 
+  // Window titlebar control buttons (Win11 visual alignment).
+  static const Color windowCloseHover = Color(0xffc42b1c);
+  static const Color windowClosePressed = Color(0xff8e0000);
+  static const Color windowCloseForeground = Color(0xffffffff);
+  static const Color windowButtonHover = Color(0x14ffffff);
+  static const Color windowButtonPressed = Color(0x28ffffff);
+
   // Shadows.
   static const Color shadow = Color(0x76000000);
   static const Color shadowSoft = Color(0x66000000);
@@ -96,16 +103,26 @@ abstract final class ShellRadii {
 /// Shared text styles. All disable the default underline decoration so callers
 /// never have to repeat `decoration: TextDecoration.none`.
 abstract final class ShellText {
-  /// Monospace family bundled for the system bar so ticking values keep a
-  /// fixed advance; the rest of the shell stays on the default family.
-  static const String systemBarFontFamily = 'JetBrainsMono';
+  /// Primary shell family. Naming it explicitly matters: leaving it unset makes
+  /// Flutter resolve the platform default through fontconfig, which answers a
+  /// CJK request with whichever face in `NotoSansCJK-Regular.ttc` it sorts
+  /// first. That face carries every Han glyph the shell needs, so
+  /// [fallbackFontFamilies] never gets consulted and Simplified Chinese renders
+  /// in Korean glyph forms.
+  static const String uiFontFamily = 'Maple Mono NF CN';
+
+  /// The system bar shares the primary family; it is monospace, so ticking
+  /// values still keep a fixed advance.
+  static const String systemBarFontFamily = uiFontFamily;
   static const List<String> fallbackFontFamilies = <String>[
+    'Maple Mono NF CN',
     'Source Han Sans CN',
     'Noto Sans CJK SC',
   ];
 
   static const TextStyle base = TextStyle(
     color: ShellColors.textPrimary,
+    fontFamily: uiFontFamily,
     fontFamilyFallback: fallbackFontFamilies,
     fontSize: 14,
     decoration: TextDecoration.none,
@@ -113,6 +130,7 @@ abstract final class ShellText {
 
   static const TextStyle statusClock = TextStyle(
     color: ShellColors.textPrimary,
+    fontFamily: uiFontFamily,
     fontFamilyFallback: fallbackFontFamilies,
     fontSize: 18,
     height: 1,
@@ -150,6 +168,7 @@ abstract final class ShellText {
 
   static const TextStyle shadeClock = TextStyle(
     color: ShellColors.panelText,
+    fontFamily: uiFontFamily,
     fontFamilyFallback: fallbackFontFamilies,
     fontSize: 42,
     height: 1,
@@ -160,6 +179,7 @@ abstract final class ShellText {
 
   static const TextStyle shadeDate = TextStyle(
     color: ShellColors.textSecondary,
+    fontFamily: uiFontFamily,
     fontFamilyFallback: fallbackFontFamilies,
     fontSize: 16,
     height: 1,
@@ -170,6 +190,7 @@ abstract final class ShellText {
 
   static const TextStyle lockClock = TextStyle(
     color: ShellColors.textPrimary,
+    fontFamily: uiFontFamily,
     fontFamilyFallback: fallbackFontFamilies,
     fontSize: 124,
     height: 0.95,
@@ -180,6 +201,7 @@ abstract final class ShellText {
 
   static const TextStyle lockDate = TextStyle(
     color: ShellColors.textSecondary,
+    fontFamily: uiFontFamily,
     fontFamilyFallback: fallbackFontFamilies,
     fontSize: 24,
     height: 1.15,
@@ -190,6 +212,7 @@ abstract final class ShellText {
 
   static const TextStyle lockStatus = TextStyle(
     color: ShellColors.textSecondary,
+    fontFamily: uiFontFamily,
     fontFamilyFallback: fallbackFontFamilies,
     fontSize: 18,
     height: 1.1,
@@ -200,6 +223,7 @@ abstract final class ShellText {
 
   static const TextStyle lockChip = TextStyle(
     color: ShellColors.textPrimary,
+    fontFamily: uiFontFamily,
     fontFamilyFallback: fallbackFontFamilies,
     fontSize: 12,
     height: 1,
@@ -210,6 +234,7 @@ abstract final class ShellText {
 
   static const TextStyle cardTitle = TextStyle(
     color: ShellColors.textPrimary,
+    fontFamily: uiFontFamily,
     fontFamilyFallback: fallbackFontFamilies,
     fontSize: 13,
     fontWeight: FontWeight.w600,

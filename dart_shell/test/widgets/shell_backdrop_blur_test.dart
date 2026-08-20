@@ -23,10 +23,32 @@ void main() {
         filter.filterConfig.toString(),
         'ImageFilterConfig.blur(24.0, 24.0, clamp, unbounded)',
       );
-      expect(filter.blendMode, BlendMode.src);
+      // Never `src`: it replaces the destination, so a backdrop the engine
+      // cannot reproduce is painted as an opaque black rectangle.
+      expect(filter.blendMode, BlendMode.srcOver);
       expect(find.byType(ClipRRect), findsOneWidget);
     },
   );
+
+  testWidgets('an ungrouped blur retains its own layer', (tester) async {
+    await tester.pumpWidget(
+      _BlurHarness(
+        theme: const ShellThemeData(),
+        child: ShellBackdropBlur(
+          borderRadius: BorderRadius.circular(18),
+          child: const SizedBox(width: 160, height: 90),
+        ),
+      ),
+    );
+
+    expect(
+      find.ancestor(
+        of: find.byType(BackdropFilter),
+        matching: find.byType(RepaintBoundary),
+      ),
+      findsOneWidget,
+    );
+  });
 
   testWidgets('disabled blur avoids creating a backdrop filter', (
     tester,
@@ -75,6 +97,14 @@ void main() {
       find.byType(BackdropFilter),
     );
     expect(renderObject.backdropKey, isNotNull);
+    expect(
+      find.ancestor(
+        of: find.byType(BackdropFilter),
+        matching: find.byType(RepaintBoundary),
+      ),
+      findsNothing,
+      reason: 'a retained layer would split the shared engine blur',
+    );
   });
 }
 

@@ -4,11 +4,20 @@ import 'package:path/path.dart' as p;
 
 import '../runtime_paths.dart';
 import '../models/desktop_app.dart';
+import '../../services/xdg_icon_theme.dart';
 
 class DesktopAppsRepository {
   const DesktopAppsRepository({required this._paths});
 
   final RuntimePaths _paths;
+
+  /// Target size for desktop-app icon lookups.
+  ///
+  /// One resolved path per app feeds every consumer, from the 16px titlebar
+  /// glyph to the 112px launcher tile, and `AppIconImage` decodes it at up to
+  /// 512px. Asking for the spec default of 24px hands back a 16px or 22px
+  /// asset that those consumers can only upscale.
+  static const int iconTargetSize = 512;
 
   Future<List<DesktopApp>> loadApplications() async {
     final filesById = <String, File>{};
@@ -34,9 +43,15 @@ class DesktopAppsRepository {
     }
 
     final iconCache = <String, String?>{};
+    final iconTheme = XdgIconTheme(baseIconDirs: _paths.iconThemeDirs());
     final apps = <DesktopApp>[];
     for (final entry in filesById.entries) {
-      final app = await _parseDesktopFile(entry.key, entry.value, iconCache);
+      final app = await _parseDesktopFile(
+        entry.key,
+        entry.value,
+        iconCache,
+        iconTheme,
+      );
       if (app != null) {
         apps.add(app);
       }
@@ -56,6 +71,7 @@ class DesktopAppsRepository {
     String id,
     File file,
     Map<String, String?> iconCache,
+    XdgIconTheme iconTheme,
   ) async {
     final fields = <String, String>{};
     var inDesktopEntry = false;
@@ -108,9 +124,15 @@ class DesktopAppsRepository {
     }
 
     final icon = fields['Icon']?.trim();
-    final iconPath = icon == null || icon.isEmpty
-        ? null
-        : iconCache.putIfAbsent(icon, () => resolveIconPath(icon));
+    String? iconPath;
+    if (icon != null && icon.isNotEmpty) {
+      if (iconCache.containsKey(icon)) {
+        iconPath = iconCache[icon];
+      } else {
+        iconPath = await iconTheme.lookupIcon(icon, targetSize: iconTargetSize);
+        iconCache[icon] = iconPath;
+      }
+    }
     final categories = (fields['Categories'] ?? '')
         .split(';')
         .map((category) => category.trim())
@@ -221,6 +243,7 @@ class DesktopAppsRepository {
       }
 
       final themes = <String>[
+        p.join(root, 'icons', 'Papirus'),
         p.join(root, 'icons', 'hicolor'),
         p.join(root, 'icons', 'Adwaita'),
         p.join(root, 'icons', 'Tela'),

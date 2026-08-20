@@ -6,7 +6,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../localization/denial_localizations.dart';
 import '../../models/shortcut_configuration.dart';
 import '../../state/shortcut_configuration.dart';
-import '../../theme/motion.dart';
 import '../../theme/shell_theme.dart';
 import '../../theme/tokens.dart';
 import 'settings_controls.dart';

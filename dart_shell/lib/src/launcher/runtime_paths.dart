@@ -50,6 +50,18 @@ class RuntimePaths {
     return File(p.join(dir.path, 'layout.json'));
   }
 
+  /// The desktop start menu's pin board.
+  ///
+  /// It sits beside [layoutFile] because both are user configuration rather
+  /// than runtime state, but it is a separate file: the mobile home screen
+  /// holds every installed application, while the pin board holds only what
+  /// the user pinned, and one file cannot mean both.
+  Future<File> desktopTilesFile() async {
+    final dir = Directory(p.join(configHome, 'denia-home'));
+    await dir.create(recursive: true);
+    return File(p.join(dir.path, 'desktop-tiles.json'));
+  }
+
   Future<File> wallpaperStateFile() async {
     final dir = Directory(p.join(stateHome, 'denial'));
     await dir.create(recursive: true);
@@ -81,12 +93,72 @@ class RuntimePaths {
     return uniquePaths(paths).map(Directory.new).toList(growable: false);
   }
 
+  /// Resolves one `xdg-user-dirs` entry, for example `DOCUMENTS`.
+  ///
+  /// The directory names are localised — this session's Documents is `文档` —
+  /// so the English [fallback] is only correct when `user-dirs.dirs` is absent
+  /// or does not name the entry. Values are shell-quoted with `$HOME` left
+  /// unexpanded, which is the only substitution the format allows.
+  Future<String> xdgUserDirectory(
+    String name, {
+    required String fallback,
+  }) async {
+    final fromEnvironment = environment['XDG_${name}_DIR'];
+    if (fromEnvironment != null && fromEnvironment.isNotEmpty) {
+      return fromEnvironment;
+    }
+    final file = File(p.join(configHome, 'user-dirs.dirs'));
+    try {
+      final pattern = RegExp('^\\s*XDG_${name}_DIR\\s*=\\s*"(.*)"\\s*\$');
+      for (final line in await file.readAsLines()) {
+        final match = pattern.firstMatch(line);
+        if (match == null) {
+          continue;
+        }
+        final value = match.group(1)!;
+        if (value.isEmpty) {
+          break;
+        }
+        if (value == r'$HOME') {
+          return homeDir;
+        }
+        if (value.startsWith(r'$HOME/')) {
+          return p.join(homeDir, value.substring(r'$HOME/'.length));
+        }
+        return value;
+      }
+    } on FileSystemException {
+      // No user-dirs.dirs, or it is unreadable; the English default is the
+      // documented fallback for exactly this case.
+    }
+    return p.join(homeDir, fallback);
+  }
+
   List<String> iconRoots() {
     return uniquePaths([
       dataHome,
       ...dataDirs,
       p.join(homeDir, '.local', 'share', 'flatpak', 'exports', 'share'),
       '/var/lib/flatpak/exports/share',
+    ]);
+  }
+
+  /// Base directories containing XDG icon themes (`index.theme`).
+  List<String> iconThemeDirs() {
+    return uniquePaths([
+      p.join(dataHome, 'icons'),
+      p.join(homeDir, '.icons'),
+      for (final dir in dataDirs) p.join(dir, 'icons'),
+      p.join(
+        homeDir,
+        '.local',
+        'share',
+        'flatpak',
+        'exports',
+        'share',
+        'icons',
+      ),
+      '/var/lib/flatpak/exports/share/icons',
     ]);
   }
 

@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../l10n/generated/app_localizations.dart';
 import '../../localization/denial_localizations.dart';
 import '../../theme/shell_theme.dart';
+import '../../theme/tokens.dart';
 import '../../widgets/app_icon.dart';
 import '../controllers/home_grid_controller.dart';
 import '../models/home_battery_discharge_info.dart';
@@ -26,22 +27,25 @@ class HomeGridItemCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return switch (item.type) {
-      HomeGridItemType.clock => HomeClockWidget(
-        clock: ref.watch(homeClockProvider),
-      ),
-      HomeGridItemType.batteryDischarge => _HomeBatteryDischargeTile(
-        series:
-            ref.watch(homeBatteryDischargeProvider).asData?.value ??
-            HomeBatteryDischargeSeries.empty,
-      ),
-      HomeGridItemType.app => _HomeAppTile(
-        name: item.localApp?.titleFor(context) ?? item.app!.name,
-        iconPath: item.app?.iconPath,
-        icon: item.localApp?.icon,
-        onTap: launchEnabled ? () => onLaunch(item) : null,
-      ),
-    };
+    return DefaultTextStyle(
+      style: ShellText.base,
+      child: switch (item.type) {
+        HomeGridItemType.clock => HomeClockWidget(
+          clock: ref.watch(homeClockProvider),
+        ),
+        HomeGridItemType.batteryDischarge => _HomeBatteryDischargeTile(
+          series:
+              ref.watch(homeBatteryDischargeProvider).asData?.value ??
+              HomeBatteryDischargeSeries.empty,
+        ),
+        HomeGridItemType.app => _HomeAppTile(
+          name: item.localApp?.titleFor(context) ?? item.app!.name,
+          iconPath: item.app?.iconPath,
+          icon: item.localApp?.icon,
+          onTap: launchEnabled ? () => onLaunch(item) : null,
+        ),
+      },
+    );
   }
 }
 
@@ -920,6 +924,8 @@ class _BatteryDischargeGraphPainter extends CustomPainter {
         text: l10n.batteryGraphMarker(label, _formatDrawMa(l10n, drawMa)),
         style: TextStyle(
           color: const Color(0xfff7f7f8),
+          fontFamily: ShellText.uiFontFamily,
+          fontFamilyFallback: ShellText.fallbackFontFamilies,
           fontSize: 10,
           height: 1,
           fontWeight: FontWeight.w700,

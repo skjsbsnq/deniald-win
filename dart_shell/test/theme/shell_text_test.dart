@@ -26,4 +26,32 @@ void main() {
       );
     }
   });
+
+  test('every shell text token names its primary family', () {
+    // Leaving fontFamily null defers to fontconfig, which answers a CJK
+    // request with whichever face it sorts first inside NotoSansCJK's
+    // collection. That face already covers every Han glyph, so the fallback
+    // chain above never runs and Simplified Chinese renders in Korean forms.
+    const styles = <TextStyle>[
+      ShellText.base,
+      ShellText.statusClock,
+      ShellText.systemBarValue,
+      ShellText.systemBarCaption,
+      ShellText.shadeClock,
+      ShellText.shadeDate,
+      ShellText.lockClock,
+      ShellText.lockDate,
+      ShellText.lockStatus,
+      ShellText.lockChip,
+      ShellText.cardTitle,
+    ];
+
+    for (final style in styles) {
+      expect(
+        style.fontFamily,
+        ShellText.uiFontFamily,
+        reason: style.toString(),
+      );
+    }
+  });
 }
