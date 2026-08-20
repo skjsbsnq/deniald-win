@@ -11,6 +11,7 @@ import '../localization/denial_localizations.dart';
 import '../services/media_player_service.dart';
 import '../settings/settings_controller.dart';
 import '../settings/shell_settings.dart';
+import '../state/status_notifier.dart';
 import '../state/system_status.dart';
 import '../theme/motion.dart';
 import '../theme/shell_theme.dart';
@@ -19,6 +20,7 @@ import '../wallpaper/state/wallpaper_accent.dart';
 import '../widgets/notification_media.dart';
 import '../widgets/shell_backdrop_blur.dart';
 import '../widgets/shell_cursor.dart';
+import '../widgets/tray/tray_area.dart';
 import 'desktop_start_button.dart';
 import 'desktop_status_cluster.dart';
 import 'desktop_system_bar_layout.dart';
@@ -229,7 +231,7 @@ class _SystemBarMediaEntrance extends ConsumerWidget {
   }
 }
 
-class _SystemBarTrayEntrance extends StatelessWidget {
+class _SystemBarTrayEntrance extends ConsumerWidget {
   const _SystemBarTrayEntrance({
     required this.accent,
     required this.side,
@@ -245,8 +247,27 @@ class _SystemBarTrayEntrance extends StatelessWidget {
   final int index;
 
   @override
-  Widget build(BuildContext context) {
-    return const SizedBox.shrink();
+  Widget build(BuildContext context, WidgetRef ref) {
+    final hasItems = ref.watch(
+      statusNotifierProvider.select((state) => state.items.isNotEmpty),
+    );
+    if (!hasItems) {
+      return const SizedBox.shrink();
+    }
+    return _SystemBarEntrance(
+      key: const ValueKey('system-bar-tray'),
+      index: index,
+      horizontal: horizontal,
+      child: Padding(
+        padding: horizontal
+            ? EdgeInsets.only(right: cardGap)
+            : EdgeInsets.only(bottom: cardGap),
+        child: _SystemBarCard(
+          accent: accent,
+          child: TrayArea(side: side, horizontal: horizontal),
+        ),
+      ),
+    );
   }
 }
 

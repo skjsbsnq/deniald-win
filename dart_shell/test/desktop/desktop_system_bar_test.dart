@@ -25,6 +25,7 @@ import 'package:denial_dart_shell/src/state/network_connectivity.dart';
 import 'package:denial_dart_shell/src/state/quick_settings.dart';
 import 'package:denial_dart_shell/src/state/shell_controller.dart';
 import 'package:denial_dart_shell/src/state/shell_state.dart';
+import 'package:denial_dart_shell/src/state/status_notifier.dart';
 import 'package:denial_dart_shell/src/state/system_status.dart';
 import 'package:denial_dart_shell/src/wallpaper/state/wallpaper_accent.dart';
 import 'package:denial_dart_shell/src/widgets/shell_backdrop_blur.dart';
@@ -610,6 +611,9 @@ Future<void> _pumpBar(
         ),
         cpuUsageProvider.overrideWithBuild((ref, controller) => cpuLoad),
         gpuUsageProvider.overrideWithBuild((ref, controller) => gpus),
+        statusNotifierProvider.overrideWith(
+          _StaticStatusNotifierController.new,
+        ),
         mediaPlaybackProvider.overrideWith(
           (ref) => Stream<MprisPlaybackState>.value(
             MprisPlaybackState.unavailable(),
@@ -679,6 +683,15 @@ Future<void> _pumpBar(
   if (settle) {
     await tester.pumpAndSettle();
   }
+}
+
+/// Keeps a system-bar layout test independent from the live session bus. The
+/// real SNI controller is exercised by its service/state tests and by the
+/// tray widget tests; this bar fixture only needs the empty tray projection.
+class _StaticStatusNotifierController extends StatusNotifierController {
+  @override
+  StatusNotifierState build() =>
+      StatusNotifierState.initial().copyWith(initializing: false);
 }
 
 /// Serves a fixed shell state so the taskbar sees a known window list.
