@@ -548,12 +548,16 @@ class _NotificationSummarySection extends ConsumerWidget {
               color: unreadCount > 0 ? theme.accent : ShellColors.textSecondary,
             ),
             const SizedBox(width: 6),
-            Text(
-              l10n.notificationsTitle,
-              style: ShellText.cardTitle.copyWith(
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-                color: ShellColors.textPrimary,
+            Flexible(
+              child: Text(
+                l10n.notificationsTitle,
+                style: ShellText.cardTitle.copyWith(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: ShellColors.textPrimary,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
             ),
             if (unreadCount > 0) ...[

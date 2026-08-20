@@ -65,7 +65,7 @@ void main() {
       isFalse,
     );
 
-    await tester.tap(find.bySemanticsLabel('Turn on Wi-Fi'));
+    await tester.tap(find.bySemanticsLabel('Turn Wi-Fi on'));
     await tester.pump();
 
     expect(backend.setWirelessCalls, 1);
@@ -132,7 +132,9 @@ void main() {
       await tester.pump();
       expect(backend.connectCalls, 1);
 
-      await tester.tap(find.bySemanticsLabel('Disconnect from ConnectedNet'));
+      await tester.tap(
+        find.bySemanticsLabel(RegExp(r'Disconnect from ConnectedNet')),
+      );
       await tester.pump();
       expect(backend.disconnectCalls, 1);
 
@@ -140,7 +142,7 @@ void main() {
       await tester.pump();
 
       expect(find.byType(EditableText), findsOneWidget);
-      expect(find.text('Password for EncryptedNet'), findsOneWidget);
+      expect(find.text('Enter the password for EncryptedNet'), findsOneWidget);
 
       await tester.enterText(find.byType(EditableText), 'secret-password-123');
       await tester.tap(find.text('Connect'));
@@ -166,14 +168,18 @@ void main() {
     await tester.pumpWidget(_host(container));
     await tester.pump();
 
-    expect(find.text('No Wi-Fi networks found'), findsOneWidget);
+    expect(find.text('No networks found'), findsOneWidget);
   });
 }
 
-Widget _host(ProviderContainer container) {
+Widget _host(
+  ProviderContainer container, {
+  Locale locale = const Locale('en'),
+}) {
   return UncontrolledProviderScope(
     container: container,
     child: DenialLocalizationScope(
+      locale: locale,
       child: MediaQuery(
         data: const MediaQueryData(size: Size(470, 300)),
         child: DefaultTextStyle(

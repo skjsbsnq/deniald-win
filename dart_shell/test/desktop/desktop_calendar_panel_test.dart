@@ -190,6 +190,9 @@ Future<void> _pumpCalendarPanel(
 
   final handle = _DummySurfaceHandle();
 
+  await tester.pumpWidget(const SizedBox.shrink());
+  await tester.pump();
+
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
@@ -199,17 +202,25 @@ Future<void> _pumpCalendarPanel(
               notifications ?? const DesktopNotificationsState(),
         ),
       ],
-      child: DenialLocalizationScope(
-        locale: const Locale('en'),
-        child: Directionality(
-          textDirection: TextDirection.ltr,
-          child: DesktopCalendarPanel(
-            handle: handle,
-            onClose: onClose ?? handle.close,
-            onEnter: onEnter,
-            onExit: onExit,
-            onOpenNotifications: onOpenNotifications,
-            side: SystemBarSide.bottom,
+      child: MaterialApp(
+        home: DenialLocalizationScope(
+          locale: const Locale('en'),
+          child: Scaffold(
+            body: Align(
+              alignment: Alignment.bottomRight,
+              child: SizedBox(
+                width: DesktopCalendarPanel.panelWidth,
+                height: DesktopCalendarPanel.panelHeight,
+                child: DesktopCalendarPanel(
+                  handle: handle,
+                  onClose: onClose ?? handle.close,
+                  onEnter: onEnter,
+                  onExit: onExit,
+                  onOpenNotifications: onOpenNotifications,
+                  side: SystemBarSide.bottom,
+                ),
+              ),
+            ),
           ),
         ),
       ),

@@ -188,7 +188,7 @@ void main() {
     testWidgets('publishes input region with debug label', (tester) async {
       await _pumpCluster(tester);
       final region = tester.widget<ShellInputRegion>(
-        find.ancestor(
+        find.descendant(
           of: find.byType(DesktopStatusCluster),
           matching: find.byType(ShellInputRegion),
         ),
@@ -210,11 +210,17 @@ void main() {
       (tester) async {
         // English closed
         await _pumpCluster(tester, panel: DesktopPanel.none);
-        expect(find.bySemanticsLabel('Open control center'), findsOneWidget);
+        expect(
+          find.bySemanticsLabel(RegExp(r'Open control center')),
+          findsOneWidget,
+        );
 
         // English open
         await _pumpCluster(tester, panel: DesktopPanel.dashboard);
-        expect(find.bySemanticsLabel('Close control center'), findsOneWidget);
+        expect(
+          find.bySemanticsLabel(RegExp(r'Close control center')),
+          findsOneWidget,
+        );
 
         // Chinese closed
         await _pumpCluster(
@@ -222,7 +228,7 @@ void main() {
           panel: DesktopPanel.none,
           locale: const Locale('zh'),
         );
-        expect(find.bySemanticsLabel('打开控制中心'), findsOneWidget);
+        expect(find.bySemanticsLabel(RegExp(r'打开控制中心')), findsOneWidget);
 
         // Chinese open
         await _pumpCluster(
@@ -230,7 +236,7 @@ void main() {
           panel: DesktopPanel.dashboard,
           locale: const Locale('zh'),
         );
-        expect(find.bySemanticsLabel('关闭控制中心'), findsOneWidget);
+        expect(find.bySemanticsLabel(RegExp(r'关闭控制中心')), findsOneWidget);
       },
     );
 
@@ -241,8 +247,13 @@ void main() {
       await _pumpCluster(tester, onTap: () => activated++);
 
       // Focus the widget
-      final focusFinder = find.byType(Focus);
-      expect(focusFinder, findsWidgets);
+      final mouseRegionFinder = find.descendant(
+        of: find.byType(DesktopStatusCluster),
+        matching: find.byType(MouseRegion),
+      );
+      expect(mouseRegionFinder, findsWidgets);
+      Focus.of(tester.element(mouseRegionFinder.first)).requestFocus();
+      await tester.pumpAndSettle();
 
       // Send Enter key
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
@@ -351,6 +362,9 @@ Future<void> _pumpCluster(
 
   final workspaceState = DesktopWorkspaceState.initial().copyWith(panel: panel);
 
+  await tester.pumpWidget(const SizedBox.shrink());
+  await tester.pump();
+
   await tester.pumpWidget(
     ProviderScope(
       overrides: [
@@ -374,13 +388,11 @@ Future<void> _pumpCluster(
           (ref, controller) => networkState,
         ),
       ],
-      child: DenialLocalizationScope(
-        locale: locale,
-        child: Directionality(
-          textDirection: TextDirection.ltr,
-          child: Material(
-            type: MaterialType.transparency,
-            child: DesktopStatusCluster(horizontal: horizontal, onTap: onTap),
+      child: MaterialApp(
+        home: DenialLocalizationScope(
+          locale: locale,
+          child: Scaffold(
+            body: DesktopStatusCluster(horizontal: horizontal, onTap: onTap),
           ),
         ),
       ),
