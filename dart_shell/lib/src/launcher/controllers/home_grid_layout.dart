@@ -175,14 +175,17 @@ class HomeGridLayout {
   static List<HomeGridItem?> placeItemAt(
     List<HomeGridItem?> slots,
     int index,
-    HomeGridItem item,
-  ) {
-    if (!itemFitsAtColumn(item, index)) {
+    HomeGridItem item, {
+    int? columns,
+  }) {
+    if (!itemFitsAtColumn(item, index, columns: columns)) {
       return slots;
     }
 
-    final cells = cellsFor(index, item);
-    final blocked = cells.any((cell) => anchorForCell(cell, slots) != null);
+    final cells = cellsFor(index, item, columns: columns);
+    final blocked = cells.any(
+      (cell) => anchorForCell(cell, slots, columns: columns) != null,
+    );
     if (blocked) {
       return slots;
     }
@@ -194,23 +197,27 @@ class HomeGridLayout {
 
   static List<HomeGridItem?> placeItemInFirstFreeSlot(
     List<HomeGridItem?> slots,
-    HomeGridItem item,
-  ) {
-    return placeItemAfter(slots, 0, item);
+    HomeGridItem item, {
+    int? columns,
+  }) {
+    return placeItemAfter(slots, 0, item, columns: columns);
   }
 
   static List<HomeGridItem?> placeItemAfter(
     List<HomeGridItem?> slots,
     int startIndex,
-    HomeGridItem item,
-  ) {
+    HomeGridItem item, {
+    int? columns,
+  }) {
     var next = [...slots];
     for (var index = math.max(0, startIndex); ; index += 1) {
-      if (!itemFitsAtColumn(item, index)) {
+      if (!itemFitsAtColumn(item, index, columns: columns)) {
         continue;
       }
-      final cells = cellsFor(index, item);
-      final blocked = cells.any((cell) => anchorForCell(cell, next) != null);
+      final cells = cellsFor(index, item, columns: columns);
+      final blocked = cells.any(
+        (cell) => anchorForCell(cell, next, columns: columns) != null,
+      );
       if (blocked) {
         continue;
       }
@@ -220,13 +227,19 @@ class HomeGridLayout {
     }
   }
 
-  static bool itemFitsAtColumn(HomeGridItem item, int index) {
-    final column = index % columns;
-    return column + item.colSpan <= columns;
+  static bool itemFitsAtColumn(HomeGridItem item, int index, {int? columns}) {
+    final effectiveColumns = columns ?? HomeGridLayout.columns;
+    final column = index % effectiveColumns;
+    return column + item.colSpan <= effectiveColumns;
   }
 
-  static bool itemFitsInPage(int index, HomeGridItem item, int pageSize) {
-    if (pageSize <= 0 || !itemFitsAtColumn(item, index)) {
+  static bool itemFitsInPage(
+    int index,
+    HomeGridItem item,
+    int pageSize, {
+    int? columns,
+  }) {
+    if (pageSize <= 0 || !itemFitsAtColumn(item, index, columns: columns)) {
       return false;
     }
     final pageStart = (index ~/ pageSize) * pageSize;
@@ -234,6 +247,7 @@ class HomeGridLayout {
     return cellsFor(
       index,
       item,
+      columns: columns,
     ).every((cell) => cell >= pageStart && cell < pageEnd);
   }
 
@@ -248,13 +262,17 @@ class HomeGridLayout {
     ];
   }
 
-  static int? anchorForCell(int cell, List<HomeGridItem?> slots) {
+  static int? anchorForCell(
+    int cell,
+    List<HomeGridItem?> slots, {
+    int? columns,
+  }) {
     for (var index = 0; index < slots.length; index += 1) {
       final item = slots[index];
       if (item == null) {
         continue;
       }
-      if (cellsFor(index, item).contains(cell)) {
+      if (cellsFor(index, item, columns: columns).contains(cell)) {
         return index;
       }
     }
@@ -277,13 +295,14 @@ class HomeGridLayout {
     HomeGridItem item,
     int pageSize, {
     required Set<int> ignoreAnchors,
+    int? columns,
   }) {
-    if (!itemFitsInPage(index, item, pageSize)) {
+    if (!itemFitsInPage(index, item, pageSize, columns: columns)) {
       return false;
     }
 
-    for (final cell in cellsFor(index, item)) {
-      final occupant = anchorForCell(cell, slots);
+    for (final cell in cellsFor(index, item, columns: columns)) {
+      final occupant = anchorForCell(cell, slots, columns: columns);
       if (occupant != null && !ignoreAnchors.contains(occupant)) {
         return false;
       }
@@ -295,8 +314,9 @@ class HomeGridLayout {
     List<HomeGridItem?> slots,
     int fromIndex,
     int toIndex,
-    int pageSize,
-  ) {
+    int pageSize, {
+    int? columns,
+  }) {
     if (fromIndex == toIndex ||
         fromIndex < 0 ||
         toIndex < 0 ||
@@ -309,7 +329,8 @@ class HomeGridLayout {
       return false;
     }
 
-    final targetAnchor = anchorForCell(toIndex, slots) ?? toIndex;
+    final targetAnchor =
+        anchorForCell(toIndex, slots, columns: columns) ?? toIndex;
     if (targetAnchor == fromIndex) {
       return false;
     }
@@ -321,6 +342,7 @@ class HomeGridLayout {
         source,
         pageSize,
         ignoreAnchors: {fromIndex},
+        columns: columns,
       );
     }
 
@@ -330,6 +352,7 @@ class HomeGridLayout {
           source,
           pageSize,
           ignoreAnchors: {fromIndex, targetAnchor},
+          columns: columns,
         ) &&
         canPlaceAt(
           slots,
@@ -337,6 +360,7 @@ class HomeGridLayout {
           target,
           pageSize,
           ignoreAnchors: {fromIndex, targetAnchor},
+          columns: columns,
         );
   }
 
@@ -344,9 +368,10 @@ class HomeGridLayout {
     List<HomeGridItem?> slots,
     int fromIndex,
     int toIndex,
-    int pageSize,
-  ) {
-    if (!canMoveSlot(slots, fromIndex, toIndex, pageSize)) {
+    int pageSize, {
+    int? columns,
+  }) {
+    if (!canMoveSlot(slots, fromIndex, toIndex, pageSize, columns: columns)) {
       return null;
     }
 
@@ -355,11 +380,12 @@ class HomeGridLayout {
       return null;
     }
 
-    final targetAnchor = anchorForCell(toIndex, slots) ?? toIndex;
+    final targetAnchor =
+        anchorForCell(toIndex, slots, columns: columns) ?? toIndex;
     final target = targetAnchor < slots.length ? slots[targetAnchor] : null;
     final requiredLength = [
-      ...cellsFor(targetAnchor, source),
-      if (target != null) ...cellsFor(fromIndex, target),
+      ...cellsFor(targetAnchor, source, columns: columns),
+      if (target != null) ...cellsFor(fromIndex, target, columns: columns),
     ].reduce(math.max);
 
     final next = ensureListLength([...slots], requiredLength + 1);
@@ -373,8 +399,9 @@ class HomeGridLayout {
     int index,
     int colSpan,
     int rowSpan,
-    int pageSize,
-  ) {
+    int pageSize, {
+    int? columns,
+  }) {
     if (index < 0 || index >= slots.length) {
       return false;
     }
@@ -385,7 +412,14 @@ class HomeGridLayout {
     }
 
     final resized = source.resize(colSpan: colSpan, rowSpan: rowSpan);
-    return canPlaceAt(slots, index, resized, pageSize, ignoreAnchors: {index});
+    return canPlaceAt(
+      slots,
+      index,
+      resized,
+      pageSize,
+      ignoreAnchors: {index},
+      columns: columns,
+    );
   }
 
   static HomeGridResizeResult? resizeSlot(
@@ -393,9 +427,17 @@ class HomeGridLayout {
     int index,
     int colSpan,
     int rowSpan,
-    int pageSize,
-  ) {
-    if (!canResizeSlot(slots, index, colSpan, rowSpan, pageSize)) {
+    int pageSize, {
+    int? columns,
+  }) {
+    if (!canResizeSlot(
+      slots,
+      index,
+      colSpan,
+      rowSpan,
+      pageSize,
+      columns: columns,
+    )) {
       return null;
     }
 
@@ -405,7 +447,7 @@ class HomeGridLayout {
     }
 
     final resized = source.resize(colSpan: colSpan, rowSpan: rowSpan);
-    final cells = cellsFor(index, resized);
+    final cells = cellsFor(index, resized, columns: columns);
     final next = ensureListLength([...slots], cells.last + 1);
     next[index] = resized;
     return HomeGridResizeResult(slots: next, resizedIndex: index);
