@@ -39,25 +39,43 @@ use super::{
 
 const XWAYLAND_BASE_DPI: u32 = 96;
 
-pub(super) fn scale_for_engine(engine_scale_120: u32) -> u32 {
-    engine_scale_120.max(SCALE_BASE).div_ceil(SCALE_BASE)
+/// X11 has no fractional-scale protocol, so the compositor alone decides what
+/// an Xwayland client pixel is worth. Handing it the output scale verbatim
+/// makes one X11 pixel one physical pixel. Rounding up to the next integer
+/// instead would size the X11 screen at `ceil(scale)/scale` of the panel, so
+/// every X11 client renders that many extra fragments only to be minified back
+/// onto the panel — 78% extra at 1.5x, plus a resample of every window.
+///
+/// Kept in `SCALE_BASE` fixed point so change detection stays an exact integer
+/// comparison rather than a float epsilon.
+pub(super) fn scale_120_for_engine(engine_scale_120: u32) -> u32 {
+    engine_scale_120.max(SCALE_BASE)
 }
 
-pub(super) fn dpi(scale: u32) -> u32 {
-    XWAYLAND_BASE_DPI.saturating_mul(scale.max(1))
+pub(super) fn scale_factor(scale_120: u32) -> f64 {
+    f64::from(scale_120.max(SCALE_BASE)) / f64::from(SCALE_BASE)
+}
+
+pub(super) fn dpi(scale_120: u32) -> u32 {
+    let base = u64::from(SCALE_BASE);
+    let scaled = u64::from(XWAYLAND_BASE_DPI) * u64::from(scale_120.max(SCALE_BASE));
+    u32::try_from((scaled + base / 2) / base).unwrap_or(u32::MAX)
 }
 
 pub(super) fn publish_dpi(
     xwm: &mut X11Wm,
-    scale: u32,
+    scale_120: u32,
 ) -> Result<(), smithay::xwayland::xwm::SettingsError> {
-    let xft_dpi = i32::try_from(dpi(scale).saturating_mul(1024)).unwrap_or(i32::MAX);
-    let base_dpi = i32::try_from(XWAYLAND_BASE_DPI.saturating_mul(1024)).unwrap_or(i32::MAX);
-    let window_scale = i32::try_from(scale).unwrap_or(i32::MAX);
+    let xft_dpi = i32::try_from(dpi(scale_120).saturating_mul(1024)).unwrap_or(i32::MAX);
+    // GTK 3 only ever implemented integer buffer scales, and Xwayland now hands
+    // over buffers whose pixels are already physical pixels. Pinning the window
+    // scaling factor to 1 keeps those buffers unscaled, which leaves the font
+    // DPI as the only channel the scale can reach toolkits through — so the
+    // unscaled and effective DPI are deliberately the same number here.
     xwm.set_xsettings(
         [
-            ("Gdk/WindowScalingFactor", window_scale),
-            ("Gdk/UnscaledDPI", base_dpi),
+            ("Gdk/WindowScalingFactor", 1),
+            ("Gdk/UnscaledDPI", xft_dpi),
             ("Xft/DPI", xft_dpi),
         ]
         .into_iter()
@@ -70,8 +88,8 @@ impl super::WaylandFrontend {
         &mut self,
         engine_scale_120: u32,
     ) -> Result<bool, Box<dyn std::error::Error>> {
-        let scale = scale_for_engine(engine_scale_120);
-        if scale == self.xwayland_scale {
+        let scale_120 = scale_120_for_engine(engine_scale_120);
+        if scale_120 == self.xwayland_scale_120 {
             return Ok(false);
         }
 
@@ -79,11 +97,11 @@ impl super::WaylandFrontend {
             .get_data::<smithay::xwayland::XWaylandClientData>()
             .ok_or("Xwayland client is missing compositor state")?
             .compositor_state
-            .set_client_scale(f64::from(scale));
+            .set_client_scale(scale_factor(scale_120));
         if let Some(xwm) = self.xwm.as_mut() {
-            publish_dpi(xwm, scale)?;
+            publish_dpi(xwm, scale_120)?;
         }
-        self.xwayland_scale = scale;
+        self.xwayland_scale_120 = scale_120;
         Ok(true)
     }
 
@@ -1121,6 +1139,66 @@ impl XwmHandler for RuntimeState {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Run this machine's actual panel through the function instead of
+    /// trusting the multiplier: 2560x1600 at 1.5 has a logical width of
+    /// 2560/1.5, and the X11 screen is that width times the Xwayland scale.
+    /// It has to land back on 2560 physical pixels, because any other value is
+    /// a resample of every X11 window. Rounding up to scale 2 put it at 3413.
+    #[test]
+    fn xwayland_screen_lands_on_physical_pixels_for_a_fractional_output() {
+        let physical = (2560.0_f64, 1600.0_f64);
+        let output_scale = 1.5_f64;
+        let logical = (physical.0 / output_scale, physical.1 / output_scale);
+
+        let scale_120 = scale_120_for_engine(180);
+        let x11_screen = (
+            logical.0 * scale_factor(scale_120),
+            logical.1 * scale_factor(scale_120),
+        );
+
+        assert!(
+            (x11_screen.0 - physical.0).abs() < 0.5,
+            "X11 screen width {} should match the panel's {}",
+            x11_screen.0,
+            physical.0
+        );
+        assert!(
+            (x11_screen.1 - physical.1).abs() < 0.5,
+            "X11 screen height {} should match the panel's {}",
+            x11_screen.1,
+            physical.1
+        );
+    }
+
+    #[test]
+    fn xwayland_scale_keeps_the_output_scale_verbatim() {
+        assert_eq!(scale_120_for_engine(180), 180);
+        assert_eq!(scale_factor(180), 1.5);
+        assert_eq!(scale_120_for_engine(150), 150);
+        assert_eq!(scale_factor(150), 1.25);
+        assert_eq!(scale_120_for_engine(SCALE_BASE), SCALE_BASE);
+        assert_eq!(scale_factor(SCALE_BASE), 1.0);
+    }
+
+    #[test]
+    fn xwayland_scale_never_falls_below_one() {
+        assert_eq!(scale_120_for_engine(0), SCALE_BASE);
+        assert_eq!(scale_120_for_engine(SCALE_BASE / 2), SCALE_BASE);
+        assert_eq!(scale_factor(0), 1.0);
+        assert_eq!(dpi(0), XWAYLAND_BASE_DPI);
+    }
+
+    #[test]
+    fn xwayland_dpi_tracks_the_scale_and_rounds_to_nearest() {
+        assert_eq!(dpi(SCALE_BASE), 96);
+        assert_eq!(dpi(150), 120);
+        assert_eq!(dpi(180), 144);
+        assert_eq!(dpi(210), 168);
+        assert_eq!(dpi(240), 192);
+        // 1.1x is 105.6 DPI; nearest, not truncated toward 105.
+        assert_eq!(dpi(132), 106);
+    }
 
     #[test]
     fn managed_x11_window_cannot_start_across_multiple_outputs() {

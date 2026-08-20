@@ -319,7 +319,7 @@ pub(super) struct WaylandFrontend {
     _fractional_scale_manager_state: FractionalScaleManagerState,
     pub xwm: Option<X11Wm>,
     xwayland_client: Client,
-    xwayland_scale: u32,
+    xwayland_scale_120: u32,
     xdisplay: u32,
     _xdg_decoration_state: XdgDecorationState,
     _cursor_shape_state: CursorShapeManagerState,
@@ -949,8 +949,8 @@ impl WaylandFrontend {
 
         let client_budget = Arc::new(WaylandClientBudget::default());
         let socket_name = init_listener(display, event_loop, client_budget)?;
-        let xwayland_scale = xwayland::scale_for_engine(atlas.engine_scale_120);
-        let xwayland_dpi = xwayland::dpi(xwayland_scale);
+        let xwayland_scale_120 = xwayland::scale_120_for_engine(atlas.engine_scale_120);
+        let xwayland_dpi = xwayland::dpi(xwayland_scale_120);
         let xwayland_args = ["-dpi".to_owned(), xwayland_dpi.to_string()];
         let (xwayland, xwayland_client) = XWayland::spawn(
             &display_handle,
@@ -966,7 +966,7 @@ impl WaylandFrontend {
             .get_data::<XWaylandClientData>()
             .expect("Xwayland client is missing compositor state")
             .compositor_state
-            .set_client_scale(f64::from(xwayland_scale));
+            .set_client_scale(xwayland::scale_factor(xwayland_scale_120));
         let xdisplay = xwayland.display_number();
         let window_placement_path = default_state_path();
         let window_placements = match WindowPlacementStore::load(window_placement_path.clone()) {
@@ -1009,15 +1009,16 @@ impl WaylandFrontend {
                             );
                             return;
                         };
-                        if let Err(error) = xwayland::publish_dpi(&mut xwm, frontend.xwayland_scale)
+                        if let Err(error) =
+                            xwayland::publish_dpi(&mut xwm, frontend.xwayland_scale_120)
                         {
                             error!(%error, "could not publish Xwayland DPI settings");
                         }
                         frontend.xwm = Some(xwm);
                         info!(
                             display = %format_args!(":{display_number}"),
-                            scale = frontend.xwayland_scale,
-                            dpi = xwayland::dpi(frontend.xwayland_scale),
+                            scale = xwayland::scale_factor(frontend.xwayland_scale_120),
+                            dpi = xwayland::dpi(frontend.xwayland_scale_120),
                             "Xwayland is ready"
                         );
                         state.scene_sync.mark_dirty();
@@ -1055,7 +1056,7 @@ impl WaylandFrontend {
             _fractional_scale_manager_state: fractional_scale_manager_state,
             xwm: None,
             xwayland_client,
-            xwayland_scale,
+            xwayland_scale_120,
             xdisplay,
             _xdg_decoration_state: xdg_decoration_state,
             _cursor_shape_state: cursor_shape_state,
