@@ -19,6 +19,9 @@ use std::time::{Duration, Instant};
 
 use libloading::Library;
 use tracing::{info, warn};
+use zbus::blocking::connection::Builder as ConnectionBuilder;
+use zbus::blocking::{Connection, Proxy};
+use zbus::zvariant::OwnedObjectPath;
 
 const CONTROL_STEP: f64 = 0.05;
 const MAX_AUDIO_LEVEL: f64 = 1.4;
@@ -28,6 +31,16 @@ const EVENT_QUEUE_CAPACITY: usize = 64;
 const MAX_AUDIO_STREAMS: usize = 256;
 const MAX_AUDIO_STREAM_NAME_BYTES: usize = 1024;
 const MAX_BRIGHTNESS_CONNECTOR_BYTES: usize = 128;
+const BACKLIGHT_CLASS_ROOT: &str = "/sys/class/backlight";
+const DRM_CLASS_ROOT: &str = "/sys/class/drm";
+const MIN_BACKLIGHT_RAW: u32 = 1;
+const LOGIND_SERVICE: &str = "org.freedesktop.login1";
+const LOGIND_MANAGER_OBJECT: &str = "/org/freedesktop/login1";
+const LOGIND_MANAGER_INTERFACE: &str = "org.freedesktop.login1.Manager";
+const LOGIND_SESSION_INTERFACE: &str = "org.freedesktop.login1.Session";
+const LOGIND_DBUS_TIMEOUT: Duration = Duration::from_millis(500);
+const DDC_RETRY_INTERVAL: Duration = Duration::from_secs(5);
+const MAX_DDC_INIT_ATTEMPTS: usize = 5;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(super) struct AudioStreamState {
@@ -1563,10 +1576,7 @@ impl BrightnessProviders {
             Ok(provider) => providers.push(Box::new(provider)),
             Err(error) => failures.push(format!("kernel backlight: {error}")),
         }
-        match DdcWorker::start() {
-            Ok(provider) => providers.push(Box::new(provider)),
-            Err(error) => failures.push(format!("DDC/CI: {error}")),
-        }
+        providers.push(Box::new(DdcWorker::new(PathBuf::from(DRM_CLASS_ROOT))));
 
         if providers.is_empty() {
             return Err(failures.join("; "));
@@ -1687,6 +1697,41 @@ impl BrightnessProviders {
     }
 }
 
+fn read_sysfs_u32(path: &Path) -> Option<u32> {
+    fs::read_to_string(path).ok()?.trim().parse().ok()
+}
+
+fn is_internal_panel(connector: &str) -> bool {
+    const INTERNAL_PREFIXES: [&str; 4] = ["edp", "lvds", "dsi", "dpi"];
+    let lowered = connector.to_ascii_lowercase();
+    INTERNAL_PREFIXES
+        .iter()
+        .any(|prefix| lowered.starts_with(prefix))
+}
+
+#[cfg(test)]
+fn internal_connector(name: &str) -> bool {
+    is_internal_panel(name)
+}
+
+fn connected_internal_connector(name: &str, status: &str) -> bool {
+    let s = status.trim();
+    is_internal_panel(name) && (s == "connected" || s == "unknown" || s.is_empty())
+}
+
+fn backlight_kind_priority(kind: &str) -> u8 {
+    match kind {
+        "raw" => 3,
+        "platform" => 2,
+        "firmware" => 1,
+        _ => 0,
+    }
+}
+
+fn paths_related(left: &Path, right: &Path) -> bool {
+    left == right || left.starts_with(right) || right.starts_with(left)
+}
+
 #[derive(Clone, Debug)]
 struct BacklightDevice {
     name: String,
@@ -1696,20 +1741,190 @@ struct BacklightDevice {
     maximum: u32,
 }
 
+impl BacklightDevice {
+    fn level(&self) -> Option<f64> {
+        let raw = read_sysfs_u32(&self.path.join("actual_brightness"))
+            .or_else(|| read_sysfs_u32(&self.path.join("brightness")))?;
+        (self.maximum > 0).then(|| f64::from(raw.min(self.maximum)) / f64::from(self.maximum))
+    }
+
+    fn raw_for(&self, level: f64) -> u32 {
+        let level = if level.is_nan() {
+            0.0
+        } else {
+            level.clamp(0.0, 1.0)
+        };
+        let scaled = (level * f64::from(self.maximum)).round();
+        if scaled.is_nan() || scaled < MIN_BACKLIGHT_RAW as f64 {
+            MIN_BACKLIGHT_RAW
+        } else if scaled > self.maximum as f64 {
+            self.maximum
+        } else {
+            (scaled as u32).clamp(MIN_BACKLIGHT_RAW, self.maximum)
+        }
+    }
+}
+
+struct LogindBrightness {
+    connection: Connection,
+    session: OwnedObjectPath,
+}
+
+impl LogindBrightness {
+    fn connect() -> Result<Self, String> {
+        let connection = ConnectionBuilder::system()
+            .map_err(|e| format!("system bus error: {e}"))?
+            .method_timeout(LOGIND_DBUS_TIMEOUT)
+            .build()
+            .map_err(|e| format!("system bus connection build error: {e}"))?;
+        let manager = Proxy::new(
+            &connection,
+            LOGIND_SERVICE,
+            LOGIND_MANAGER_OBJECT,
+            LOGIND_MANAGER_INTERFACE,
+        )
+        .map_err(|e| format!("logind manager proxy error: {e}"))?;
+        let session: OwnedObjectPath = match manager.call("GetSessionByPID", &(std::process::id(),))
+        {
+            Ok(session) => session,
+            Err(error) => match std::env::var("XDG_SESSION_ID") {
+                Ok(id) => manager
+                    .call("GetSession", &(id.as_str(),))
+                    .map_err(|e| format!("GetSession error: {e}"))?,
+                Err(_) => match manager.call("GetSession", &("auto",)) {
+                    Ok(s) => s,
+                    Err(_) => return Err(format!("could not determine logind session: {error}")),
+                },
+            },
+        };
+        Ok(Self {
+            connection,
+            session,
+        })
+    }
+
+    fn set(&self, device: &str, raw: u32) -> Result<(), String> {
+        let proxy = Proxy::new(
+            &self.connection,
+            LOGIND_SERVICE,
+            self.session.as_str(),
+            LOGIND_SESSION_INTERFACE,
+        )
+        .map_err(|e| format!("logind session proxy error: {e}"))?;
+        proxy
+            .call("SetBrightness", &("backlight", device, raw))
+            .map_err(|e| format!("logind SetBrightness failed: {e}"))
+    }
+}
+
+fn discover_backlights(backlight_root: &Path, drm_root: &Path) -> HashMap<String, BacklightDevice> {
+    let mut backlights = fs::read_dir(backlight_root)
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|entry| {
+            let path = entry.path();
+            let maximum =
+                read_sysfs_u32(&path.join("max_brightness")).filter(|value| *value > 0)?;
+            let device_path = fs::canonicalize(path.join("device")).ok()?;
+            let kind = fs::read_to_string(path.join("type"))
+                .unwrap_or_default()
+                .trim()
+                .to_owned();
+            Some(BacklightDevice {
+                name: entry.file_name().to_string_lossy().into_owned(),
+                path,
+                device_path,
+                kind,
+                maximum,
+            })
+        })
+        .collect::<Vec<_>>();
+    backlights.sort_by(|left, right| left.name.cmp(&right.name));
+
+    let all_connectors = drm_connector_identities(drm_root);
+    let connectors = all_connectors
+        .into_iter()
+        .filter(|connector| {
+            connected_internal_connector(
+                &connector.name,
+                connector.status.as_deref().unwrap_or_default(),
+            )
+        })
+        .collect::<Vec<_>>();
+
+    let mut displays = HashMap::new();
+    for connector in &connectors {
+        let mut related = backlights
+            .iter()
+            .filter(|backlight| {
+                if let Some(canonical) = connector.canonical.as_ref()
+                    && (canonical.starts_with(&backlight.device_path)
+                        || backlight.device_path.starts_with(canonical))
+                {
+                    return true;
+                }
+                if let Some(device) = connector.device_path.as_ref()
+                    && paths_related(&backlight.device_path, device)
+                {
+                    return true;
+                }
+                false
+            })
+            .collect::<Vec<_>>();
+        if related.is_empty() && connectors.len() == 1 && backlights.len() == 1 {
+            info!(
+                connector = %connector.name,
+                backlight = %backlights[0].name,
+                "single internal connector and single backlight; using conservative fallback match"
+            );
+            related.push(&backlights[0]);
+        }
+        related
+            .sort_by_key(|backlight| std::cmp::Reverse(backlight_kind_priority(&backlight.kind)));
+        let Some(selected) = related.first() else {
+            continue;
+        };
+        if related.get(1).is_some_and(|other| {
+            backlight_kind_priority(&other.kind) == backlight_kind_priority(&selected.kind)
+        }) {
+            warn!(
+                connector = %connector.name,
+                "multiple equally suitable kernel backlights; leaving output unclaimed"
+            );
+            continue;
+        }
+        displays.insert(connector.name.clone(), (*selected).clone());
+    }
+    displays
+}
+
 struct BacklightWorker {
-    connection: zbus::blocking::Connection,
     displays: HashMap<String, BacklightDevice>,
+    logind: Option<LogindBrightness>,
+    backlight_root: PathBuf,
+    drm_root: PathBuf,
 }
 
 impl BacklightWorker {
     fn start() -> Result<Self, String> {
-        let connection = zbus::blocking::Connection::system()
-            .map_err(|error| format!("could not connect to logind: {error}"))?;
+        Self::with_roots(
+            PathBuf::from(BACKLIGHT_CLASS_ROOT),
+            PathBuf::from(DRM_CLASS_ROOT),
+        )
+    }
+
+    fn with_roots(backlight_root: PathBuf, drm_root: PathBuf) -> Result<Self, String> {
         let mut worker = Self {
-            connection,
             displays: HashMap::new(),
+            logind: None,
+            backlight_root,
+            drm_root,
         };
         worker.refresh_displays();
+        if worker.displays.is_empty() {
+            return Err("no kernel backlight devices found".into());
+        }
         info!(
             outputs = worker.displays.len(),
             "Denial brightness registered the kernel backlight provider"
@@ -1718,10 +1933,7 @@ impl BacklightWorker {
     }
 
     fn refresh_displays(&mut self) {
-        self.displays = discover_backlights(
-            Path::new("/sys/class/backlight"),
-            Path::new("/sys/class/drm"),
-        );
+        self.displays = discover_backlights(&self.backlight_root, &self.drm_root);
     }
 
     fn display(&mut self, connector: &str) -> Option<&BacklightDevice> {
@@ -1745,135 +1957,47 @@ impl BrightnessProvider for BacklightWorker {
         let display = self
             .display(connector)
             .ok_or_else(|| "output is not associated with a backlight device".to_owned())?;
-        let current = read_u32(&display.path.join("actual_brightness"))
-            .or_else(|_| read_u32(&display.path.join("brightness")))?;
-        Ok(f64::from(current.min(display.maximum)) / f64::from(display.maximum))
+        display
+            .level()
+            .ok_or_else(|| "could not read kernel backlight level".to_owned())
     }
 
     fn set(&mut self, connector: &str, level: f64) -> Result<(), String> {
-        let (name, maximum) = {
-            let display = self
-                .display(connector)
-                .ok_or_else(|| "output is not associated with a backlight device".to_owned())?;
-            (display.name.clone(), display.maximum)
-        };
-        let value = (level.clamp(0.0, 1.0) * f64::from(maximum)).round() as u32;
-        let proxy = zbus::blocking::Proxy::new(
-            &self.connection,
-            "org.freedesktop.login1",
-            "/org/freedesktop/login1/session/auto",
-            "org.freedesktop.login1.Session",
-        )
-        .map_err(|error| format!("could not open the logind session: {error}"))?;
-        let _: () = proxy
-            .call("SetBrightness", &("backlight", name.as_str(), value))
-            .map_err(|error| format!("logind SetBrightness failed: {error}"))?;
-        Ok(())
-    }
-}
+        let display = self
+            .display(connector)
+            .cloned()
+            .ok_or_else(|| "output is not associated with a backlight device".to_owned())?;
+        let raw = display.raw_for(level);
 
-fn read_u32(path: &Path) -> Result<u32, String> {
-    fs::read_to_string(path)
-        .map_err(|error| format!("could not read {}: {error}", path.display()))?
-        .trim()
-        .parse()
-        .map_err(|error| format!("invalid value in {}: {error}", path.display()))
-}
-
-fn internal_connector(name: &str) -> bool {
-    ["eDP-", "LVDS-", "DSI-"]
-        .iter()
-        .any(|prefix| name.starts_with(prefix))
-}
-
-fn connected_internal_connector(name: &str, status: &str) -> bool {
-    internal_connector(name) && status.trim() == "connected"
-}
-
-fn backlight_kind_priority(kind: &str) -> u8 {
-    match kind {
-        "raw" => 3,
-        "platform" => 2,
-        "firmware" => 1,
-        _ => 0,
-    }
-}
-
-fn paths_related(left: &Path, right: &Path) -> bool {
-    left == right || left.starts_with(right) || right.starts_with(left)
-}
-
-fn discover_backlights(backlight_root: &Path, drm_root: &Path) -> HashMap<String, BacklightDevice> {
-    let mut backlights = fs::read_dir(backlight_root)
-        .into_iter()
-        .flatten()
-        .flatten()
-        .filter_map(|entry| {
-            let path = entry.path();
-            let maximum = read_u32(&path.join("max_brightness"))
-                .ok()
-                .filter(|value| *value > 0)?;
-            let device_path = fs::canonicalize(path.join("device")).ok()?;
-            let kind = fs::read_to_string(path.join("type"))
-                .unwrap_or_default()
-                .trim()
-                .to_owned();
-            Some(BacklightDevice {
-                name: entry.file_name().to_string_lossy().into_owned(),
-                path,
-                device_path,
-                kind,
-                maximum,
-            })
-        })
-        .collect::<Vec<_>>();
-    backlights.sort_by(|left, right| left.name.cmp(&right.name));
-
-    let connectors = fs::read_dir(drm_root)
-        .into_iter()
-        .flatten()
-        .flatten()
-        .filter_map(|entry| {
-            let path = entry.path();
-            if !path.join("connector_id").is_file() {
-                return None;
+        match fs::write(display.path.join("brightness"), raw.to_string()) {
+            Ok(()) => return Ok(()),
+            Err(error) if error.kind() != io::ErrorKind::PermissionDenied => {
+                return Err(format!("could not write sysfs brightness: {error}"));
             }
-            let name = connector_from_ddc_name(&entry.file_name().to_string_lossy());
-            let status = fs::read_to_string(path.join("status")).unwrap_or_default();
-            if !connected_internal_connector(&name, &status) {
-                return None;
-            }
-            let device_path = fs::canonicalize(path.join("device")).ok()?;
-            Some((name, device_path))
-        })
-        .collect::<Vec<_>>();
+            Err(_) => {}
+        }
 
-    let mut displays = HashMap::new();
-    for (connector, connector_device) in &connectors {
-        let mut related = backlights
-            .iter()
-            .filter(|backlight| paths_related(&backlight.device_path, connector_device))
-            .collect::<Vec<_>>();
-        if related.is_empty() && connectors.len() == 1 && backlights.len() == 1 {
-            related.push(&backlights[0]);
+        if self.logind.is_none() {
+            self.logind = LogindBrightness::connect().ok();
         }
-        related
-            .sort_by_key(|backlight| std::cmp::Reverse(backlight_kind_priority(&backlight.kind)));
-        let Some(selected) = related.first() else {
-            continue;
-        };
-        if related.get(1).is_some_and(|other| {
-            backlight_kind_priority(&other.kind) == backlight_kind_priority(&selected.kind)
-        }) {
-            warn!(
-                connector,
-                "multiple equally suitable kernel backlights; leaving output unclaimed"
-            );
-            continue;
+        if let Some(logind) = self.logind.as_ref()
+            && logind.set(&display.name, raw).is_ok()
+        {
+            return Ok(());
         }
-        displays.insert(connector.clone(), (*selected).clone());
+
+        match LogindBrightness::connect() {
+            Ok(logind) => {
+                let res = logind.set(&display.name, raw);
+                self.logind = Some(logind);
+                res.map_err(|e| format!("logind SetBrightness failed: {e}"))
+            }
+            Err(error) => {
+                self.logind = None;
+                Err(format!("logind is unavailable: {error}"))
+            }
+        }
     }
-    displays
 }
 
 type DdcDisplayRef = *mut c_void;
@@ -2076,11 +2200,14 @@ impl DdcApi {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 struct DrmConnectorIdentity {
     name: String,
     i2c_bus: Option<c_int>,
     edid: Option<[u8; 128]>,
+    canonical: Option<PathBuf>,
+    device_path: Option<PathBuf>,
+    status: Option<String>,
 }
 
 fn fixed_c_string(chars: &[c_char]) -> String {
@@ -2117,10 +2244,16 @@ fn drm_connector_identities(root: &Path) -> Vec<DrmConnectorIdentity> {
             let edid = fs::read(path.join("edid"))
                 .ok()
                 .and_then(|bytes| bytes.get(..128).and_then(|prefix| prefix.try_into().ok()));
+            let canonical = fs::canonicalize(&path).ok();
+            let device_path = fs::canonicalize(path.join("device")).ok();
+            let status = fs::read_to_string(path.join("status")).ok();
             Some(DrmConnectorIdentity {
                 name,
                 i2c_bus,
                 edid,
+                canonical,
+                device_path,
+                status,
             })
         })
         .collect()
@@ -2151,59 +2284,108 @@ fn connector_for_stable_display(
 }
 
 struct DdcWorker {
-    api: DdcApi,
+    api: Option<DdcApi>,
     displays: HashMap<String, DdcDisplayRef>,
+    init_error: Option<String>,
+    last_init_attempt: Option<Instant>,
+    init_attempts: usize,
+    drm_root: PathBuf,
 }
 
 impl DdcWorker {
-    fn start() -> Result<Self, String> {
-        let api = DdcApi::load()?;
+    fn new(drm_root: PathBuf) -> Self {
+        Self {
+            api: None,
+            displays: HashMap::new(),
+            init_error: None,
+            last_init_attempt: None,
+            init_attempts: 0,
+            drm_root,
+        }
+    }
+
+    #[cfg(test)]
+    fn is_initialized(&self) -> bool {
+        self.api.is_some()
+    }
+
+    fn ensure_initialized(&mut self) -> Result<(), String> {
+        if self.api.is_some() {
+            return Ok(());
+        }
+        if self.init_attempts >= MAX_DDC_INIT_ATTEMPTS {
+            return Err(self
+                .init_error
+                .clone()
+                .unwrap_or_else(|| "DDC unavailable".into()));
+        }
+        if let Some(last) = self.last_init_attempt
+            && last.elapsed() < DDC_RETRY_INTERVAL
+        {
+            return Err(self
+                .init_error
+                .clone()
+                .unwrap_or_else(|| "DDC unavailable".into()));
+        }
+        self.last_init_attempt = Some(Instant::now());
+        self.init_attempts += 1;
+
+        let api = match DdcApi::load() {
+            Ok(api) => api,
+            Err(error) => {
+                let msg = format!("could not load libddcutil: {error}");
+                self.init_error = Some(msg.clone());
+                return Err(msg);
+            }
+        };
+
         // DDCA_SYSLOG_NEVER=0 and DISABLE_CONFIG_FILE=1 keep this embedded
         // controller independent from global logging/configuration policy.
         // SAFETY: null optional arguments and flags follow ddca_init2's API.
         let status = unsafe { (api.init)(ptr::null(), 0, 1, ptr::null_mut()) };
         if status != 0 {
-            return Err(format!(
-                "DDC initialization failed: {}",
-                api.describe_status(status)
-            ));
+            let msg = format!("DDC initialization failed: {}", api.describe_status(status));
+            self.init_error = Some(msg.clone());
+            return Err(msg);
         }
-        let mut worker = Self {
-            api,
-            displays: HashMap::new(),
-        };
-        let outputs = worker
+
+        self.api = Some(api);
+        self.init_error = None;
+        let outputs = self
             .refresh_displays(false)
-            .map_or(0, |()| worker.displays.len());
+            .map_or(0, |()| self.displays.len());
         info!(
             outputs,
             "Denial brightness registered the native DDC/CI provider"
         );
-        Ok(worker)
+        Ok(())
     }
 
     fn refresh_displays(&mut self, redetect: bool) -> Result<(), String> {
+        let Some(api) = self.api.as_ref() else {
+            return Err("DDC is not initialized".into());
+        };
         if redetect {
             // SAFETY: called only on the dedicated DDC worker.
-            let status = unsafe { (self.api.redetect_displays)() };
+            let status = unsafe { (api.redetect_displays)() };
             if status != 0 {
                 return Err(format!(
                     "DDC display redetection failed: {}",
-                    self.api.describe_status(status)
+                    api.describe_status(status)
                 ));
             }
         }
         let mut references: *mut DdcDisplayRef = ptr::null_mut();
         // SAFETY: libddcutil returns its null-terminated reference array.
-        let status = unsafe { (self.api.get_display_refs)(false, &mut references) };
+        let status = unsafe { (api.get_display_refs)(false, &mut references) };
         if status != 0 || references.is_null() {
             return Err(format!(
                 "DDC display enumeration failed: {}",
-                self.api.describe_status(status)
+                api.describe_status(status)
             ));
         }
         let mut displays = HashMap::new();
-        let drm_connectors = drm_connector_identities(Path::new("/sys/class/drm"));
+        let drm_connectors = drm_connector_identities(&self.drm_root);
         let mut index = 0usize;
         loop {
             // SAFETY: get_display_refs promises a null-terminated array.
@@ -2211,7 +2393,7 @@ impl DdcWorker {
             if reference.is_null() {
                 break;
             }
-            if let Some(connector) = self.api.display_connector(reference, &drm_connectors) {
+            if let Some(connector) = api.display_connector(reference, &drm_connectors) {
                 displays.insert(connector, reference);
             }
             index += 1;
@@ -2225,73 +2407,17 @@ impl DdcWorker {
     }
 
     fn display(&mut self, connector: &str) -> Option<DdcDisplayRef> {
+        if is_internal_panel(connector) {
+            return None;
+        }
+        if self.ensure_initialized().is_err() {
+            return None;
+        }
         if let Some(reference) = self.displays.get(connector) {
             return Some(*reference);
         }
         self.refresh_displays(true).ok()?;
         self.displays.get(connector).copied()
-    }
-
-    fn read_level(&mut self, connector: &str) -> Result<f64, String> {
-        let Some(reference) = self.display(connector) else {
-            return Err("has no matching DDC display".into());
-        };
-        let mut handle = ptr::null_mut();
-        // SAFETY: reference is owned by libddcutil and all use is serialized.
-        let open_status = unsafe { (self.api.open_display)(reference, false, &mut handle) };
-        if open_status != 0 || handle.is_null() {
-            let detail = self.api.describe_status(open_status);
-            return Err(format!("could not open DDC display: {detail}"));
-        }
-
-        let mut value = DdcNonTableValue::default();
-        // SAFETY: handle is open and value is a complete response buffer.
-        let read_status = unsafe { (self.api.get_value)(handle, 0x10, &mut value) };
-        let maximum = u16::from_be_bytes([value.maximum_high, value.maximum_low]);
-        let current = u16::from_be_bytes([value.current_high, value.current_low]);
-        if read_status != 0 || maximum == 0 {
-            // SAFETY: balances the successful open above.
-            unsafe { (self.api.close_display)(handle) };
-            let detail = self.api.describe_status(read_status);
-            return Err(format!("could not read VCP 0x10: {detail}"));
-        }
-        // SAFETY: balances the successful open above.
-        unsafe { (self.api.close_display)(handle) };
-        Ok(f64::from(current) / f64::from(maximum))
-    }
-
-    fn set_level(&mut self, connector: &str, level: f64) -> Result<(), String> {
-        let Some(reference) = self.display(connector) else {
-            return Err("has no matching DDC display".into());
-        };
-        let mut handle = ptr::null_mut();
-        // SAFETY: reference is owned by libddcutil and all use is serialized.
-        let open_status = unsafe { (self.api.open_display)(reference, false, &mut handle) };
-        if open_status != 0 || handle.is_null() {
-            let detail = self.api.describe_status(open_status);
-            return Err(format!("could not open DDC display: {detail}"));
-        }
-        let mut value = DdcNonTableValue::default();
-        // SAFETY: handle is open and value is a complete response buffer.
-        let read_status = unsafe { (self.api.get_value)(handle, 0x10, &mut value) };
-        let maximum = u16::from_be_bytes([value.maximum_high, value.maximum_low]);
-        if read_status != 0 || maximum == 0 {
-            // SAFETY: balances the successful open above.
-            unsafe { (self.api.close_display)(handle) };
-            let detail = self.api.describe_status(read_status);
-            return Err(format!("could not read VCP 0x10: {detail}"));
-        }
-        let target_value = (level.clamp(0.0, 1.0) * f64::from(maximum)).round() as u16;
-        let [high, low] = target_value.to_be_bytes();
-        // SAFETY: handle is open and the VCP payload is two scalar bytes.
-        let write_status = unsafe { (self.api.set_value)(handle, 0x10, high, low) };
-        // SAFETY: balances the successful open above.
-        unsafe { (self.api.close_display)(handle) };
-        if write_status != 0 {
-            let detail = self.api.describe_status(write_status);
-            return Err(format!("could not write VCP 0x10: {detail}"));
-        }
-        Ok(())
     }
 }
 
@@ -2301,15 +2427,78 @@ impl BrightnessProvider for DdcWorker {
     }
 
     fn controls(&mut self, connector: &str) -> bool {
+        if is_internal_panel(connector) {
+            return false;
+        }
         self.display(connector).is_some()
     }
 
     fn read(&mut self, connector: &str) -> Result<f64, String> {
-        self.read_level(connector)
+        let Some(reference) = self.display(connector) else {
+            return Err("has no matching DDC display".into());
+        };
+        let Some(api) = self.api.as_ref() else {
+            return Err("DDC is not initialized".into());
+        };
+        let mut handle = ptr::null_mut();
+        // SAFETY: reference is owned by libddcutil and all use is serialized.
+        let open_status = unsafe { (api.open_display)(reference, false, &mut handle) };
+        if open_status != 0 || handle.is_null() {
+            let detail = api.describe_status(open_status);
+            return Err(format!("could not open DDC display: {detail}"));
+        }
+
+        let mut value = DdcNonTableValue::default();
+        // SAFETY: handle is open and value is a complete response buffer.
+        let read_status = unsafe { (api.get_value)(handle, 0x10, &mut value) };
+        let maximum = u16::from_be_bytes([value.maximum_high, value.maximum_low]);
+        let current = u16::from_be_bytes([value.current_high, value.current_low]);
+        if read_status != 0 || maximum == 0 {
+            // SAFETY: balances the successful open above.
+            unsafe { (api.close_display)(handle) };
+            let detail = api.describe_status(read_status);
+            return Err(format!("could not read VCP 0x10: {detail}"));
+        }
+        // SAFETY: balances the successful open above.
+        unsafe { (api.close_display)(handle) };
+        Ok(f64::from(current) / f64::from(maximum))
     }
 
     fn set(&mut self, connector: &str, level: f64) -> Result<(), String> {
-        self.set_level(connector, level)
+        let Some(reference) = self.display(connector) else {
+            return Err("has no matching DDC display".into());
+        };
+        let Some(api) = self.api.as_ref() else {
+            return Err("DDC is not initialized".into());
+        };
+        let mut handle = ptr::null_mut();
+        // SAFETY: reference is owned by libddcutil and all use is serialized.
+        let open_status = unsafe { (api.open_display)(reference, false, &mut handle) };
+        if open_status != 0 || handle.is_null() {
+            let detail = api.describe_status(open_status);
+            return Err(format!("could not open DDC display: {detail}"));
+        }
+        let mut value = DdcNonTableValue::default();
+        // SAFETY: handle is open and value is a complete response buffer.
+        let read_status = unsafe { (api.get_value)(handle, 0x10, &mut value) };
+        let maximum = u16::from_be_bytes([value.maximum_high, value.maximum_low]);
+        if read_status != 0 || maximum == 0 {
+            // SAFETY: balances the successful open above.
+            unsafe { (api.close_display)(handle) };
+            let detail = api.describe_status(read_status);
+            return Err(format!("could not read VCP 0x10: {detail}"));
+        }
+        let target_value = (level.clamp(0.0, 1.0) * f64::from(maximum)).round() as u16;
+        let [high, low] = target_value.to_be_bytes();
+        // SAFETY: handle is open and the VCP payload is two scalar bytes.
+        let write_status = unsafe { (api.set_value)(handle, 0x10, high, low) };
+        // SAFETY: balances the successful open above.
+        unsafe { (api.close_display)(handle) };
+        if write_status != 0 {
+            let detail = api.describe_status(write_status);
+            return Err(format!("could not write VCP 0x10: {detail}"));
+        }
+        Ok(())
     }
 }
 
@@ -2501,11 +2690,17 @@ mod tests {
                 name: "DP-1".into(),
                 i2c_bus: Some(8),
                 edid: Some(edid),
+                canonical: None,
+                device_path: None,
+                status: None,
             },
             DrmConnectorIdentity {
                 name: "DP-2".into(),
                 i2c_bus: Some(9),
                 edid: Some(edid),
+                canonical: None,
+                device_path: None,
+                status: None,
             },
         ];
         let display = DdcDisplayInfo {
@@ -2607,11 +2802,111 @@ mod tests {
         assert!(internal_connector("eDP-1"));
         assert!(internal_connector("LVDS-1"));
         assert!(internal_connector("DSI-1"));
+        assert!(internal_connector("DPI-1"));
         assert!(!internal_connector("DP-1"));
         assert!(!internal_connector("HDMI-A-1"));
         assert!(connected_internal_connector("eDP-1", "connected\n"));
         assert!(!connected_internal_connector("eDP-2", "disconnected\n"));
         assert!(!connected_internal_connector("DP-1", "connected\n"));
+    }
+
+    #[test]
+    fn internal_panel_connectors_are_classified_by_type() {
+        for connector in [
+            "eDP-1", "edp-2", "LVDS-1", "lvds-2", "DSI-1", "dsi-2", "DPI-1", "dpi-2",
+        ] {
+            assert!(is_internal_panel(connector), "{connector} is internal");
+        }
+        for connector in ["DP-1", "HDMI-A-1", "DVI-D-1", "Writeback-1", "VGA-1"] {
+            assert!(!is_internal_panel(connector), "{connector} is external");
+        }
+    }
+
+    #[test]
+    fn sysfs_backlight_never_writes_a_dark_panel() {
+        let device = BacklightDevice {
+            name: "nvidia_0".into(),
+            path: PathBuf::from("/nonexistent"),
+            device_path: PathBuf::from("/nonexistent"),
+            kind: "raw".into(),
+            maximum: 100,
+        };
+        assert_eq!(device.raw_for(0.0), 1);
+        assert_eq!(device.raw_for(-1.0), 1);
+        assert_eq!(device.raw_for(0.5), 50);
+        assert_eq!(device.raw_for(1.0), 100);
+        assert_eq!(device.raw_for(4.0), 100);
+    }
+
+    /// Reproduces this class of laptop: a discrete GPU carrying the panel and
+    /// an external output, plus an integrated GPU with its own unused eDP. Only
+    /// the discrete panel may claim the backlight.
+    #[test]
+    fn sysfs_backlights_match_only_the_internal_panel_on_the_owning_gpu() {
+        let suffix = std::process::id();
+        let root = std::env::temp_dir().join(format!("denial-backlight-test-{suffix}"));
+        let _ = fs::remove_dir_all(&root);
+        let discrete = root.join("devices/pci0000:00/0000:01:00.0");
+        let integrated = root.join("devices/pci0000:00/0000:05:00.0");
+        let backlight_device = discrete.join("backlight/nvidia_0");
+        fs::create_dir_all(&backlight_device).expect("create backlight device");
+        fs::write(backlight_device.join("max_brightness"), "100\n").expect("write maximum");
+        fs::write(backlight_device.join("actual_brightness"), "40\n").expect("write level");
+
+        let class_root = root.join("class/backlight");
+        let drm_root = root.join("class/drm");
+        fs::create_dir_all(&class_root).expect("create backlight class");
+        fs::create_dir_all(&drm_root).expect("create drm class");
+        std::os::unix::fs::symlink(&backlight_device, class_root.join("nvidia_0"))
+            .expect("link backlight");
+        std::os::unix::fs::symlink(&discrete, backlight_device.join("device"))
+            .expect("link backlight owner");
+
+        for (connector, gpu) in [
+            ("card1-eDP-1", &discrete),
+            ("card1-HDMI-A-1", &discrete),
+            ("card2-eDP-2", &integrated),
+        ] {
+            let target = gpu.join(format!("drm/{connector}"));
+            fs::create_dir_all(&target).expect("create connector");
+            fs::write(target.join("connector_id"), "1\n").expect("write connector id");
+            std::os::unix::fs::symlink(&target, drm_root.join(connector)).expect("link connector");
+        }
+
+        let backlights = discover_backlights(&class_root, &drm_root);
+        assert_eq!(
+            backlights.keys().cloned().collect::<Vec<_>>(),
+            vec!["eDP-1"]
+        );
+        let panel = &backlights["eDP-1"];
+        assert_eq!(panel.name, "nvidia_0");
+        assert_eq!(panel.maximum, 100);
+        assert_eq!(panel.level(), Some(0.4));
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn lazy_ddc_is_not_initialized_for_internal_panel_requests() {
+        let mut worker = DdcWorker::new(PathBuf::from("/nonexistent/drm"));
+        assert!(!worker.is_initialized());
+        // Internal panel requests must be rejected immediately without initializing DDC
+        assert!(!worker.controls("eDP-1"));
+        assert!(!worker.controls("edp-2"));
+        assert!(!worker.controls("LVDS-1"));
+        assert!(!worker.controls("DSI-1"));
+        assert!(!worker.controls("DPI-1"));
+        assert!(!worker.is_initialized());
+    }
+
+    #[test]
+    fn logind_brightness_constants_and_timeout() {
+        assert_eq!(LOGIND_SERVICE, "org.freedesktop.login1");
+        assert_eq!(LOGIND_MANAGER_OBJECT, "/org/freedesktop/login1");
+        assert_eq!(LOGIND_MANAGER_INTERFACE, "org.freedesktop.login1.Manager");
+        assert_eq!(LOGIND_SESSION_INTERFACE, "org.freedesktop.login1.Session");
+        assert_eq!(LOGIND_DBUS_TIMEOUT, Duration::from_millis(500));
+        assert_eq!(MIN_BACKLIGHT_RAW, 1);
     }
 
     #[test]

@@ -279,6 +279,11 @@ fn denial_main() -> Result<(), Box<dyn Error>> {
     }
 
     tracing_subscriber::fmt()
+        // Session managers routinely send a session's stdout to /dev/null and
+        // keep only stderr. SDDM does, so on the default stdout writer every
+        // warning this compositor emits was discarded and field diagnosis had
+        // to proceed by inference.
+        .with_writer(std::io::stderr)
         .with_env_filter(
             tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| "denial_kms=info,smithay=info".into()),
