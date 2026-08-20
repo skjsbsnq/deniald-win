@@ -62,6 +62,7 @@ import 'desktop_dashboard_wifi_card.dart';
 import 'desktop_overview_layout.dart';
 import 'desktop_overview_target.dart';
 import 'desktop_home_layout.dart';
+import 'desktop_popup_surface_policy.dart';
 import 'desktop_start_menu.dart';
 import 'desktop_system_bar.dart';
 import 'desktop_texture_resize.dart';
@@ -2368,9 +2369,11 @@ class _DesktopPopupSurfaceLayers extends StatelessWidget {
         final fullscreenVisual = placement.fullscreen && !transformed;
         final drawsServerFrame =
             !fullscreenVisual && placement.serverSideDecorated;
-        final contentRect = drawsServerFrame
-            ? frame.deflate(DesktopMetrics.frameBorder)
-            : frame;
+        final contentRect = desktopPopupContentRect(
+          placement: placement,
+          visualFrame: frame,
+          drawsServerFrame: drawsServerFrame,
+        );
         final duration = placement.dragging ? Duration.zero : motionDuration;
         final resizing = desktopTextureNeedsResizeSmoothing(
           targetSize: contentRect.size,
@@ -2401,7 +2404,7 @@ class _DesktopPopupSurfaceLayers extends StatelessWidget {
                         switching: switching,
                         dragging: placement.dragging,
                         child: ShellBackdropBlur(
-                          blur: !layer.opaque || layer.opacity < 1.0,
+                          blur: desktopPopupBackdropBlurEnabled(layer),
                           child: SurfaceLayerTexture(
                             layer: layer,
                             filterQuality: filterQuality,
