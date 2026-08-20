@@ -8,6 +8,7 @@ import '../input/shell_interaction_registry.dart';
 import '../models/denial_window.dart';
 import '../state/desktop_window_switcher.dart';
 import '../state/shell_controller.dart';
+import 'desktop_taskbar_preview.dart';
 import 'desktop_workspace.dart';
 
 class DesktopInputLayoutPublisher extends ConsumerStatefulWidget {
@@ -38,6 +39,9 @@ class _DesktopInputLayoutPublisherState
     ref.watch(desktopWorkspaceProvider);
     ref.watch(desktopWindowSwitcherProvider);
     ref.watch(shellInteractionRegistryProvider);
+    ref.watch(
+      desktopTaskbarPreviewProvider.select((target) => target?.objectId),
+    );
     _schedulePublish(
       MediaQuery.sizeOf(context),
       MediaQuery.devicePixelRatioOf(context),
@@ -129,6 +133,24 @@ class _DesktopInputLayoutPublisherState
           );
         }
       }
+      // The cuts above are z-order blind, so a lower window's content rect also
+      // erases the shell-drawn frame ring of every window stacked above it.
+      shellRegions.addAll(
+        desktopFrameRingRegions(canvas, <DesktopFrameRing>[
+          for (final placement in placements.reversed)
+            DesktopFrameRing(
+              frame: placement.frame,
+              content: placement.contentRect,
+              popups: <Rect>[
+                for (final popup in windowsById[placement.objectId]!.popupRoots)
+                  windowsById[placement.objectId]!.mapSurfaceRect(
+                    popup,
+                    placement.contentRect,
+                  ),
+              ],
+            ),
+        ]),
+      );
     }
     for (final region in interactions.childRegions) {
       final clipped = region.intersect(canvas);
@@ -154,18 +176,14 @@ class _DesktopInputLayoutPublisherState
         );
       }
     }
-    // Desktop widgets still sample their live main-surface textures. Keep
-    // those surfaces presentation-visible without adding a client input
-    // region or configuring the native window to the widget rectangle.
-    for (final placement in desktop.placements.values) {
-      if (!placement.minimized) {
-        continue;
+    // Minimized windows do not need continuous presentation sampling unless
+    // an active taskbar preview is currently hovering over them.
+    final previewTarget = ref.read(desktopTaskbarPreviewProvider);
+    if (previewTarget != null) {
+      final previewWindow = windowsById[previewTarget.objectId];
+      if (previewWindow != null) {
+        visibleSurfaceIds.addAll(previewWindow.visibleSurfaceIds);
       }
-      final window = windowsById[placement.objectId];
-      if (window == null) {
-        continue;
-      }
-      visibleSurfaceIds.addAll(window.mainVisibleSurfaceIds);
     }
     final zStride = placements.fold<int>(2, (stride, placement) {
       final layers = windowsById[placement.objectId]!.surfaceLayers.length + 2;
@@ -182,11 +200,7 @@ class _DesktopInputLayoutPublisherState
       if (interactions.capturesFullScene) {
         final window = windowsById[placement.objectId]!;
         visibleSurfaceIds.addAll(window.visibleSurfaceIds);
-        _configureWindowGeometry(
-          window,
-          placement.contentRect,
-          nativeDragActive: placement.dragging,
-        );
+        _configureWindowGeometry(window, placement);
         continue;
       }
       final window = windowsById[placement.objectId]!;
@@ -225,11 +239,7 @@ class _DesktopInputLayoutPublisherState
           geometryLocked: placement.fullscreen,
         ),
       );
-      _configureWindowGeometry(
-        window,
-        placement.contentRect,
-        nativeDragActive: placement.dragging,
-      );
+      _configureWindowGeometry(window, placement);
     }
 
     _configureTracker.retainWindowIds(windowsById.keys.toSet());
@@ -254,13 +264,25 @@ class _DesktopInputLayoutPublisherState
 
   void _configureWindowGeometry(
     DenialWindow window,
-    Rect contentRect, {
-    required bool nativeDragActive,
-  }) {
+    DesktopWindowPlacement placement,
+  ) {
+    if (placement.shellDragging) {
+      // A titlebar drag repositions the frame in Dart on every pointer move,
+      // and only input routing and composition — both republished here each
+      // frame — depend on it until the pointer is released. Reporting each step
+      // would configure the client at pointer rate for nothing; reporting the
+      // rectangle without sending it would be worse still, because the tracker
+      // caches whatever it is handed and would then treat the final position as
+      // already configured and never send it at all. Skip the drag outright and
+      // let the position Rust needs go out when [DesktopWorkspaceController.
+      // endMove] clears the flag.
+      return;
+    }
     final configuredGeometry = _configureTracker.update(
       window.objectId,
-      contentRect,
-      nativeDragActive: nativeDragActive,
+      placement.contentRect,
+      nativeDragActive: placement.nativeGrab,
+      configureInitial: placement.shellCorrectedInitialGeometry,
     );
     if (configuredGeometry == null) {
       return;
@@ -280,6 +302,7 @@ class DesktopWindowConfigureTracker {
     int objectId,
     Rect contentRect, {
     required bool nativeDragActive,
+    bool configureInitial = false,
   }) {
     final geometry = (
       left: contentRect.left.round().clamp(0, 16384),
@@ -291,8 +314,17 @@ class DesktopWindowConfigureTracker {
     _configured[objectId] = geometry;
     if (previous == null) {
       // The native compositor owns initial placement and sizing. Seed from
-      // the received geometry instead of echoing a newly discovered window.
-      return null;
+      // the received geometry instead of echoing a newly discovered window,
+      // unless the shell deliberately corrected the initial geometry to keep
+      // its titlebar visible.
+      return configureInitial
+          ? Rect.fromLTWH(
+              geometry.left.toDouble(),
+              geometry.top.toDouble(),
+              geometry.width.toDouble(),
+              geometry.height.toDouble(),
+            )
+          : null;
     }
     if (nativeDragActive) {
       // Rust is the sole writer during a native move/resize grab.
@@ -314,6 +346,52 @@ class DesktopWindowConfigureTracker {
       (objectId, _) => !activeObjectIds.contains(objectId),
     );
   }
+}
+
+/// One window's shell-drawn outer frame paired with the client rectangle it
+/// encloses, plus any client popups that paint above the frame.
+@immutable
+class DesktopFrameRing {
+  const DesktopFrameRing({
+    required this.frame,
+    required this.content,
+    this.popups = const <Rect>[],
+  });
+
+  final Rect frame;
+  final Rect content;
+  final List<Rect> popups;
+}
+
+/// The shell paints each window's border and titlebar band itself, so those
+/// pixels are shell input targets. Subtracting every window's client rectangle
+/// from the shell region is z-order blind and erases them wherever they overlap
+/// a *lower* window's client rectangle — after which clicking the upper
+/// window's titlebar routes to the client underneath and the click is lost.
+///
+/// Restore each ring, minus whatever a higher window paints over it. Overlap
+/// among the results is harmless: the compositor treats the shell region as a
+/// union.
+///
+/// [stack] must be ordered topmost first.
+List<Rect> desktopFrameRingRegions(Rect canvas, List<DesktopFrameRing> stack) {
+  final restored = <Rect>[];
+  final obstructions = <Rect>[];
+  for (final entry in stack) {
+    var ring = _subtractRect(entry.frame, entry.content);
+    for (final obstruction in obstructions) {
+      ring = _subtractFromAll(ring, obstruction);
+    }
+    for (final piece in ring) {
+      final clipped = piece.intersect(canvas);
+      if (!clipped.isEmpty) {
+        restored.add(clipped);
+      }
+    }
+    obstructions.add(entry.frame);
+    obstructions.addAll(entry.popups);
+  }
+  return restored;
 }
 
 List<Rect> _subtractFromAll(List<Rect> regions, Rect cut) {

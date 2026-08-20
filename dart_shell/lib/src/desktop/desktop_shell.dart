@@ -18,6 +18,7 @@ import '../input/shell_interaction_registry.dart';
 import '../localization/denial_localizations.dart';
 import '../models/display_layout.dart';
 import '../models/denial_window.dart';
+import 'desktop_taskbar_preview.dart';
 import 'desktop_window_titlebar.dart';
 import '../platform/denial_bridge.dart';
 import '../services/bluetooth_service.dart';
@@ -1520,6 +1521,7 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
                           ),
                         ),
                       ),
+                  const DesktopTaskbarPreviewLayer(),
                   if (frameTimingOptions.showOverlay)
                     Positioned(
                       top: 12,

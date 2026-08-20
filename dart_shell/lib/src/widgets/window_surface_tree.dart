@@ -58,6 +58,32 @@ class WindowSurfaceTree extends StatelessWidget {
   }
 }
 
+/// Nearest-neighbour sampling only reproduces a client buffer faithfully when
+/// one source texel covers exactly one physical pixel. Clients that cannot
+/// negotiate the fractional output scale — XWayland, and GTK 3, which never
+/// implemented `wp_fractional_scale_v1` — hand over an integer-scaled buffer
+/// instead. On a 1.5x output that is a 2x buffer minified to 0.75x, and
+/// nearest neighbour discards every fourth row and column, which reads as
+/// moire fringing on text. Keep the cheap path whenever the sampling really is
+/// 1:1 so fractional-aware clients pay nothing.
+FilterQuality _sampledFilterQuality(
+  BuildContext context, {
+  required FilterQuality requested,
+  required Size target,
+  required double sourceWidth,
+  required double sourceHeight,
+}) {
+  if (requested != FilterQuality.none) {
+    return requested;
+  }
+  final devicePixelRatio = MediaQuery.maybeOf(context)?.devicePixelRatio ?? 1.0;
+  const tolerance = 0.5;
+  final oneToOne =
+      ((target.width * devicePixelRatio) - sourceWidth).abs() <= tolerance &&
+      ((target.height * devicePixelRatio) - sourceHeight).abs() <= tolerance;
+  return oneToOne ? requested : FilterQuality.medium;
+}
+
 class SurfaceLayerTexture extends StatelessWidget {
   const SurfaceLayerTexture({
     super.key,
@@ -91,13 +117,20 @@ class SurfaceLayerTexture extends StatelessWidget {
             layer.textureSourceY.abs() < 0.001 &&
             (sourceWidth - bufferWidth).abs() < 0.001 &&
             (sourceHeight - bufferHeight).abs() < 0.001;
+        final effectiveQuality = _sampledFilterQuality(
+          context,
+          requested: filterQuality,
+          target: target,
+          sourceWidth: sourceWidth,
+          sourceHeight: sourceHeight,
+        );
         if (usesWholeBuffer) {
           return _SurfaceOpacity(
             opacity: layer.opacity,
             child: RepaintBoundary(
               child: Texture(
                 textureId: layer.textureId,
-                filterQuality: filterQuality,
+                filterQuality: effectiveQuality,
               ),
             ),
           );
@@ -120,7 +153,7 @@ class SurfaceLayerTexture extends StatelessWidget {
                   child: RepaintBoundary(
                     child: Texture(
                       textureId: layer.textureId,
-                      filterQuality: filterQuality,
+                      filterQuality: effectiveQuality,
                     ),
                   ),
                 ),
@@ -165,13 +198,20 @@ class _LegacyWindowTexture extends StatelessWidget {
             window.textureSourceY.abs() < 0.001 &&
             (sourceWidth - bufferWidth).abs() < 0.001 &&
             (sourceHeight - bufferHeight).abs() < 0.001;
+        final effectiveQuality = _sampledFilterQuality(
+          context,
+          requested: filterQuality,
+          target: target,
+          sourceWidth: sourceWidth,
+          sourceHeight: sourceHeight,
+        );
         if (usesWholeBuffer) {
           return _SurfaceOpacity(
             opacity: window.opacity,
             child: RepaintBoundary(
               child: Texture(
                 textureId: window.textureId,
-                filterQuality: filterQuality,
+                filterQuality: effectiveQuality,
               ),
             ),
           );
@@ -194,7 +234,7 @@ class _LegacyWindowTexture extends StatelessWidget {
                   child: RepaintBoundary(
                     child: Texture(
                       textureId: window.textureId,
-                      filterQuality: filterQuality,
+                      filterQuality: effectiveQuality,
                     ),
                   ),
                 ),
