@@ -9,6 +9,7 @@ class SettingsOverlaysPage extends StatelessWidget {
   const SettingsOverlaysPage({
     required this.settings,
     required this.onChanged,
+    this.onEdgeHoverPanelsChanged,
     required this.onReset,
     super.key,
   });
@@ -19,6 +20,7 @@ class SettingsOverlaysPage extends StatelessWidget {
     ShellPopupPlacement placement,
   )
   onChanged;
+  final ValueChanged<bool>? onEdgeHoverPanelsChanged;
   final VoidCallback onReset;
 
   @override
@@ -30,6 +32,20 @@ class SettingsOverlaysPage extends StatelessWidget {
       title: l10n.settingsOverlaysTitle,
       onReset: onReset,
       children: [
+        if (onEdgeHoverPanelsChanged != null)
+          SettingsCardGroup(
+            children: [
+              SettingsSection(
+                title: l10n.settingsEdgeHoverPanels,
+                child: SettingsToggle(
+                  label: l10n.settingsEdgeHoverPanels,
+                  description: l10n.settingsEdgeHoverPanelsDescription,
+                  value: settings.edgeHoverPanels,
+                  onChanged: onEdgeHoverPanelsChanged!,
+                ),
+              ),
+            ],
+          ),
         SettingsCardGroup(
           children: [
             _PlacementEditor(

@@ -147,6 +147,12 @@ class ShellSettingsController extends Notifier<ShellSettings> {
     );
   }
 
+  void setSystemBarAlignment(SystemBarAlignment value) {
+    _update(
+      state.copyWith(layout: state.layout.copyWith(systemBarAlignment: value)),
+    );
+  }
+
   void setMaximizePadding(double value) {
     _update(
       state.copyWith(
@@ -182,6 +188,14 @@ class ShellSettingsController extends Notifier<ShellSettings> {
     _update(
       state.copyWith(
         overlays: state.overlays.withPlacement(surface, placement),
+      ),
+    );
+  }
+
+  void setEdgeHoverPanels(bool enabled) {
+    _update(
+      state.copyWith(
+        overlays: state.overlays.copyWith(edgeHoverPanels: enabled),
       ),
     );
   }

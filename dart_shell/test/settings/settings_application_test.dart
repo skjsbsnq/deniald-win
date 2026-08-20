@@ -27,6 +27,7 @@ import 'package:denial_dart_shell/src/settings/shell_settings.dart';
 import 'package:denial_dart_shell/src/state/display_layout.dart';
 import 'package:denial_dart_shell/src/state/output_configuration.dart';
 import 'package:denial_dart_shell/src/state/shell_controller.dart';
+import 'package:denial_dart_shell/src/state/status_notifier.dart';
 import 'package:denial_dart_shell/src/theme/tokens.dart';
 import 'package:denial_dart_shell/src/wallpaper/state/wallpaper_controller.dart';
 import 'package:denial_dart_shell/src/widgets/denial_wordmark.dart';
@@ -796,6 +797,39 @@ void main() {
     );
   });
 
+  testWidgets('the bar cluster alignment updates live', (tester) async {
+    final container = _settingsContainer();
+    addTearDown(container.dispose);
+    await _pumpSettings(tester, container);
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Desktop layout'));
+    await tester.pumpAndSettle();
+    expect(
+      container.read(shellSettingsProvider).layout.systemBarAlignment,
+      SystemBarAlignment.center,
+    );
+
+    final leftAligned = find.text('Left (top when vertical)');
+    await tester.ensureVisible(leftAligned);
+    await tester.tap(leftAligned);
+    await tester.pump();
+    expect(
+      container.read(shellSettingsProvider).layout.systemBarAlignment,
+      SystemBarAlignment.leading,
+    );
+
+    final centered = find.text('Centered');
+    await tester.ensureVisible(centered);
+    await tester.tap(centered);
+    await tester.pump();
+    expect(
+      container.read(shellSettingsProvider).layout.systemBarAlignment,
+      SystemBarAlignment.center,
+    );
+    await container.read(shellSettingsProvider.notifier).flush();
+  });
+
   testWidgets('power page configures automatic DPMS live', (tester) async {
     final container = _settingsContainer();
     addTearDown(container.dispose);
@@ -882,8 +916,26 @@ ProviderContainer _settingsContainer({
       brightnessServiceProvider.overrideWith(
         (ref) => _TestBrightnessService(ref.watch(denialBridgeProvider)),
       ),
+      statusNotifierProvider.overrideWith(_TestStatusNotifierController.new),
     ],
   );
+}
+
+class _TestStatusNotifierController extends StatusNotifierController {
+  @override
+  StatusNotifierState build() {
+    return const StatusNotifierState(
+      serviceAvailable: true,
+      isWatcher: false,
+      isHostRegistered: false,
+      items: [],
+      initializing: false,
+      refreshing: false,
+    );
+  }
+
+  @override
+  Future<void> refresh() async {}
 }
 
 class _MemorySettingsStore implements SettingsStore {

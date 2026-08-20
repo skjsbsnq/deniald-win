@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../localization/denial_localizations.dart';
+import '../../models/tray_item.dart';
 import '../../models/ui_development.dart';
+import '../../state/status_notifier.dart';
 import '../../state/ui_development.dart';
 import '../../theme/shell_theme.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/shell_cursor.dart';
+import '../../widgets/tray/tray_icon.dart';
 import 'settings_controls.dart';
 
 const settingsDeveloperWorkspaceFieldKey = ValueKey<String>(
@@ -262,6 +266,14 @@ class _SettingsDeveloperPageState extends State<SettingsDeveloperPage> {
                   ? null
                   : '${l10n.settingsDeveloperGeneration} ${state.generation}',
               child: _Diagnostics(state: state),
+            ),
+          ],
+        ),
+        const SettingsCardGroup(
+          children: [
+            SettingsSection(
+              title: 'StatusNotifier (SNI) Tray Debug',
+              child: _TrayDiagnostics(),
             ),
           ],
         ),
@@ -674,6 +686,182 @@ class _DiagnosticRow extends StatelessWidget {
             ],
           ),
         ),
+      ],
+    );
+  }
+}
+
+class _TrayDiagnostics extends ConsumerWidget {
+  const _TrayDiagnostics();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final trayState = ref.watch(statusNotifierProvider);
+    final items = trayState.items;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Wrap(
+          spacing: 16,
+          runSpacing: 8,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          alignment: WrapAlignment.spaceBetween,
+          children: [
+            Text(
+              'Watcher: ${trayState.isWatcher ? "Primary Owner" : "Secondary / External"}',
+              style: ShellText.base.copyWith(
+                color: ShellColors.textSecondary,
+                fontSize: 11,
+              ),
+            ),
+            Text(
+              'Host: ${trayState.isHostRegistered ? "Registered" : "Unregistered"}',
+              style: ShellText.base.copyWith(
+                color: ShellColors.textSecondary,
+                fontSize: 11,
+              ),
+            ),
+            SettingsTextButton(
+              label: 'Refresh',
+              onPressed: trayState.refreshing
+                  ? null
+                  : () => ref.read(statusNotifierProvider.notifier).refresh(),
+            ),
+          ],
+        ),
+        if (trayState.error != null) ...[
+          const SizedBox(height: 6),
+          Text(
+            trayState.error!,
+            style: ShellText.base.copyWith(
+              color: ShellColors.performanceBad,
+              fontSize: 11,
+            ),
+          ),
+        ],
+        const SizedBox(height: 10),
+        if (items.isEmpty)
+          Text(
+            'No StatusNotifier items currently registered.',
+            style: ShellText.base.copyWith(
+              color: ShellColors.textTertiary,
+              fontSize: 12,
+            ),
+          )
+        else
+          for (final item in items)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: ShellColors.surfaceContainerHigh,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: ShellColors.hairlineSoft),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      width: 36,
+                      height: 36,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: ShellColors.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: ShellColors.hairlineSoft),
+                      ),
+                      child: TrayIcon(item: item, size: 22),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  item.displayLabel,
+                                  overflow: TextOverflow.ellipsis,
+                                  maxLines: 1,
+                                  style: ShellText.base.copyWith(
+                                    color: ShellColors.textPrimary,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
+                                decoration: BoxDecoration(
+                                  color:
+                                      item.status ==
+                                          TrayItemStatus.needsAttention
+                                      ? ShellColors.performanceWarning
+                                      : item.status == TrayItemStatus.active
+                                      ? ShellTheme.of(context).accent
+                                      : ShellColors.surfaceContainerHighest,
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  item.status.toWireString(),
+                                  style: ShellText.base.copyWith(
+                                    color: item.status == TrayItemStatus.passive
+                                        ? ShellColors.textTertiary
+                                        : Colors.white,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          SelectableText(
+                            'Id: ${item.id.isEmpty ? "(empty)" : item.id} | Title: ${item.title.isEmpty ? "(empty)" : item.title} | Category: ${item.category.toWireString()}',
+                            style: ShellText.base.copyWith(
+                              color: ShellColors.textSecondary,
+                              fontSize: 11,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          SelectableText(
+                            'Bus: ${item.service} | Path: ${item.path}',
+                            style: ShellText.base.copyWith(
+                              color: ShellColors.textTertiary,
+                              fontFamily: ShellText.systemBarFontFamily,
+                              fontSize: 10,
+                            ),
+                          ),
+                          if (item.iconName.isNotEmpty ||
+                              item.iconPixmap.isNotEmpty ||
+                              item.iconThemePath.isNotEmpty ||
+                              item.menuPath.isNotEmpty) ...[
+                            const SizedBox(height: 2),
+                            SelectableText(
+                              'Icon: ${item.iconName.isNotEmpty ? item.iconName : "(pixmaps: ${item.iconPixmap.length})"}'
+                              '${item.iconThemePath.isNotEmpty ? " | Path: ${item.iconThemePath}" : ""}'
+                              '${item.menuPath.isNotEmpty ? " | Menu: ${item.menuPath}" : ""}',
+                              style: ShellText.base.copyWith(
+                                color: ShellColors.textTertiary,
+                                fontFamily: ShellText.systemBarFontFamily,
+                                fontSize: 10,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
       ],
     );
   }

@@ -193,7 +193,7 @@ class ShellLayoutSettings {
   const ShellLayoutSettings({
     this.systemBarSide,
     this.systemBarOutputNames = const <String>[],
-    this.systemBarThickness = 32,
+    this.systemBarThickness = 44,
     this.systemBarAlignment = SystemBarAlignment.center,
     this.maximizePadding = 10,
     this.clipboardTrayEdge = ClipboardTrayEdge.right,
@@ -260,16 +260,11 @@ class ShellLayoutSettings {
 @immutable
 class ShellOverlaySettings {
   const ShellOverlaySettings({
-    this.launcher = const ShellPopupPlacement(
-      anchor: ShellPopupAnchor.topLeft,
-      width: 680,
-      height: 620,
-      margin: 14,
-    ),
+    this.launcher = ShellPopupPlacement.desktopStartMenu,
     this.dashboard = const ShellPopupPlacement(
       anchor: ShellPopupAnchor.bottomLeft,
       width: 470,
-      height: 620,
+      height: 780,
       margin: 14,
     ),
     this.notifications = const ShellPopupPlacement(
@@ -801,7 +796,13 @@ ShellPopupPlacement _placement(
 }
 
 Map<String, dynamic> _map(Object? value) {
-  return value is Map<String, dynamic> ? value : const <String, dynamic>{};
+  if (value is Map<String, dynamic>) {
+    return value;
+  }
+  if (value is Map) {
+    return Map<String, dynamic>.from(value);
+  }
+  return const <String, dynamic>{};
 }
 
 List<Object?> _list(Object? value) {

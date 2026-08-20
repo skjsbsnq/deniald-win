@@ -18,6 +18,7 @@ import 'state/desktop_notifications.dart';
 import 'state/display_layout.dart';
 import 'state/shell_controller.dart';
 import 'state/shell_profile.dart';
+import 'state/status_notifier.dart';
 import 'state/screenshot_selection.dart';
 import 'theme/cursor_themes.dart';
 import 'theme/motion.dart';
@@ -132,6 +133,7 @@ class _DenialShellAppState extends ConsumerState<DenialShellApp> {
     // root subscription documents and enforces their eager initialization.
     ref.watch(shellControllerProvider.select((_) => null));
     ref.watch(desktopNotificationsProvider.select((_) => null));
+    ref.watch(statusNotifierProvider.select((_) => null));
     ref.listen<bool>(
       shellControllerProvider.select((state) => state.lockLayerVisible),
       (_, lockLayerVisible) {

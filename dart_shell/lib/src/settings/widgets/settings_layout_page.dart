@@ -12,6 +12,7 @@ class SettingsLayoutPage extends StatelessWidget {
     required this.displayLayout,
     required this.onSystemBarChanged,
     required this.onSystemBarThicknessChanged,
+    required this.onSystemBarAlignmentChanged,
     required this.onMaximizePaddingChanged,
     required this.onClipboardTrayEdgeChanged,
     required this.onClipboardTrayExtentChanged,
@@ -23,6 +24,7 @@ class SettingsLayoutPage extends StatelessWidget {
   final DisplayLayout? displayLayout;
   final SystemBarPlacementChanged onSystemBarChanged;
   final ValueChanged<double> onSystemBarThicknessChanged;
+  final ValueChanged<SystemBarAlignment> onSystemBarAlignmentChanged;
   final ValueChanged<double> onMaximizePaddingChanged;
   final ValueChanged<ClipboardTrayEdge> onClipboardTrayEdgeChanged;
   final ValueChanged<double> onClipboardTrayExtentChanged;
@@ -55,6 +57,23 @@ class SettingsLayoutPage extends StatelessWidget {
                   settings.systemBarThickness.round(),
                 ),
                 onChanged: onSystemBarThicknessChanged,
+              ),
+            ),
+            SettingsSection(
+              title: l10n.settingsBarAlignmentTitle,
+              child: SettingsSegmentedControl<SystemBarAlignment>(
+                value: settings.systemBarAlignment,
+                choices: [
+                  SettingsChoice(
+                    SystemBarAlignment.leading,
+                    l10n.settingsBarAlignmentLeading,
+                  ),
+                  SettingsChoice(
+                    SystemBarAlignment.center,
+                    l10n.settingsBarAlignmentCenter,
+                  ),
+                ],
+                onChanged: onSystemBarAlignmentChanged,
               ),
             ),
           ],

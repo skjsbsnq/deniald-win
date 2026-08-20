@@ -32,6 +32,7 @@ void main() {
         systemBarSide: SystemBarSide.right,
         systemBarOutputNames: <String>['DP-1', 'HDMI-A-1'],
         systemBarThickness: 46,
+        systemBarAlignment: SystemBarAlignment.leading,
         maximizePadding: 18,
         clipboardTrayEdge: ClipboardTrayEdge.bottom,
         clipboardTrayExtent: 288,
@@ -43,6 +44,7 @@ void main() {
           height: 650,
           margin: 20,
         ),
+        edgeHoverPanels: true,
       ),
       lockScreen: ShellLockScreenSettings(
         dimAmount: 0.42,
@@ -59,6 +61,21 @@ void main() {
     expect(ShellSettings.fromJson(settings.toJson()), settings);
     expect(settings.toJson()['version'], ShellSettings.schemaVersion);
   });
+
+  test(
+    'the bar cluster stays centered unless a stored mode says otherwise',
+    () {
+      expect(
+        const ShellSettings().layout.systemBarAlignment,
+        SystemBarAlignment.center,
+      );
+      final restored = ShellSettings.fromJson(<String, dynamic>{
+        'version': ShellSettings.schemaVersion,
+        'layout': <String, dynamic>{'systemBarAlignment': 'diagonal'},
+      });
+      expect(restored.layout.systemBarAlignment, SystemBarAlignment.center);
+    },
+  );
 
   test('malformed and out-of-range values are safe and clamped', () {
     final settings = ShellSettings.fromJson(<String, dynamic>{
@@ -115,7 +132,7 @@ void main() {
     expect(settings.appearance.cursorSize, shellCursorMaximumSize);
     expect(settings.layout.systemBarSide, isNull);
     expect(settings.layout.systemBarOutputNames, <String>['DP-1']);
-    expect(settings.layout.systemBarThickness, 32);
+    expect(settings.layout.systemBarThickness, 44);
     expect(settings.layout.maximizePadding, 0);
     expect(settings.layout.clipboardTrayEdge, ClipboardTrayEdge.right);
     expect(settings.layout.clipboardTrayExtent, clipboardTrayMaximumExtent);
@@ -155,5 +172,24 @@ void main() {
       ).localeOverride?.toLanguageTag(),
       'zh',
     );
+  });
+
+  test('edgeHoverPanels defaults to false and falls back gracefully', () {
+    expect(const ShellOverlaySettings().edgeHoverPanels, isFalse);
+
+    final fromEmpty = ShellSettings.fromJson(<String, dynamic>{
+      'overlays': <String, dynamic>{},
+    });
+    expect(fromEmpty.overlays.edgeHoverPanels, isFalse);
+
+    final fromInvalid = ShellSettings.fromJson(<String, dynamic>{
+      'overlays': <String, dynamic>{'edgeHoverPanels': 'not-a-bool'},
+    });
+    expect(fromInvalid.overlays.edgeHoverPanels, isFalse);
+
+    final fromTrue = ShellSettings.fromJson(<String, dynamic>{
+      'overlays': <String, dynamic>{'edgeHoverPanels': true},
+    });
+    expect(fromTrue.overlays.edgeHoverPanels, isTrue);
   });
 }

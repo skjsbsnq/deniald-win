@@ -290,6 +290,7 @@ class _DenialSettingsApplicationState
             displayController,
           );
         },
+        onSystemBarAlignmentChanged: controller.setSystemBarAlignment,
         onMaximizePaddingChanged: (value) {
           controller.setMaximizePadding(value);
           _syncDisplayConfiguration(
@@ -318,6 +319,7 @@ class _DenialSettingsApplicationState
       SettingsPageId.overlays => SettingsOverlaysPage(
         settings: settings.overlays,
         onChanged: controller.setOverlayPlacement,
+        onEdgeHoverPanelsChanged: controller.setEdgeHoverPanels,
         onReset: controller.resetOverlays,
       ),
       SettingsPageId.power => SettingsPowerPage(
