@@ -141,6 +141,24 @@ class _DesktopInputLayoutPublisherState
             DesktopFrameRing(
               frame: placement.frame,
               content: placement.contentRect,
+              resizeHotZones: desktopResizeHotZones(placement),
+              popups: <Rect>[
+                for (final popup in windowsById[placement.objectId]!.popupRoots)
+                  windowsById[placement.objectId]!.mapSurfaceRect(
+                    popup,
+                    placement.contentRect,
+                  ),
+              ],
+            ),
+        ]),
+      );
+      shellRegions.addAll(
+        desktopResizeHotZoneRegions(canvas, <DesktopFrameRing>[
+          for (final placement in placements.reversed)
+            DesktopFrameRing(
+              frame: placement.frame,
+              content: placement.contentRect,
+              resizeHotZones: desktopResizeHotZones(placement),
               popups: <Rect>[
                 for (final popup in windowsById[placement.objectId]!.popupRoots)
                   windowsById[placement.objectId]!.mapSurfaceRect(
@@ -356,11 +374,13 @@ class DesktopFrameRing {
     required this.frame,
     required this.content,
     this.popups = const <Rect>[],
+    this.resizeHotZones = const <Rect>[],
   });
 
   final Rect frame;
   final Rect content;
   final List<Rect> popups;
+  final List<Rect> resizeHotZones;
 }
 
 /// The shell paints each window's border and titlebar band itself, so those
@@ -384,6 +404,32 @@ List<Rect> desktopFrameRingRegions(Rect canvas, List<DesktopFrameRing> stack) {
     }
     for (final piece in ring) {
       final clipped = piece.intersect(canvas);
+      if (!clipped.isEmpty) {
+        restored.add(clipped);
+      }
+    }
+    obstructions.add(entry.frame);
+    obstructions.addAll(entry.popups);
+  }
+  return restored;
+}
+
+/// Returns visible resize bands in the same topmost-first order as the frame
+/// ring. A lower window's edge must not steal a pointer from a higher window's
+/// client or frame.
+List<Rect> desktopResizeHotZoneRegions(
+  Rect canvas,
+  List<DesktopFrameRing> stack,
+) {
+  final restored = <Rect>[];
+  final obstructions = <Rect>[];
+  for (final entry in stack) {
+    var zones = entry.resizeHotZones;
+    for (final obstruction in obstructions) {
+      zones = _subtractFromAll(zones, obstruction);
+    }
+    for (final zone in zones) {
+      final clipped = zone.intersect(canvas);
       if (!clipped.isEmpty) {
         restored.add(clipped);
       }

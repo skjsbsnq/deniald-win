@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -2615,112 +2616,137 @@ class _DesktopWindowFrame extends ConsumerWidget {
                   outset: drawsServerFrame
                       ? DesktopWindowFramePainter.shadowOutset
                       : 0,
-                  child: _DesktopOverviewPreviewInteraction(
-                    overviewActive: overviewActive,
-                    overview: overview,
-                    desktopWidget: desktopWidget,
-                    dragging: placement.dragging,
-                    label: desktopWidget
-                        ? context.l10n.desktopRestoreWindow(
-                            localizedWindowTitle(context, window),
-                          )
-                        : context.l10n.desktopActivateWindow(
-                            localizedWindowTitle(context, window),
-                          ),
-                    onTap: onOverviewTap,
-                    onDragStart: onOverviewDragStart,
-                    onDragUpdate: onOverviewDragUpdate,
-                    onDragEnd: onOverviewDragEnd,
-                    onDragCancel: onOverviewDragCancel,
-                    child: Builder(
-                      builder: (context) {
-                        final client = ClipRRect(
-                          borderRadius: BorderRadius.circular(
-                            math.max(0.0, windowRadius - 1.0),
-                          ),
-                          child: Padding(
-                            // The native client keeps its real geometry
-                            // during overview; only its live texture scales.
-                            padding: drawsServerFrame
-                                ? const EdgeInsets.all(
-                                    DesktopMetrics.frameBorder,
-                                  )
-                                : EdgeInsets.zero,
-                            child: placement.decorated
-                                ? Column(
-                                    children: [
-                                      SizedBox(
-                                        height: DesktopTitlebarMetrics.height,
-                                        child: DesktopWindowTitlebar(
-                                          window: window,
-                                          active: active,
-                                          maximized: placement.maximized,
-                                          fullscreen: placement.fullscreen,
-                                          overviewActive: overviewActive,
-                                          onActivate: () => ref
-                                              .read(
-                                                desktopWorkspaceProvider
-                                                    .notifier,
-                                              )
-                                              .activate(window.objectId),
-                                          onBeginMove: () => ref
-                                              .read(
-                                                desktopWorkspaceProvider
-                                                    .notifier,
-                                              )
-                                              .beginMove(window.objectId),
-                                          onMoveBy: (delta) => ref
-                                              .read(
-                                                desktopWorkspaceProvider
-                                                    .notifier,
-                                              )
-                                              .moveBy(window.objectId, delta),
-                                          onEndMove: () => ref
-                                              .read(
-                                                desktopWorkspaceProvider
-                                                    .notifier,
-                                              )
-                                              .endMove(window.objectId),
-                                          onBeginMaximizedDrag:
-                                              ({
-                                                required pointerPosition,
-                                                required pointerFractionX,
-                                                required pointerOffsetY,
-                                              }) => ref
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      _DesktopOverviewPreviewInteraction(
+                        overviewActive: overviewActive,
+                        overview: overview,
+                        desktopWidget: desktopWidget,
+                        dragging: placement.dragging,
+                        label: desktopWidget
+                            ? context.l10n.desktopRestoreWindow(
+                                localizedWindowTitle(context, window),
+                              )
+                            : context.l10n.desktopActivateWindow(
+                                localizedWindowTitle(context, window),
+                              ),
+                        onTap: onOverviewTap,
+                        onDragStart: onOverviewDragStart,
+                        onDragUpdate: onOverviewDragUpdate,
+                        onDragEnd: onOverviewDragEnd,
+                        onDragCancel: onOverviewDragCancel,
+                        child: Builder(
+                          builder: (context) {
+                            final client = ClipRRect(
+                              borderRadius: BorderRadius.circular(
+                                math.max(0.0, windowRadius - 1.0),
+                              ),
+                              child: Padding(
+                                // The native client keeps its real geometry
+                                // during overview; only its live texture scales.
+                                padding: drawsServerFrame
+                                    ? const EdgeInsets.all(
+                                        DesktopMetrics.frameBorder,
+                                      )
+                                    : EdgeInsets.zero,
+                                child: placement.decorated
+                                    ? Column(
+                                        children: [
+                                          SizedBox(
+                                            height:
+                                                DesktopTitlebarMetrics.height,
+                                            child: DesktopWindowTitlebar(
+                                              window: window,
+                                              active: active,
+                                              maximized: placement.maximized,
+                                              fullscreen: placement.fullscreen,
+                                              overviewActive: overviewActive,
+                                              onActivate: () => ref
                                                   .read(
                                                     desktopWorkspaceProvider
                                                         .notifier,
                                                   )
-                                                  .beginMaximizedDrag(
+                                                  .activate(window.objectId),
+                                              onBeginMove: () => ref
+                                                  .read(
+                                                    desktopWorkspaceProvider
+                                                        .notifier,
+                                                  )
+                                                  .beginMove(window.objectId),
+                                              onMoveBy: (delta) => ref
+                                                  .read(
+                                                    desktopWorkspaceProvider
+                                                        .notifier,
+                                                  )
+                                                  .moveBy(
                                                     window.objectId,
-                                                    pointerPosition:
-                                                        pointerPosition,
-                                                    pointerFractionX:
-                                                        pointerFractionX,
-                                                    pointerOffsetY:
-                                                        pointerOffsetY,
+                                                    delta,
                                                   ),
-                                          onMinimize: () => ref
-                                              .read(
-                                                desktopWorkspaceProvider
-                                                    .notifier,
-                                              )
-                                              .minimize(window.objectId),
-                                          onToggleMaximize: () => ref
-                                              .read(
-                                                desktopWorkspaceProvider
-                                                    .notifier,
-                                              )
-                                              .toggleMaximized(window.objectId),
-                                          onClose: () => ref
-                                              .read(
-                                                shellControllerProvider
-                                                    .notifier,
-                                              )
-                                              .closeWindow(window),
-                                        ),
-                                      ),
-                                      Expanded(
+                                              onEndMove: () => ref
+                                                  .read(
+                                                    desktopWorkspaceProvider
+                                                        .notifier,
+                                                  )
+                                                  .endMove(window.objectId),
+                                              onBeginMaximizedDrag:
+                                                  ({
+                                                    required pointerPosition,
+                                                    required pointerFractionX,
+                                                    required pointerOffsetY,
+                                                  }) => ref
+                                                      .read(
+                                                        desktopWorkspaceProvider
+                                                            .notifier,
+                                                      )
+                                                      .beginMaximizedDrag(
+                                                        window.objectId,
+                                                        pointerPosition:
+                                                            pointerPosition,
+                                                        pointerFractionX:
+                                                            pointerFractionX,
+                                                        pointerOffsetY:
+                                                            pointerOffsetY,
+                                                      ),
+                                              onMinimize: () => ref
+                                                  .read(
+                                                    desktopWorkspaceProvider
+                                                        .notifier,
+                                                  )
+                                                  .minimize(window.objectId),
+                                              onToggleMaximize: () => ref
+                                                  .read(
+                                                    desktopWorkspaceProvider
+                                                        .notifier,
+                                                  )
+                                                  .toggleMaximized(
+                                                    window.objectId,
+                                                  ),
+                                              onClose: () => ref
+                                                  .read(
+                                                    shellControllerProvider
+                                                        .notifier,
+                                                  )
+                                                  .closeWindow(window),
+                                            ),
+                                          ),
+                                          Expanded(
+                                            child: _DesktopWindowContent(
+                                              window: window,
+                                              smooth:
+                                                  transformed ||
+                                                  resizing ||
+                                                  placement.dragging,
+                                              active: active && !minimized,
+                                              localLayoutSize:
+                                                  window.isLocalFlutter
+                                                  ? placement.contentRect.size
+                                                  : null,
+                                            ),
+                                          ),
+                                        ],
+                                      )
+                                    : SizedBox.expand(
                                         child: _DesktopWindowContent(
                                           window: window,
                                           smooth:
@@ -2733,42 +2759,52 @@ class _DesktopWindowFrame extends ConsumerWidget {
                                               : null,
                                         ),
                                       ),
-                                    ],
-                                  )
-                                : SizedBox.expand(
-                                    child: _DesktopWindowContent(
-                                      window: window,
-                                      smooth:
-                                          transformed ||
-                                          resizing ||
-                                          placement.dragging,
-                                      active: active && !minimized,
-                                      localLayoutSize: window.isLocalFlutter
-                                          ? placement.contentRect.size
-                                          : null,
-                                    ),
-                                  ),
-                          ),
-                        );
-                        if (!drawsServerFrame) {
-                          return client;
-                        }
-                        return DesktopWindowFrameLayers(
-                          windowId: window.objectId,
-                          borderPainter: _DesktopWindowBorderPainter(
-                            windowId: window.objectId,
-                            color: window.pinned
-                                ? theme.accentPalette.container
-                                : active
-                                ? theme.accent
-                                : ShellColors.hairlineWindow,
-                            devicePixelRatio: devicePixelRatio,
-                            radius: windowRadius,
-                          ),
-                          child: client,
-                        );
-                      },
-                    ),
+                              ),
+                            );
+                            if (!drawsServerFrame) {
+                              return client;
+                            }
+                            return DesktopWindowFrameLayers(
+                              windowId: window.objectId,
+                              borderPainter: _DesktopWindowBorderPainter(
+                                windowId: window.objectId,
+                                color: window.pinned
+                                    ? theme.accentPalette.container
+                                    : active
+                                    ? theme.accent
+                                    : ShellColors.hairlineWindow,
+                                devicePixelRatio: devicePixelRatio,
+                                radius: windowRadius,
+                              ),
+                              child: client,
+                            );
+                          },
+                        ),
+                      ),
+                      if (placement.decorated &&
+                          !overviewActive &&
+                          !overview &&
+                          !switching &&
+                          !desktopWidget)
+                        _DesktopWindowResizeInteraction(
+                          zones: [
+                            for (final zone in desktopResizeHotZones(placement))
+                              zone.shift(-frame.topLeft),
+                          ],
+                          onActivate: () => ref
+                              .read(desktopWorkspaceProvider.notifier)
+                              .activate(window.objectId),
+                          onBeginResize: (edge) => ref
+                              .read(desktopWorkspaceProvider.notifier)
+                              .beginResize(window.objectId, edge),
+                          onResizeBy: (delta) => ref
+                              .read(desktopWorkspaceProvider.notifier)
+                              .resizeBy(window.objectId, delta),
+                          onEndResize: () => ref
+                              .read(desktopWorkspaceProvider.notifier)
+                              .endResize(window.objectId),
+                        ),
+                    ],
                   ),
                 ),
               ),
@@ -2931,6 +2967,104 @@ class _DesktopOverviewPreviewInteraction extends StatefulWidget {
   @override
   State<_DesktopOverviewPreviewInteraction> createState() =>
       _DesktopOverviewPreviewInteractionState();
+}
+
+class _DesktopWindowResizeInteraction extends StatefulWidget {
+  const _DesktopWindowResizeInteraction({
+    required this.zones,
+    required this.onActivate,
+    required this.onBeginResize,
+    required this.onResizeBy,
+    required this.onEndResize,
+  });
+
+  final List<Rect> zones;
+  final VoidCallback onActivate;
+  final ValueChanged<DesktopResizeEdge> onBeginResize;
+  final ValueChanged<Offset> onResizeBy;
+  final VoidCallback onEndResize;
+
+  @override
+  State<_DesktopWindowResizeInteraction> createState() =>
+      _DesktopWindowResizeInteractionState();
+}
+
+class _DesktopWindowResizeInteractionState
+    extends State<_DesktopWindowResizeInteraction> {
+  DesktopResizeEdge? _activeEdge;
+
+  void _handlePointerDown(DesktopResizeEdge edge, PointerDownEvent event) {
+    if (event.buttons != kPrimaryMouseButton &&
+        event.kind != PointerDeviceKind.touch) {
+      return;
+    }
+    _activeEdge = edge;
+    widget.onActivate();
+    widget.onBeginResize(edge);
+  }
+
+  void _handlePointerMove(PointerMoveEvent event) {
+    if (_activeEdge == null) {
+      return;
+    }
+    widget.onResizeBy(event.delta);
+  }
+
+  void _finishResize() {
+    if (_activeEdge == null) {
+      return;
+    }
+    _activeEdge = null;
+    widget.onEndResize();
+  }
+
+  MouseCursor _cursorFor(DesktopResizeEdge edge) {
+    return switch (edge) {
+      DesktopResizeEdge.top ||
+      DesktopResizeEdge.bottom => ShellMouseCursors.verticalResize,
+      DesktopResizeEdge.left ||
+      DesktopResizeEdge.right => ShellMouseCursors.horizontalResize,
+    };
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        for (var index = 0; index < widget.zones.length; index += 1)
+          Positioned.fromRect(
+            rect: widget.zones[index],
+            child: MouseRegion(
+              cursor: _cursorFor(
+                <DesktopResizeEdge>[
+                  DesktopResizeEdge.top,
+                  DesktopResizeEdge.bottom,
+                  DesktopResizeEdge.left,
+                  DesktopResizeEdge.right,
+                ][index],
+              ),
+              child: Listener(
+                behavior: HitTestBehavior.opaque,
+                onPointerDown: (event) => _handlePointerDown(
+                  <DesktopResizeEdge>[
+                    DesktopResizeEdge.top,
+                    DesktopResizeEdge.bottom,
+                    DesktopResizeEdge.left,
+                    DesktopResizeEdge.right,
+                  ][index],
+                  event,
+                ),
+                onPointerMove: _handlePointerMove,
+                onPointerUp: (_) => _finishResize(),
+                onPointerCancel: (_) => _finishResize(),
+                child: const SizedBox.expand(),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
 }
 
 class _DesktopOverviewPreviewInteractionState

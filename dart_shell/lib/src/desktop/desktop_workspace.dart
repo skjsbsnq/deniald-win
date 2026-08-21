@@ -13,6 +13,8 @@ import 'desktop_window_titlebar.dart';
 
 abstract final class DesktopMetrics {
   static const double frameBorder = 1.0;
+  static const double resizeHitSlop = 6.0;
+  static const double minimumClientExtent = 64.0;
   static const double panelGap = 12.0;
   static const double panelMargin = 14.0;
   static const double edgeTriggerWidth = 8.0;
@@ -226,6 +228,110 @@ abstract final class DesktopMetrics {
   }
 }
 
+enum DesktopResizeEdge { top, bottom, left, right }
+
+/// Returns the four one-axis resize bands inside a decorated window frame.
+/// Corners are intentionally left out: diagonal resize is a separate feature.
+List<Rect> desktopResizeHotZones(
+  DesktopWindowPlacement placement, {
+  double hitSlop = DesktopMetrics.resizeHitSlop,
+}) {
+  if (!placement.decorated ||
+      placement.minimized ||
+      (placement.dragging && !placement.resizing)) {
+    return const <Rect>[];
+  }
+  final frame = placement.frame;
+  final slop = math.max(0.0, hitSlop);
+  if (frame.width <= slop * 2.0 || frame.height <= slop * 2.0) {
+    return const <Rect>[];
+  }
+  return <Rect>[
+    Rect.fromLTRB(
+      frame.left + slop,
+      frame.top,
+      frame.right - slop,
+      math.min(frame.bottom, frame.top + slop),
+    ),
+    Rect.fromLTRB(
+      frame.left + slop,
+      math.max(frame.top, frame.bottom - slop),
+      frame.right - slop,
+      frame.bottom,
+    ),
+    Rect.fromLTRB(
+      frame.left,
+      frame.top + slop,
+      math.min(frame.right, frame.left + slop),
+      frame.bottom - slop,
+    ),
+    Rect.fromLTRB(
+      math.max(frame.left, frame.right - slop),
+      frame.top + slop,
+      frame.right,
+      frame.bottom - slop,
+    ),
+  ];
+}
+
+DesktopResizeEdge? desktopResizeEdgeForPosition(
+  Offset position,
+  Size size, {
+  double hitSlop = DesktopMetrics.resizeHitSlop,
+}) {
+  final slop = math.max(0.0, hitSlop);
+  if (size.width <= slop * 2.0 || size.height <= slop * 2.0) {
+    return null;
+  }
+  final inHorizontalInterior =
+      position.dx >= slop && position.dx <= size.width - slop;
+  final inVerticalInterior =
+      position.dy >= slop && position.dy <= size.height - slop;
+  if (inHorizontalInterior && position.dy <= slop) {
+    return DesktopResizeEdge.top;
+  }
+  if (inHorizontalInterior && position.dy >= size.height - slop) {
+    return DesktopResizeEdge.bottom;
+  }
+  if (inVerticalInterior && position.dx <= slop) {
+    return DesktopResizeEdge.left;
+  }
+  if (inVerticalInterior && position.dx >= size.width - slop) {
+    return DesktopResizeEdge.right;
+  }
+  return null;
+}
+
+/// Applies one pointer delta to a frame while preserving the opposite edge.
+/// The client minimum is expressed in frame coordinates so the ConfigureWindow
+/// request cannot be clamped to a different size by the native bridge.
+Rect desktopResizeFrame({
+  required Rect frame,
+  required DesktopResizeEdge edge,
+  required Offset delta,
+  required EdgeInsets insets,
+}) {
+  final minimumWidth = insets.horizontal + DesktopMetrics.minimumClientExtent;
+  final minimumHeight = insets.vertical + DesktopMetrics.minimumClientExtent;
+  switch (edge) {
+    case DesktopResizeEdge.top:
+      final top = math.min(frame.bottom - minimumHeight, frame.top + delta.dy);
+      return Rect.fromLTRB(frame.left, top, frame.right, frame.bottom);
+    case DesktopResizeEdge.bottom:
+      final bottom = math.max(
+        frame.top + minimumHeight,
+        frame.bottom + delta.dy,
+      );
+      return Rect.fromLTRB(frame.left, frame.top, frame.right, bottom);
+    case DesktopResizeEdge.left:
+      final left = math.min(frame.right - minimumWidth, frame.left + delta.dx);
+      return Rect.fromLTRB(left, frame.top, frame.right, frame.bottom);
+    case DesktopResizeEdge.right:
+      final right = math.max(frame.left + minimumWidth, frame.right + delta.dx);
+      return Rect.fromLTRB(frame.left, frame.top, right, frame.bottom);
+  }
+}
+
 enum DesktopPanel { none, launcher, dashboard, calendar }
 
 @immutable
@@ -263,11 +369,13 @@ class DesktopWindowPlacement {
     this.fullscreen = false,
     this.serverSideDecorated = true,
     this.dragging = false,
+    bool resizing = false,
     this.shellCorrectedInitialGeometry = false,
     bool nativeGrab = false,
     this.restoreFrame,
     this.fullscreenRestoreFrame,
-  }) : nativeGrab = dragging && nativeGrab;
+  }) : resizing = dragging && resizing,
+       nativeGrab = dragging && nativeGrab;
 
   final int objectId;
   final Rect frame;
@@ -279,6 +387,7 @@ class DesktopWindowPlacement {
   final bool fullscreen;
   final bool serverSideDecorated;
   final bool dragging;
+  final bool resizing;
   final bool shellCorrectedInitialGeometry;
 
   /// Whether the compositor, not the shell, authors the frame while [dragging].
@@ -297,7 +406,9 @@ class DesktopWindowPlacement {
   final Rect? fullscreenRestoreFrame;
 
   /// Whether the shell is mid-drag and still owes Rust the resulting position.
-  bool get shellDragging => dragging && !nativeGrab;
+  bool get shellDragging => dragging && !nativeGrab && !resizing;
+
+  bool get shellResizing => dragging && !nativeGrab && resizing;
 
   bool get decorated => !fullscreen && serverSideDecorated;
 
@@ -324,6 +435,7 @@ class DesktopWindowPlacement {
     bool? fullscreen,
     bool? serverSideDecorated,
     bool? dragging,
+    bool? resizing,
     bool? shellCorrectedInitialGeometry,
     bool? nativeGrab,
     Rect? restoreFrame,
@@ -342,6 +454,7 @@ class DesktopWindowPlacement {
       fullscreen: fullscreen ?? this.fullscreen,
       serverSideDecorated: serverSideDecorated ?? this.serverSideDecorated,
       dragging: dragging ?? this.dragging,
+      resizing: resizing ?? this.resizing,
       shellCorrectedInitialGeometry:
           shellCorrectedInitialGeometry ?? this.shellCorrectedInitialGeometry,
       nativeGrab: nativeGrab ?? this.nativeGrab,
@@ -522,6 +635,7 @@ bool _desktopPlacementHasSameSceneStructure(
       left.fullscreen == right.fullscreen &&
       left.serverSideDecorated == right.serverSideDecorated &&
       left.dragging == right.dragging &&
+      left.resizing == right.resizing &&
       left.restoreFrame == right.restoreFrame &&
       left.fullscreenRestoreFrame == right.fullscreenRestoreFrame;
 }
@@ -561,6 +675,8 @@ class DesktopWorkspaceController extends Notifier<DesktopWorkspaceState> {
   /// one map.
   final Map<int, ({Offset remainder, Rect origin})> _moveGestures =
       <int, ({Offset remainder, Rect origin})>{};
+  final Map<int, ({DesktopResizeEdge edge, double remainder})> _resizeGestures =
+      <int, ({DesktopResizeEdge edge, double remainder})>{};
   final Map<int, Rect> _pendingNativeFrames = <int, Rect>{};
   // Native ordering prevents stale placement events but has no visual effect,
   // so keep it outside provider state and its widget rebuild boundary.
@@ -635,8 +751,12 @@ class DesktopWorkspaceController extends Notifier<DesktopWorkspaceState> {
     if (pixelRatioChanged) {
       _devicePixelRatio = nextPixelRatio;
       _moveGestures.clear();
+      _resizeGestures.clear();
     }
 
+    // Keep transient popups in the placement map: their independent scene
+    // entries still need to be rendered and routed. App-only consumers filter
+    // them with DenialWindow.isTransientPopup instead.
     final userWindows = windows.where((window) => window.isUserApp).toList();
     final activeIds = {for (final window in userWindows) window.objectId};
     _moveGestures.removeWhere((objectId, _) => !activeIds.contains(objectId));
@@ -1139,6 +1259,104 @@ class DesktopWorkspaceController extends Notifier<DesktopWorkspaceState> {
     state = state.copyWith(placements: next);
   }
 
+  void beginResize(int objectId, DesktopResizeEdge edge) {
+    if (state.overviewActive) {
+      return;
+    }
+    final placement = state.placements[objectId];
+    if (placement == null ||
+        !placement.decorated ||
+        placement.maximized ||
+        placement.fullscreen ||
+        placement.minimized ||
+        placement.dragging) {
+      return;
+    }
+    _moveGestures.remove(objectId);
+    _resizeGestures[objectId] = (edge: edge, remainder: 0.0);
+    final next = Map<int, DesktopWindowPlacement>.of(state.placements);
+    next[objectId] = placement.copyWith(
+      dragging: true,
+      resizing: true,
+      nativeGrab: false,
+    );
+    state = state.copyWith(placements: next);
+  }
+
+  void resizeBy(int objectId, Offset delta) {
+    if (state.overviewActive) {
+      return;
+    }
+    final placement = state.placements[objectId];
+    final gesture = _resizeGestures[objectId];
+    if (placement == null ||
+        gesture == null ||
+        !placement.shellResizing ||
+        delta == Offset.zero) {
+      return;
+    }
+
+    final pointerDelta = switch (gesture.edge) {
+      DesktopResizeEdge.top || DesktopResizeEdge.bottom => delta.dy,
+      DesktopResizeEdge.left || DesktopResizeEdge.right => delta.dx,
+    };
+    final pendingDelta = gesture.remainder + pointerDelta;
+    final snappedDelta = _snapToPixel(pendingDelta);
+    if (snappedDelta == 0.0) {
+      _resizeGestures[objectId] = (edge: gesture.edge, remainder: pendingDelta);
+      return;
+    }
+
+    final frame = desktopResizeFrame(
+      frame: placement.frame,
+      edge: gesture.edge,
+      delta: switch (gesture.edge) {
+        DesktopResizeEdge.top ||
+        DesktopResizeEdge.bottom => Offset(0.0, snappedDelta),
+        DesktopResizeEdge.left ||
+        DesktopResizeEdge.right => Offset(snappedDelta, 0.0),
+      },
+      insets: placement.frameInsets,
+    );
+    final appliedDelta = switch (gesture.edge) {
+      DesktopResizeEdge.top => frame.top - placement.frame.top,
+      DesktopResizeEdge.bottom => frame.bottom - placement.frame.bottom,
+      DesktopResizeEdge.left => frame.left - placement.frame.left,
+      DesktopResizeEdge.right => frame.right - placement.frame.right,
+    };
+    var remainder = pendingDelta - appliedDelta;
+    if ((appliedDelta - snappedDelta).abs() > 0.000001) {
+      remainder = 0.0;
+    }
+    _resizeGestures[objectId] = (edge: gesture.edge, remainder: remainder);
+
+    if (frame == placement.frame) {
+      return;
+    }
+    final next = Map<int, DesktopWindowPlacement>.of(state.placements);
+    next[objectId] = placement.copyWith(frame: frame);
+    _pendingNativeFrames[objectId] = frame;
+    state = state.copyWith(placements: next);
+  }
+
+  void endResize(int objectId) {
+    if (state.overviewActive) {
+      return;
+    }
+    _resizeGestures.remove(objectId);
+    final placement = state.placements[objectId];
+    if (placement == null || !placement.resizing) {
+      return;
+    }
+    final next = Map<int, DesktopWindowPlacement>.of(state.placements);
+    next[objectId] = placement.copyWith(
+      dragging: false,
+      resizing: false,
+      nativeGrab: false,
+    );
+    state = state.copyWith(placements: next);
+  }
+
   void beginMove(int objectId) {
     if (state.overviewActive) {
       return;
@@ -1150,6 +1368,7 @@ class DesktopWorkspaceController extends Notifier<DesktopWorkspaceState> {
         placement.minimized) {
       return;
     }
+    _resizeGestures.remove(objectId);
     _moveGestures[objectId] = (remainder: Offset.zero, origin: placement.frame);
     final next = Map<int, DesktopWindowPlacement>.of(state.placements);
     next[objectId] = placement.copyWith(dragging: true, nativeGrab: false);
@@ -1214,6 +1433,7 @@ class DesktopWorkspaceController extends Notifier<DesktopWorkspaceState> {
       return;
     }
     _moveGestures.remove(objectId);
+    _resizeGestures.remove(objectId);
     final placement = state.placements[objectId];
     if (placement == null || !placement.dragging) {
       return;
@@ -1246,6 +1466,7 @@ class DesktopWorkspaceController extends Notifier<DesktopWorkspaceState> {
         next[objectId] = placement.copyWith(
           monitorId: event.monitorId,
           workspaceId: event.workspaceId,
+          resizing: false,
         );
         _nativeSequences[objectId] = event.sequence;
         state = state.copyWith(placements: next);
@@ -1265,6 +1486,7 @@ class DesktopWorkspaceController extends Notifier<DesktopWorkspaceState> {
         workspaceId: event.workspaceId,
         dragging: event.phase != DenialWindowPlacementPhase.end,
         nativeGrab: true,
+        resizing: false,
         fullscreenRestoreFrame: monitorChanged
             ? placement.fullscreenRestoreFrame?.shift(delta)
             : placement.fullscreenRestoreFrame,
@@ -1292,6 +1514,7 @@ class DesktopWorkspaceController extends Notifier<DesktopWorkspaceState> {
       fullscreen: false,
       dragging: event.phase != DenialWindowPlacementPhase.end,
       nativeGrab: true,
+      resizing: false,
       clearRestoreFrame: true,
       clearFullscreenRestoreFrame: true,
     );

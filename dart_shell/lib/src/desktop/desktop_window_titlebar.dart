@@ -150,14 +150,6 @@ class DesktopWindowTitlebar extends ConsumerWidget {
                 ],
               ),
             ),
-            SizedBox(
-              height: DesktopMetrics.frameBorder,
-              child: ColoredBox(
-                color: active
-                    ? accent.color.withValues(alpha: 0.18)
-                    : ShellColors.hairlineSoft,
-              ),
-            ),
           ],
         ),
       ),
@@ -296,6 +288,7 @@ class _DesktopWindowTitlebarInteractiveAreaState
   @override
   Widget build(BuildContext context) {
     final title = localizedWindowTitle(context, widget.window);
+    final accent = ref.watch(shellAccentProvider);
     final titleColor = widget.active
         ? ShellColors.textPrimary
         : ShellColors.textTertiary;
@@ -310,36 +303,50 @@ class _DesktopWindowTitlebarInteractiveAreaState
         behavior: HitTestBehavior.opaque,
         onDoubleTap: widget.onToggleMaximize,
         onSecondaryTapUp: (details) => _openContextMenu(details.globalPosition),
-        child: Padding(
-          padding: const EdgeInsets.only(
-            left: DesktopTitlebarMetrics.horizontalPadding,
-            right: DesktopTitlebarMetrics.iconGap,
-          ),
-          child: Row(
-            children: [
-              _DesktopWindowTitlebarIcon(
-                window: widget.window,
-                active: widget.active,
-              ),
-              const SizedBox(width: DesktopTitlebarMetrics.iconGap),
-              Expanded(
-                child: Text(
-                  title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: titleColor,
-                    fontSize: 12.0,
-                    fontWeight: widget.active
-                        ? FontWeight.w600
-                        : FontWeight.w500,
-                    fontFamilyFallback: ShellText.fallbackFontFamilies,
-                    decoration: TextDecoration.none,
-                  ),
+        child: Column(
+          children: [
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.only(
+                  left: DesktopTitlebarMetrics.horizontalPadding,
+                  right: DesktopTitlebarMetrics.iconGap,
+                ),
+                child: Row(
+                  children: [
+                    _DesktopWindowTitlebarIcon(
+                      window: widget.window,
+                      active: widget.active,
+                    ),
+                    const SizedBox(width: DesktopTitlebarMetrics.iconGap),
+                    Expanded(
+                      child: Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: titleColor,
+                          fontSize: 12.0,
+                          fontWeight: widget.active
+                              ? FontWeight.w600
+                              : FontWeight.w500,
+                          fontFamilyFallback: ShellText.fallbackFontFamilies,
+                          decoration: TextDecoration.none,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
-          ),
+            ),
+            SizedBox(
+              height: DesktopMetrics.frameBorder,
+              child: ColoredBox(
+                color: widget.active
+                    ? accent.color.withValues(alpha: 0.18)
+                    : ShellColors.hairlineSoft,
+              ),
+            ),
+          ],
         ),
       ),
     );
