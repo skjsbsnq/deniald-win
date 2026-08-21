@@ -2146,40 +2146,64 @@ class _DesktopPanelTransitionState extends State<_DesktopPanelTransition>
         ignoring: !widget.visible,
         child: ExcludeSemantics(
           excluding: !widget.visible,
-          child: AnimatedBuilder(
-            animation: _progress,
-            child: RepaintBoundary(child: widget.child),
-            builder: (context, child) {
-              final progress = _progress.value;
-              return LayoutBuilder(
-                builder: (context, constraints) {
-                  final direction = widget.entryDirection;
-                  final travel = Offset(
-                    direction.dx *
-                        (constraints.maxWidth + widget.entryDistance),
-                    direction.dy *
-                        (constraints.maxHeight + widget.entryDistance),
-                  );
-                  return Transform.translate(
-                    offset: travel * (1.0 - progress),
-                    child: ShellBackdropBlur(
-                      blur: shouldBlurDesktopPanel(
-                        animationStatus: _controller.status,
-                        panelOpacity: ShellTheme.of(context).panelOpacity,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final direction = widget.entryDirection;
+              final travel = Offset(
+                direction.dx * (constraints.maxWidth + widget.entryDistance),
+                direction.dy * (constraints.maxHeight + widget.entryDistance),
+              );
+              return ClipRect(
+                clipper: _DesktopPanelVisibleClipper(
+                  progress: _progress,
+                  travel: travel,
+                ),
+                child: ShellBackdropBlur(
+                  blur: shouldBlurDesktopPanel(
+                    panelOpacity: ShellTheme.of(context).panelOpacity,
+                  ),
+                  borderRadius: BorderRadius.circular(
+                    ShellTheme.of(context).panelRadius,
+                  ),
+                  child: RepaintBoundary(
+                    child: AnimatedBuilder(
+                      animation: _progress,
+                      child: widget.child,
+                      builder: (context, child) => Transform.translate(
+                        offset: travel * (1.0 - _progress.value),
+                        child: child,
                       ),
-                      borderRadius: BorderRadius.circular(
-                        ShellTheme.of(context).panelRadius,
-                      ),
-                      child: child!,
                     ),
-                  );
-                },
+                  ),
+                ),
               );
             },
           ),
         ),
       ),
     );
+  }
+}
+
+class _DesktopPanelVisibleClipper extends CustomClipper<Rect> {
+  _DesktopPanelVisibleClipper({
+    required Animation<double> progress,
+    required this.travel,
+  }) : _progress = progress,
+       super(reclip: progress);
+
+  final Animation<double> _progress;
+  final Offset travel;
+
+  @override
+  Rect getClip(Size size) => desktopPanelVisibleClip(
+    size: size,
+    offset: travel * (1.0 - _progress.value),
+  );
+
+  @override
+  bool shouldReclip(covariant _DesktopPanelVisibleClipper oldClipper) {
+    return oldClipper._progress != _progress || oldClipper.travel != travel;
   }
 }
 

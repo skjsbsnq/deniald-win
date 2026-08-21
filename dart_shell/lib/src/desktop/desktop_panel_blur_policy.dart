@@ -1,13 +1,13 @@
-import 'package:flutter/animation.dart';
+import 'package:flutter/widgets.dart';
 
-/// Keeps moving desktop panels off the backdrop-filter path.
-///
-/// The panel contents still move normally, but the expensive blur is restored
-/// only after the entrance animation has settled. Closing panels remain
-/// unblurred for their entire visible lifetime.
-bool shouldBlurDesktopPanel({
-  required AnimationStatus animationStatus,
-  required double panelOpacity,
-}) {
-  return animationStatus == AnimationStatus.completed && panelOpacity < 1.0;
+/// Keeps the panel backdrop stable while its contents move.
+bool shouldBlurDesktopPanel({required double panelOpacity}) {
+  return panelOpacity < 1.0;
+}
+
+/// Clips the fixed backdrop to the part occupied by the translated panel.
+Rect desktopPanelVisibleClip({required Size size, required Offset offset}) {
+  final bounds = Offset.zero & size;
+  final visible = bounds.intersect(bounds.shift(offset));
+  return visible.isEmpty ? Rect.zero : visible;
 }
