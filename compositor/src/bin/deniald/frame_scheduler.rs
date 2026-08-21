@@ -257,15 +257,15 @@ impl DisplayClock {
         {
             if let Some((previous_at, previous_sequence)) = self.last_presentation {
                 let sequence_delta = sequence.wrapping_sub(previous_sequence);
-                if sequence_delta > 0 {
-                    if let Some(interval) = measured_interval(
+                if sequence_delta > 0
+                    && let Some(interval) = measured_interval(
                         previous_at,
                         observed_at,
                         sequence_delta,
                         self.source.interval,
-                    ) {
-                        self.interval = interval;
-                    }
+                    )
+                {
+                    self.interval = interval;
                 }
             }
             self.last_presentation = Some((observed_at, sequence));
