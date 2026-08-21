@@ -26,6 +26,77 @@ import 'models/desktop_tile.dart';
 /// Height of the full-width search strip along the bottom edge.
 const double _searchStripHeight = 48;
 
+final desktopStartMenuCatalogProvider = Provider.autoDispose
+    .family<DesktopStartMenuCatalog, DesktopStartMenuCatalogSource>(
+      (ref, source) => DesktopStartMenuCatalog.fromSource(source),
+    );
+
+/// Inputs whose identity changes only when the launchable application catalog
+/// or active locale changes. Search edits therefore reuse the same derived
+/// ordering, grouping, and idle row list.
+@immutable
+class DesktopStartMenuCatalogSource {
+  const DesktopStartMenuCatalogSource({
+    required this.desktopApps,
+    required this.slots,
+    required this.localRegistry,
+    required this.locale,
+    required this.localizedLocalEntries,
+  });
+
+  final List<DesktopApp> desktopApps;
+  final List<HomeGridItem?> slots;
+  final LocalFlutterApplicationRegistry localRegistry;
+  final Locale locale;
+  final List<DesktopStartMenuEntry> localizedLocalEntries;
+
+  @override
+  bool operator ==(Object other) {
+    return other is DesktopStartMenuCatalogSource &&
+        identical(other.desktopApps, desktopApps) &&
+        identical(other.slots, slots) &&
+        identical(other.localRegistry, localRegistry) &&
+        other.locale == locale;
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    identityHashCode(desktopApps),
+    identityHashCode(slots),
+    identityHashCode(localRegistry),
+    locale,
+  );
+}
+
+@immutable
+class DesktopStartMenuCatalog {
+  const DesktopStartMenuCatalog({
+    required this.entries,
+    required this.groups,
+    required this.idleRows,
+  });
+
+  factory DesktopStartMenuCatalog.fromSource(
+    DesktopStartMenuCatalogSource source,
+  ) {
+    final entries = _startMenuEntriesFromSources(
+      source.desktopApps,
+      source.slots,
+      source.localizedLocalEntries,
+    );
+    final groups = groupStartMenuEntries(entries);
+    return DesktopStartMenuCatalog(
+      entries: entries,
+      groups: groups,
+      idleRows: flattenStartMenuGroups(groups),
+    );
+  }
+
+  final List<DesktopStartMenuEntry> entries;
+  final List<DesktopStartMenuAppGroup> groups;
+  final List<DesktopStartMenuAppListRow> idleRows;
+}
+
 /// Windows 10 style start menu: icon rail, letter-grouped all-apps list, and
 /// tile area, over a full-width search strip.
 ///
@@ -179,11 +250,23 @@ class _DesktopStartMenuState extends ConsumerState<DesktopStartMenu> {
 
   @override
   Widget build(BuildContext context) {
-    final allApps = startMenuEntries(
-      context,
-      ref.watch(homeGridControllerProvider),
-      ref.watch(localFlutterApplicationRegistryProvider).applications,
+    final grid = ref.watch(homeGridControllerProvider).asData?.value;
+    final localRegistry = ref.watch(localFlutterApplicationRegistryProvider);
+    final catalog = ref.watch(
+      desktopStartMenuCatalogProvider(
+        DesktopStartMenuCatalogSource(
+          desktopApps: grid?.desktopApps ?? const <DesktopApp>[],
+          slots: grid?.slots ?? const <HomeGridItem?>[],
+          localRegistry: localRegistry,
+          locale: Localizations.localeOf(context),
+          localizedLocalEntries: <DesktopStartMenuEntry>[
+            for (final app in localRegistry.applications)
+              DesktopStartMenuEntry.local(app, context),
+          ],
+        ),
+      ),
     );
+    final allApps = catalog.entries;
     final apps = filterStartMenuEntries(allApps, _searchController.text);
     final searching = _searchController.text.trim().isNotEmpty;
     final theme = ShellTheme.of(context);
@@ -237,6 +320,7 @@ class _DesktopStartMenuState extends ConsumerState<DesktopStartMenu> {
                                   ? const _StartMenuSearchEmptyState()
                                   : DesktopStartMenuAppList(
                                       entries: apps,
+                                      idleRows: catalog.idleRows,
                                       searching: searching,
                                       accent: accent,
                                       onLaunch: _launch,
@@ -324,19 +408,32 @@ List<DesktopStartMenuEntry> startMenuEntries(
   AsyncValue<HomeGridState> state,
   Iterable<LocalFlutterApplication> localApps,
 ) {
+  final grid = state.asData?.value;
+  return _startMenuEntriesFromSources(
+    grid?.desktopApps ?? const <DesktopApp>[],
+    grid?.slots ?? const <HomeGridItem?>[],
+    <DesktopStartMenuEntry>[
+      for (final app in localApps) DesktopStartMenuEntry.local(app, context),
+    ],
+  );
+}
+
+List<DesktopStartMenuEntry> _startMenuEntriesFromSources(
+  List<DesktopApp> desktopApps,
+  List<HomeGridItem?> slots,
+  Iterable<DesktopStartMenuEntry> localEntries,
+) {
   final byId = <String, DesktopStartMenuEntry>{};
-  if (state.asData?.value case final grid?) {
-    for (final app in grid.desktopApps) {
+  for (final app in desktopApps) {
+    byId['desktop:${app.id}'] = DesktopStartMenuEntry.desktop(app);
+  }
+  for (final item in slots.whereType<HomeGridItem>()) {
+    if (item.app case final app?) {
       byId['desktop:${app.id}'] = DesktopStartMenuEntry.desktop(app);
     }
-    for (final item in grid.slots.whereType<HomeGridItem>()) {
-      if (item.app case final app?) {
-        byId['desktop:${app.id}'] = DesktopStartMenuEntry.desktop(app);
-      }
-    }
   }
-  for (final app in localApps) {
-    byId['local:${app.id}'] = DesktopStartMenuEntry.local(app, context);
+  for (final entry in localEntries) {
+    byId['local:${entry.id}'] = entry;
   }
   return byId.values.toList(growable: false)
     ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
@@ -353,12 +450,7 @@ List<DesktopStartMenuEntry> filterStartMenuEntries(
 
   return entries
       .where((entry) {
-        final searchable = <String>[
-          entry.name,
-          entry.id,
-          ...entry.categories,
-        ].join(' ').toLowerCase();
-        return searchable.contains(normalizedQuery);
+        return entry.searchableText.contains(normalizedQuery);
       })
       .toList(growable: false);
 }
@@ -482,7 +574,7 @@ class _StartMenuSearchField extends StatelessWidget {
                         controller: controller,
                         focusNode: focusNode,
                         mouseCursor: ShellMouseCursors.text,
-                        autofocus: true,
+                        autofocus: false,
                         maxLines: 1,
                         keyboardType: TextInputType.text,
                         textInputAction: TextInputAction.search,

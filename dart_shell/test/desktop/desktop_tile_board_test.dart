@@ -526,6 +526,26 @@ void main() {
   });
 
   group('board', () {
+    testWidgets('tile groups are built lazily as they enter the viewport', (
+      tester,
+    ) async {
+      final board = DesktopTileState(
+        groups: <DesktopTileGroup>[
+          for (var index = 0; index < 30; index += 1)
+            DesktopTileGroup(name: 'Group $index', slots: const []),
+        ],
+      );
+      await _pumpBoard(tester, board);
+
+      expect(find.text('Group 0'), findsOneWidget);
+      expect(find.text('Group 29'), findsNothing);
+
+      await tester.drag(find.byType(CustomScrollView), const Offset(0, -5000));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Group 29'), findsOneWidget);
+    });
+
     testWidgets('an empty board explains how tiles get there', (tester) async {
       await _pumpBoard(tester, DesktopTileState.empty);
 

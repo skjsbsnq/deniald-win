@@ -138,37 +138,30 @@ class DesktopTileBoard extends ConsumerWidget {
         ref.watch(desktopTileControllerProvider).asData?.value ??
         DesktopTileState.empty;
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        return SingleChildScrollView(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(minHeight: constraints.maxHeight),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              child: board.groups.isEmpty
-                  ? const DesktopTileBoardEmptyState()
-                  : Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: <Widget>[
-                        for (
-                          var index = 0;
-                          index < board.groups.length;
-                          index += 1
-                        )
-                          _TileGroupSection(
-                            key: ValueKey<int>(index),
-                            groupIndex: index,
-                            group: board.groups[index],
-                            accent: accent,
-                            onLaunch: onLaunch,
-                            onLaunchLocal: onLaunchLocal,
-                          ),
-                      ],
-                    ),
+    if (board.groups.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        child: DesktopTileBoardEmptyState(),
+      );
+    }
+
+    return CustomScrollView(
+      slivers: <Widget>[
+        SliverPadding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          sliver: SliverList.builder(
+            itemCount: board.groups.length,
+            itemBuilder: (context, index) => _TileGroupSection(
+              key: ValueKey<int>(index),
+              groupIndex: index,
+              group: board.groups[index],
+              accent: accent,
+              onLaunch: onLaunch,
+              onLaunchLocal: onLaunchLocal,
             ),
           ),
-        );
-      },
+        ),
+      ],
     );
   }
 }

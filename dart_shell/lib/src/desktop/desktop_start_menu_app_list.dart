@@ -19,7 +19,7 @@ import '../widgets/shell_cursor.dart';
 /// branch on which kind it is holding.
 @immutable
 class DesktopStartMenuEntry {
-  const DesktopStartMenuEntry._({
+  DesktopStartMenuEntry._({
     required this.id,
     required this.name,
     required this.categories,
@@ -27,7 +27,9 @@ class DesktopStartMenuEntry {
     required this.icon,
     required this.desktopApp,
     required this.localApp,
-  });
+  }) : searchableText =
+           '${name.toLowerCase()} ${id.toLowerCase()} '
+           '${categories.join(' ').toLowerCase()}';
 
   factory DesktopStartMenuEntry.desktop(DesktopApp app) {
     return DesktopStartMenuEntry._(
@@ -63,6 +65,10 @@ class DesktopStartMenuEntry {
   final IconData? icon;
   final DesktopApp? desktopApp;
   final LocalFlutterApplication? localApp;
+
+  /// Search text is normalized once when the application catalog changes,
+  /// rather than rebuilt for every keystroke.
+  final String searchableText;
 }
 
 /// A letter heading plus the entries filed under it.
@@ -150,6 +156,27 @@ List<DesktopStartMenuAppGroup> groupStartMenuEntries(
   ];
 }
 
+/// A heading or application row in the idle all-apps list.
+@immutable
+class DesktopStartMenuAppListRow {
+  const DesktopStartMenuAppListRow.heading(this.heading) : entry = null;
+  const DesktopStartMenuAppListRow.app(this.entry) : heading = null;
+
+  final String? heading;
+  final DesktopStartMenuEntry? entry;
+}
+
+List<DesktopStartMenuAppListRow> flattenStartMenuGroups(
+  List<DesktopStartMenuAppGroup> groups,
+) {
+  return <DesktopStartMenuAppListRow>[
+    for (final group in groups) ...<DesktopStartMenuAppListRow>[
+      DesktopStartMenuAppListRow.heading(group.key),
+      for (final entry in group.entries) DesktopStartMenuAppListRow.app(entry),
+    ],
+  ];
+}
+
 /// The all-apps column: letter-grouped when idle, flat while searching.
 ///
 /// Headings scroll away instead of pinning, which is what Windows 10 itself
@@ -159,6 +186,7 @@ class DesktopStartMenuAppList extends StatelessWidget {
   const DesktopStartMenuAppList({
     super.key,
     required this.entries,
+    required this.idleRows,
     required this.searching,
     required this.accent,
     required this.onLaunch,
@@ -166,6 +194,7 @@ class DesktopStartMenuAppList extends StatelessWidget {
   });
 
   final List<DesktopStartMenuEntry> entries;
+  final List<DesktopStartMenuAppListRow> idleRows;
   final bool searching;
   final WallpaperAccent accent;
   final ValueChanged<DesktopStartMenuEntry> onLaunch;
@@ -176,27 +205,15 @@ class DesktopStartMenuAppList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final rows = <_AppListRow>[];
-    if (searching) {
-      for (final entry in entries) {
-        rows.add(_AppListRow.app(entry));
-      }
-    } else {
-      for (final group in groupStartMenuEntries(entries)) {
-        rows.add(_AppListRow.heading(group.key));
-        for (final entry in group.entries) {
-          rows.add(_AppListRow.app(entry));
-        }
-      }
-    }
-
     // ListView wraps every child in a RepaintBoundary already, so one icon
     // settling cannot repaint the rows around it.
     return ListView.builder(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-      itemCount: rows.length,
+      itemCount: searching ? entries.length : idleRows.length,
       itemBuilder: (context, index) {
-        final row = rows[index];
+        final row = searching
+            ? DesktopStartMenuAppListRow.app(entries[index])
+            : idleRows[index];
         final heading = row.heading;
         if (heading != null) {
           return _AppListHeading(label: heading, accent: accent);
@@ -213,15 +230,6 @@ class DesktopStartMenuAppList extends StatelessWidget {
       },
     );
   }
-}
-
-@immutable
-class _AppListRow {
-  const _AppListRow.heading(this.heading) : entry = null;
-  const _AppListRow.app(this.entry) : heading = null;
-
-  final String? heading;
-  final DesktopStartMenuEntry? entry;
 }
 
 class _AppListHeading extends StatelessWidget {

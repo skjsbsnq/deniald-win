@@ -63,7 +63,7 @@ import 'desktop_dashboard_wifi_card.dart';
 import 'desktop_overview_layout.dart';
 import 'desktop_overview_target.dart';
 import 'desktop_home_layout.dart';
-import 'desktop_panel_blur_policy.dart';
+import 'desktop_panel_transition.dart';
 import 'desktop_popup_surface_policy.dart';
 import 'desktop_start_menu.dart';
 import 'desktop_system_bar.dart';
@@ -1518,7 +1518,7 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
                     Positioned.fromRect(
                       key: const ValueKey<String>('desktop-launcher-position'),
                       rect: launcherRect,
-                      child: _DesktopPanelTransition(
+                      child: DesktopPanelTransition(
                         key: const ValueKey<String>('desktop-launcher-panel'),
                         inputDebugLabel: 'Desktop application launcher',
                         keyboardPolicy: ShellKeyboardPolicy.capture,
@@ -1544,7 +1544,7 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
                     Positioned.fromRect(
                       key: const ValueKey<String>('desktop-dashboard-position'),
                       rect: dashboardRect,
-                      child: _DesktopPanelTransition(
+                      child: DesktopPanelTransition(
                         key: const ValueKey<String>('desktop-dashboard-panel'),
                         inputDebugLabel: 'Desktop dashboard',
                         keyboardPolicy: ShellKeyboardPolicy.capture,
@@ -1568,7 +1568,7 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
                     Positioned.fromRect(
                       key: const ValueKey<String>('desktop-calendar-position'),
                       rect: calendarRect,
-                      child: _DesktopPanelTransition(
+                      child: DesktopPanelTransition(
                         key: const ValueKey<String>('desktop-calendar-panel'),
                         inputDebugLabel: 'Desktop calendar',
                         keyboardPolicy: ShellKeyboardPolicy.capture,
@@ -2030,183 +2030,6 @@ class _AppVolumeRowState extends State<_AppVolumeRow> {
   }
 }
 
-class _DesktopPanelTransition extends StatefulWidget {
-  const _DesktopPanelTransition({
-    super.key,
-    required this.inputDebugLabel,
-    required this.visible,
-    required this.child,
-    this.entryDirection = const Offset(-1, 0),
-    this.entryDistance = 0,
-    this.durationScale = 1,
-    this.keyboardPolicy = ShellKeyboardPolicy.none,
-  });
-
-  final String inputDebugLabel;
-  final bool visible;
-  final Widget child;
-  final Offset entryDirection;
-  final double entryDistance;
-  final double durationScale;
-  final ShellKeyboardPolicy keyboardPolicy;
-
-  @override
-  State<_DesktopPanelTransition> createState() =>
-      _DesktopPanelTransitionState();
-}
-
-class _DesktopPanelTransitionState extends State<_DesktopPanelTransition>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _controller;
-  late final Animation<double> _progress;
-  late bool _showChild;
-
-  @override
-  void initState() {
-    super.initState();
-    _showChild = widget.visible;
-    _controller = AnimationController(
-      vsync: this,
-      value: widget.visible ? 1.0 : 0.0,
-      duration: _scaledDuration(Motion.desktopPanelOpen, widget.durationScale),
-      reverseDuration: _scaledDuration(
-        Motion.desktopPanelClose,
-        widget.durationScale,
-      ),
-    );
-    _progress = CurvedAnimation(
-      parent: _controller,
-      curve: Motion.md3EmphasizedDecelerate,
-      reverseCurve: Motion.md3EmphasizedAccelerate,
-    );
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final reduceMotion = MediaQuery.disableAnimationsOf(context);
-    _controller
-      ..duration = reduceMotion
-          ? Duration.zero
-          : _scaledDuration(Motion.desktopPanelOpen, widget.durationScale)
-      ..reverseDuration = reduceMotion
-          ? Duration.zero
-          : _scaledDuration(Motion.desktopPanelClose, widget.durationScale);
-  }
-
-  @override
-  void didUpdateWidget(covariant _DesktopPanelTransition oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (widget.durationScale != oldWidget.durationScale) {
-      final reduceMotion = MediaQuery.disableAnimationsOf(context);
-      _controller
-        ..duration = reduceMotion
-            ? Duration.zero
-            : _scaledDuration(Motion.desktopPanelOpen, widget.durationScale)
-        ..reverseDuration = reduceMotion
-            ? Duration.zero
-            : _scaledDuration(Motion.desktopPanelClose, widget.durationScale);
-    }
-    if (widget.visible == oldWidget.visible) {
-      return;
-    }
-
-    if (widget.visible) {
-      _showChild = true;
-      _controller.forward();
-      return;
-    }
-
-    _controller.reverse().whenCompleteOrCancel(() {
-      if (!mounted || widget.visible || _controller.value != 0.0) {
-        return;
-      }
-      setState(() => _showChild = false);
-    });
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (!_showChild) {
-      return const SizedBox.shrink();
-    }
-
-    return ShellInputRegion(
-      debugLabel: widget.inputDebugLabel,
-      keyboardPolicy: widget.visible
-          ? widget.keyboardPolicy
-          : ShellKeyboardPolicy.none,
-      child: IgnorePointer(
-        ignoring: !widget.visible,
-        child: ExcludeSemantics(
-          excluding: !widget.visible,
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final direction = widget.entryDirection;
-              final travel = Offset(
-                direction.dx * (constraints.maxWidth + widget.entryDistance),
-                direction.dy * (constraints.maxHeight + widget.entryDistance),
-              );
-              return ClipRect(
-                clipper: _DesktopPanelVisibleClipper(
-                  progress: _progress,
-                  travel: travel,
-                ),
-                child: ShellBackdropBlur(
-                  blur: shouldBlurDesktopPanel(
-                    panelOpacity: ShellTheme.of(context).panelOpacity,
-                  ),
-                  borderRadius: BorderRadius.circular(
-                    ShellTheme.of(context).panelRadius,
-                  ),
-                  child: RepaintBoundary(
-                    child: AnimatedBuilder(
-                      animation: _progress,
-                      child: widget.child,
-                      builder: (context, child) => Transform.translate(
-                        offset: travel * (1.0 - _progress.value),
-                        child: child,
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _DesktopPanelVisibleClipper extends CustomClipper<Rect> {
-  _DesktopPanelVisibleClipper({
-    required Animation<double> progress,
-    required this.travel,
-  }) : _progress = progress,
-       super(reclip: progress);
-
-  final Animation<double> _progress;
-  final Offset travel;
-
-  @override
-  Rect getClip(Size size) => desktopPanelVisibleClip(
-    size: size,
-    offset: travel * (1.0 - _progress.value),
-  );
-
-  @override
-  bool shouldReclip(covariant _DesktopPanelVisibleClipper oldClipper) {
-    return oldClipper._progress != _progress || oldClipper.travel != travel;
-  }
-}
-
 class _DesktopPanelEdgeTrigger extends StatelessWidget {
   const _DesktopPanelEdgeTrigger({required this.onEnter, required this.onExit});
 
@@ -2224,10 +2047,6 @@ class _DesktopPanelEdgeTrigger extends StatelessWidget {
       ),
     );
   }
-}
-
-Duration _scaledDuration(Duration duration, double scale) {
-  return Duration(microseconds: (duration.inMicroseconds * scale).round());
 }
 
 Offset _entryDirectionFor(int horizontal, int vertical) {

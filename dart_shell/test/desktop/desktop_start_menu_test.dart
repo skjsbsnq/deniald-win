@@ -73,6 +73,83 @@ void main() {
     });
   });
 
+  group('derived catalog', () {
+    test('equal application inputs reuse the memoized catalog', () {
+      final apps = <DesktopApp>[_app('Alacritty'), _app('Chromium')];
+      const slots = <HomeGridItem?>[];
+      final registry = LocalFlutterApplicationRegistry(
+        const <LocalFlutterApplication>[],
+      );
+      final source = DesktopStartMenuCatalogSource(
+        desktopApps: apps,
+        slots: slots,
+        localRegistry: registry,
+        locale: const Locale('en'),
+        localizedLocalEntries: const <DesktopStartMenuEntry>[],
+      );
+      final equalSource = DesktopStartMenuCatalogSource(
+        desktopApps: apps,
+        slots: slots,
+        localRegistry: registry,
+        locale: const Locale('en'),
+        localizedLocalEntries: const <DesktopStartMenuEntry>[],
+      );
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      final subscription = container.listen(
+        desktopStartMenuCatalogProvider(source),
+        (_, _) {},
+        fireImmediately: true,
+      );
+      addTearDown(subscription.close);
+
+      expect(
+        container.read(desktopStartMenuCatalogProvider(equalSource)),
+        same(container.read(desktopStartMenuCatalogProvider(source))),
+      );
+    });
+
+    test('a changed application list derives a fresh sorted catalog', () {
+      final registry = LocalFlutterApplicationRegistry(
+        const <LocalFlutterApplication>[],
+      );
+      const slots = <HomeGridItem?>[];
+      final firstApps = <DesktopApp>[_app('Chromium')];
+      final nextApps = <DesktopApp>[_app('Chromium'), _app('Alacritty')];
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+
+      final first = container.read(
+        desktopStartMenuCatalogProvider(
+          DesktopStartMenuCatalogSource(
+            desktopApps: firstApps,
+            slots: slots,
+            localRegistry: registry,
+            locale: const Locale('en'),
+            localizedLocalEntries: const <DesktopStartMenuEntry>[],
+          ),
+        ),
+      );
+      final next = container.read(
+        desktopStartMenuCatalogProvider(
+          DesktopStartMenuCatalogSource(
+            desktopApps: nextApps,
+            slots: slots,
+            localRegistry: registry,
+            locale: const Locale('en'),
+            localizedLocalEntries: const <DesktopStartMenuEntry>[],
+          ),
+        ),
+      );
+
+      expect(first.entries.map((entry) => entry.name), <String>['Chromium']);
+      expect(next.entries.map((entry) => entry.name), <String>[
+        'Alacritty',
+        'Chromium',
+      ]);
+    });
+  });
+
   group('placement', () {
     test('the panel and its hover trigger share one placement', () {
       const viewSize = Size(1707, 1067);
@@ -98,6 +175,20 @@ void main() {
   });
 
   group('layout', () {
+    testWidgets('mounting the retained menu does not steal focus', (
+      tester,
+    ) async {
+      await _pumpMenu(tester, apps: <DesktopApp>[_app('Alacritty')]);
+
+      expect(
+        tester
+            .widget<EditableText>(find.byType(EditableText))
+            .focusNode
+            .hasFocus,
+        isFalse,
+      );
+    });
+
     testWidgets('three columns share the panel without overflowing', (
       tester,
     ) async {
