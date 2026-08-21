@@ -10,6 +10,38 @@ const SvgTheme _desktopAppSvgTheme = SvgTheme(
   currentColor: ShellColors.fallbackAppIcon,
 );
 
+/// Bounds icon decode work so a large application list does not stampede the
+/// UI isolate during a panel transition.
+class AppIconLoadGate {
+  AppIconLoadGate._();
+
+  static const int maximumConcurrent = 4;
+  static int _active = 0;
+  static final List<Completer<void>> _waiters = <Completer<void>>[];
+
+  static Future<void> acquire() {
+    if (_active < maximumConcurrent) {
+      _active++;
+      return Future<void>.value();
+    }
+    final waiter = Completer<void>();
+    _waiters.add(waiter);
+    return waiter.future;
+  }
+
+  static void release() {
+    if (_waiters.isNotEmpty) {
+      _waiters.removeAt(0).complete();
+      return;
+    }
+    if (_active > 0) {
+      _active--;
+    }
+  }
+
+  static int get activeCount => _active;
+}
+
 /// Renders a resolved desktop-app icon with the shell's bundled fallback.
 class AppIconImage extends StatelessWidget {
   const AppIconImage({super.key, required this.iconPath});
@@ -107,7 +139,11 @@ class _DeferredAppIconState extends State<DeferredAppIcon> {
   Future<void> _load(int generation) async {
     var failed = false;
     var fallbackReady = false;
+    await AppIconLoadGate.acquire();
     try {
+      if (!mounted || generation != _loadGeneration) {
+        return;
+      }
       await _precacheAppIcon(context, widget.iconPath);
     } on Object {
       failed = true;
@@ -121,6 +157,8 @@ class _DeferredAppIconState extends State<DeferredAppIcon> {
         // The transparent placeholder remains if even the bundled fallback
         // cannot be decoded.
       }
+    } finally {
+      AppIconLoadGate.release();
     }
     if (!mounted || generation != _loadGeneration) {
       return;

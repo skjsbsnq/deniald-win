@@ -513,6 +513,12 @@ class _DesktopShellState extends ConsumerState<DesktopShell> {
     ref
         .read(desktopWorkspaceProvider.notifier)
         .showPanel(DesktopPanel.dashboard);
+  }
+
+  void _refreshDashboardAfterOpen() {
+    if (!mounted || !ref.read(desktopWorkspaceProvider).dashboardOpen) {
+      return;
+    }
     unawaited(ref.read(bluetoothProvider.notifier).refresh());
     unawaited(ref.read(desktopPowerModesProvider.notifier).refresh());
   }
@@ -783,6 +789,7 @@ class _DesktopShellState extends ConsumerState<DesktopShell> {
             onClosePanels: _closePanels,
             onOpenDashboard: _openDashboard,
             onToggleDashboard: _toggleDashboard,
+            onDashboardOpened: _refreshDashboardAfterOpen,
             onToggleCalendar: _toggleCalendar,
             onOpenNotifications: _openNotificationCenter,
             onOpenWallpaperSelector: _openWallpaperSelector,
@@ -1129,6 +1136,7 @@ class _DesktopScene extends ConsumerStatefulWidget {
     required this.onClosePanels,
     required this.onOpenDashboard,
     required this.onToggleDashboard,
+    required this.onDashboardOpened,
     required this.onToggleCalendar,
     required this.onOpenNotifications,
     required this.onOpenWallpaperSelector,
@@ -1166,6 +1174,7 @@ class _DesktopScene extends ConsumerStatefulWidget {
   final VoidCallback onClosePanels;
   final VoidCallback onOpenDashboard;
   final VoidCallback onToggleDashboard;
+  final VoidCallback onDashboardOpened;
   final VoidCallback onToggleCalendar;
   final VoidCallback onOpenNotifications;
   final VoidCallback onOpenWallpaperSelector;
@@ -1274,6 +1283,7 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
     final onClosePanels = widget.onClosePanels;
     final onOpenDashboard = widget.onOpenDashboard;
     final onToggleDashboard = widget.onToggleDashboard;
+    final onDashboardOpened = widget.onDashboardOpened;
     final onToggleCalendar = widget.onToggleCalendar;
     final onOpenNotifications = widget.onOpenNotifications;
     final onOpenSettings = widget.onOpenSettings;
@@ -1555,6 +1565,7 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
                         ),
                         entryDistance: widget.panelTravel,
                         durationScale: widget.panelDurationScale,
+                        onOpened: onDashboardOpened,
                         child: DesktopDashboard(
                           onEnter: onCancelPanelClose,
                           onExit: onSchedulePanelClose,

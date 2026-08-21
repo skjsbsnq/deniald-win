@@ -22,6 +22,7 @@ class DesktopPanelTransition extends StatefulWidget {
     this.entryDistance = 0,
     this.durationScale = 1,
     this.keyboardPolicy = ShellKeyboardPolicy.none,
+    this.onOpened,
   });
 
   final String inputDebugLabel;
@@ -31,6 +32,7 @@ class DesktopPanelTransition extends StatefulWidget {
   final double entryDistance;
   final double durationScale;
   final ShellKeyboardPolicy keyboardPolicy;
+  final VoidCallback? onOpened;
 
   @override
   State<DesktopPanelTransition> createState() => _DesktopPanelTransitionState();
@@ -60,6 +62,13 @@ class _DesktopPanelTransitionState extends State<DesktopPanelTransition>
       curve: Motion.md3EmphasizedDecelerate,
       reverseCurve: Motion.md3EmphasizedAccelerate,
     );
+    _controller.addStatusListener(_handleAnimationStatus);
+  }
+
+  void _handleAnimationStatus(AnimationStatus status) {
+    if (status == AnimationStatus.completed && widget.visible) {
+      widget.onOpened?.call();
+    }
   }
 
   @override
@@ -107,6 +116,7 @@ class _DesktopPanelTransitionState extends State<DesktopPanelTransition>
 
   @override
   void dispose() {
+    _controller.removeStatusListener(_handleAnimationStatus);
     _controller.dispose();
     super.dispose();
   }

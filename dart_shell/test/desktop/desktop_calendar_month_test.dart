@@ -3,6 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:intl/date_symbol_data_local.dart';
 
 void main() {
+  setUp(CalendarMonthData.clearCacheForTesting);
+
   setUpAll(() async {
     await initializeDateFormatting('en', null);
     await initializeDateFormatting('zh', null);
@@ -141,6 +143,33 @@ void main() {
         locale: 'zh_CN',
       );
       expect(zhData.weekdayHeaders, ['一', '二', '三', '四', '五', '六', '日']);
+    });
+
+    test('reuses entries with the same normalized day key', () {
+      final first = CalendarMonthData.compute(
+        year: 2026,
+        month: 8,
+        locale: 'zh_CN',
+        today: DateTime(2026, 8, 21, 8),
+        selectedDate: DateTime(2026, 8, 21, 9),
+      );
+      final second = CalendarMonthData.compute(
+        year: 2026,
+        month: 8,
+        locale: 'zh_CN',
+        today: DateTime(2026, 8, 21, 23),
+        selectedDate: DateTime(2026, 8, 21, 1),
+      );
+      final changedSelection = CalendarMonthData.compute(
+        year: 2026,
+        month: 8,
+        locale: 'zh_CN',
+        today: DateTime(2026, 8, 21),
+        selectedDate: DateTime(2026, 8, 22),
+      );
+
+      expect(identical(first, second), isTrue);
+      expect(identical(first, changedSelection), isFalse);
     });
   });
 }

@@ -80,6 +80,51 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
     expect(counters.disposed, 1);
   });
+
+  testWidgets('notifies only after an opening animation completes', (
+    tester,
+  ) async {
+    var opened = 0;
+
+    Future<void> pump({required bool visible}) => tester.pumpWidget(
+      ProviderScope(
+        child: ShellTheme(
+          data: const ShellThemeData(),
+          child: MediaQuery(
+            data: const MediaQueryData(),
+            child: Directionality(
+              textDirection: TextDirection.ltr,
+              child: SizedBox(
+                width: 320,
+                height: 240,
+                child: DesktopPanelTransition(
+                  inputDebugLabel: 'test panel',
+                  visible: visible,
+                  onOpened: () => opened++,
+                  child: const SizedBox.expand(),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await pump(visible: false);
+    await pump(visible: true);
+    await tester.pump(const Duration(milliseconds: 100));
+    expect(opened, 0);
+    await tester.pumpAndSettle();
+    expect(opened, 1);
+
+    await pump(visible: true);
+    await tester.pumpAndSettle();
+    expect(opened, 1);
+
+    await pump(visible: false);
+    await tester.pumpAndSettle();
+    expect(opened, 1);
+  });
 }
 
 class _ProbeCounters {

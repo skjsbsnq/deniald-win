@@ -43,6 +43,10 @@ class CalendarMonthData {
   final List<String> weekdayHeaders;
   final List<CalendarMonthCell> cells;
 
+  static final Map<_CalendarMonthCacheKey, CalendarMonthData> _cache =
+      <_CalendarMonthCacheKey, CalendarMonthData>{};
+  static const int _maximumCacheEntries = 96;
+
   /// Returns total number of days in the specified year and month,
   /// accurately handling leap years and century boundaries.
   static int getDaysInMonth(int year, int month) =>
@@ -57,6 +61,17 @@ class CalendarMonthData {
     DateTime? selectedDate,
   }) {
     final effectiveLocale = locale ?? Intl.getCurrentLocale();
+    final key = _CalendarMonthCacheKey(
+      year: year,
+      month: month,
+      locale: effectiveLocale,
+      today: _dayKey(today),
+      selectedDate: _dayKey(selectedDate),
+    );
+    final cached = _cache[key];
+    if (cached != null) {
+      return cached;
+    }
     final dateSymbols = _resolveDateSymbols(effectiveLocale);
 
     // In intl DateSymbols: FIRSTDAYOFWEEK is 0 for Monday, 6 for Sunday, 5 for Saturday.
@@ -131,7 +146,7 @@ class CalendarMonthData {
       );
     }
 
-    return CalendarMonthData(
+    final result = CalendarMonthData(
       year: year,
       month: month,
       daysInMonth: daysInCurrentMonth,
@@ -139,7 +154,17 @@ class CalendarMonthData {
       weekdayHeaders: List<String>.unmodifiable(weekdayHeaders),
       cells: List<CalendarMonthCell>.unmodifiable(cells),
     );
+    if (_cache.length >= _maximumCacheEntries) {
+      _cache.remove(_cache.keys.first);
+    }
+    _cache[key] = result;
+    return result;
   }
+
+  static String? _dayKey(DateTime? value) =>
+      value == null ? null : '${value.year}-${value.month}-${value.day}';
+
+  static void clearCacheForTesting() => _cache.clear();
 
   static DateSymbols _resolveDateSymbols(String locale) {
     try {
@@ -172,6 +197,34 @@ class CalendarMonthData {
     if (b == null) return false;
     return a.year == b.year && a.month == b.month && a.day == b.day;
   }
+}
+
+class _CalendarMonthCacheKey {
+  const _CalendarMonthCacheKey({
+    required this.year,
+    required this.month,
+    required this.locale,
+    required this.today,
+    required this.selectedDate,
+  });
+
+  final int year;
+  final int month;
+  final String locale;
+  final String? today;
+  final String? selectedDate;
+
+  @override
+  bool operator ==(Object other) =>
+      other is _CalendarMonthCacheKey &&
+      year == other.year &&
+      month == other.month &&
+      locale == other.locale &&
+      today == other.today &&
+      selectedDate == other.selectedDate;
+
+  @override
+  int get hashCode => Object.hash(year, month, locale, today, selectedDate);
 }
 
 /// Pure month view widget displaying weekday headers and the 7x6 day grid.
