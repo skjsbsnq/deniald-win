@@ -63,6 +63,7 @@ import 'desktop_dashboard_wifi_card.dart';
 import 'desktop_overview_layout.dart';
 import 'desktop_overview_target.dart';
 import 'desktop_home_layout.dart';
+import 'desktop_panel_blur_policy.dart';
 import 'desktop_popup_surface_policy.dart';
 import 'desktop_start_menu.dart';
 import 'desktop_system_bar.dart';
@@ -2147,15 +2148,7 @@ class _DesktopPanelTransitionState extends State<_DesktopPanelTransition>
           excluding: !widget.visible,
           child: AnimatedBuilder(
             animation: _progress,
-            child: RepaintBoundary(
-              child: ShellBackdropBlur(
-                blur: ShellTheme.of(context).panelOpacity < 1.0,
-                borderRadius: BorderRadius.circular(
-                  ShellTheme.of(context).panelRadius,
-                ),
-                child: widget.child,
-              ),
-            ),
+            child: RepaintBoundary(child: widget.child),
             builder: (context, child) {
               final progress = _progress.value;
               return LayoutBuilder(
@@ -2169,7 +2162,16 @@ class _DesktopPanelTransitionState extends State<_DesktopPanelTransition>
                   );
                   return Transform.translate(
                     offset: travel * (1.0 - progress),
-                    child: child,
+                    child: ShellBackdropBlur(
+                      blur: shouldBlurDesktopPanel(
+                        animationStatus: _controller.status,
+                        panelOpacity: ShellTheme.of(context).panelOpacity,
+                      ),
+                      borderRadius: BorderRadius.circular(
+                        ShellTheme.of(context).panelRadius,
+                      ),
+                      child: child!,
+                    ),
                   );
                 },
               );
