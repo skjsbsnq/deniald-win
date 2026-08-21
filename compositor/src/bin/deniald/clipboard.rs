@@ -10,6 +10,8 @@ use std::fmt;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+use tracing::{debug, warn};
+
 pub const CONTROL_CHANNEL: &str = "denial/clipboard";
 pub const STATE_CHANNEL: &std::ffi::CStr = c"denial/clipboard_state";
 
@@ -450,6 +452,12 @@ impl ClipboardManager {
     }
 
     pub fn finish_capture(&self, epoch: u64, mime_type: &str, data: Option<Vec<u8>>) {
+        debug!(
+            epoch,
+            mime_type,
+            data_len = data.as_ref().map_or(0, Vec::len),
+            "finished clipboard representation capture"
+        );
         let mut state = self.lock();
         let Some(capture) = state.pending_capture.as_mut() else {
             return;
@@ -818,6 +826,20 @@ fn finalize_capture(state: &mut ClipboardState, capture: PendingCapture) {
         )
         || capture.representations.is_empty()
     {
+        if capture.representations.is_empty()
+            && !state.locked
+            && !state.paused
+            && matches!(
+                state.current,
+                CurrentSelection::External { epoch, .. } if epoch == capture.epoch
+            )
+        {
+            warn!(
+                epoch = capture.epoch,
+                received_mime_count = capture.representations.len(),
+                "discarding clipboard capture with no valid representations"
+            );
+        }
         return;
     }
     let mut representations = capture.representations.into_values().collect::<Vec<_>>();

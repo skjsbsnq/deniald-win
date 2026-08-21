@@ -188,6 +188,12 @@ pub(super) fn observe_selection(
         .as_ref()
         .map(focused_source)
         .unwrap_or_default();
+    debug!(
+        ?owner,
+        mime_types = ?mime_types,
+        source = ?identity,
+        "observing external clipboard selection"
+    );
     let defer_telegram_image = owner == CaptureOwner::Wayland
         && identity.as_ref().is_some_and(telegram_source)
         && source_surface.is_some()
@@ -263,6 +269,17 @@ pub(crate) fn cancel_clipboard_captures(state: &mut RuntimeState) {
 }
 
 fn start_capture(state: &mut RuntimeState, owner: CaptureOwner, plan: ClipboardCapturePlan) {
+    let planned_mime_types = plan
+        .representations
+        .iter()
+        .map(|representation| representation.mime_type.clone())
+        .collect::<Vec<_>>();
+    debug!(
+        ?owner,
+        epoch = plan.epoch,
+        mime_types = ?planned_mime_types,
+        "starting clipboard-history capture"
+    );
     if !state.clipboard.capture_is_current(plan.epoch) {
         return;
     }
@@ -393,6 +410,11 @@ fn start_representation_capture(
     let timer_token =
         timeout_handle.insert_source(Timer::from_duration(CAPTURE_TIMEOUT), move |_, _, _| {
             if !timeout_completed.swap(true, Ordering::AcqRel) {
+                warn!(
+                    epoch,
+                    mime_type = %timeout_mime,
+                    "clipboard capture timed out"
+                );
                 removal_handle.remove(reader_token);
                 timeout_manager.finish_capture(epoch, &timeout_mime, None);
             }
