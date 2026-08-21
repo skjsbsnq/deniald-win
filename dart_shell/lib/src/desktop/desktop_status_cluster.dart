@@ -15,6 +15,7 @@ import '../theme/tokens.dart';
 import '../wallpaper/state/wallpaper_accent.dart';
 import '../widgets/shade/status_glyphs.dart';
 import '../widgets/shell_cursor.dart';
+import 'desktop_input_method.dart';
 
 /// The status icon cluster for the desktop system bar.
 ///
@@ -198,6 +199,11 @@ class _DesktopStatusClusterState extends ConsumerState<DesktopStatusCluster> {
     );
 
     final children = <Widget>[
+      DesktopInputMethodMark(color: foreground),
+      SizedBox(
+        width: widget.horizontal ? DesktopStatusCluster._itemGap : null,
+        height: widget.horizontal ? null : DesktopStatusCluster._itemGap,
+      ),
       Semantics(
         label: networkLabel,
         child: Icon(

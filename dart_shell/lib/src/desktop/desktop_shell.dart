@@ -35,6 +35,7 @@ import '../state/desktop_notifications.dart';
 import '../state/desktop_window_close_effect.dart';
 import '../state/desktop_window_switcher.dart';
 import '../state/display_layout.dart';
+import '../state/fcitx5.dart';
 import '../state/quick_settings.dart';
 import '../state/screenshot_selection.dart';
 import '../state/shell_controller.dart';
@@ -60,6 +61,7 @@ import '../wallpaper/state/wallpaper_controller.dart';
 import '../wallpaper/widgets/wallpaper_selector_surface.dart';
 import 'desktop_calendar_panel.dart';
 import 'desktop_dashboard_wifi_card.dart';
+import 'desktop_input_method.dart';
 import 'desktop_overview_layout.dart';
 import 'desktop_overview_target.dart';
 import 'desktop_home_layout.dart';
@@ -193,6 +195,7 @@ class _DesktopShellState extends ConsumerState<DesktopShell> {
   void initState() {
     super.initState();
     ref.read(hapticsServiceProvider).prewarm();
+    ref.read(fcitx5Provider);
     _shellActionSubscription = ref
         .read(denialBridgeProvider)
         .shellActions
@@ -3351,9 +3354,13 @@ class DesktopDashboard extends ConsumerWidget {
                 const SizedBox(height: 12),
                 const _DesktopPowerModesCard(),
                 const SizedBox(height: 12),
+                const DesktopInputMethodCard(),
+                const SizedBox(height: 12),
                 const Expanded(child: DesktopDashboardWifiCard()),
                 const SizedBox(height: 12),
-                Expanded(
+                SizedBox(
+                  key: const ValueKey('desktop-dashboard-bluetooth-card'),
+                  height: 164,
                   child: _DashboardCard(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,

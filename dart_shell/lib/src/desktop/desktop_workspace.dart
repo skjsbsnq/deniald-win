@@ -22,13 +22,11 @@ abstract final class DesktopMetrics {
 
   /// Height of the control centre panel.
   ///
-  /// [DesktopDashboard] is a fixed-height column whose only flexible children
-  /// are the Wi-Fi and Bluetooth cards, and both bottom out at an empty state
-  /// that cannot be compressed. This is therefore a content measurement, not a
-  /// taste one: it is the height at which those two cards still clear that
-  /// floor, and `desktop_dashboard_test.dart` asserts they do. Every fixed card
-  /// added above them has to be paid for here.
-  static const double dashboardHeight = 820.0;
+  /// [DesktopDashboard] is a fixed-height column. Wi-Fi absorbs the remaining
+  /// space while Bluetooth keeps a compact measured height, so fixed cards
+  /// added above them must still leave Wi-Fi enough room for its empty state.
+  /// `desktop_dashboard_test.dart` protects both floors.
+  static const double dashboardHeight = 900.0;
 
   /// Clamps the configured system bar strip to the visible canvas. The strip
   /// itself comes from [DisplayLayout.systemBarRect]; hidden bars stay
@@ -76,7 +74,7 @@ abstract final class DesktopMetrics {
       systemBarRect: systemBarRect,
       systemBarSide: systemBarSide,
     );
-    final effectiveHeight = placement.height <= 640.0
+    final effectiveHeight = placement.height <= 820.0
         ? math.min(dashboardHeight, math.max(620.0, bounds.height - 80.0))
         : placement.height;
     final effectivePlacement = placement.copyWith(height: effectiveHeight);
@@ -145,7 +143,7 @@ abstract final class DesktopMetrics {
       systemBarRect: systemBarRect,
       systemBarSide: systemBarSide,
     );
-    final effectiveHeight = placement.height <= 640.0
+    final effectiveHeight = placement.height <= 820.0
         ? math.min(dashboardHeight, math.max(620.0, bounds.height - 80.0))
         : placement.height;
     final effectivePlacement = placement.copyWith(height: effectiveHeight);

@@ -530,6 +530,20 @@ class AppLocalizationsZh extends AppLocalizations {
   String get desktopPowerModesTitle => '电源模式';
 
   @override
+  String get inputMethodTitle => '输入法';
+
+  @override
+  String get inputMethodEnglish => '切换为英文输入';
+
+  @override
+  String get inputMethodChinese => '切换为中文输入';
+
+  @override
+  String inputMethodCurrent(String label) {
+    return '当前输入法：$label';
+  }
+
+  @override
   String get desktopPowerModesUnavailable => '电源模式不可用。';
 
   @override

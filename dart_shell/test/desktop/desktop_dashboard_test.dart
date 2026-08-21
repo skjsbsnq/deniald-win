@@ -1,4 +1,5 @@
 import 'package:denial_dart_shell/src/desktop/desktop_dashboard_wifi_card.dart';
+import 'package:denial_dart_shell/src/desktop/desktop_input_method.dart';
 import 'package:denial_dart_shell/src/desktop/desktop_shell.dart';
 import 'package:denial_dart_shell/src/desktop/desktop_workspace.dart';
 import 'package:denial_dart_shell/src/localization/denial_localizations.dart';
@@ -16,17 +17,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 // The panel DesktopMetrics.dashboardRect resolves to on the reference output
-// (2560x1600 at scale 1.5). The column is a fixed height with two Expanded
-// cards at the bottom, so whatever a new fixed card above them costs comes out
-// of those two.
+// (2560x1600 at scale 1.5). The column is fixed-height; Wi-Fi absorbs the
+// remainder and Bluetooth is deliberately compact.
 const Size _panelSize = Size(470, DesktopMetrics.dashboardHeight);
 
-// Wi-Fi and Bluetooth both fall back to an icon-over-caption empty state that
-// measures 82 px, on top of the card's 32 px of padding, a 34 px header row and
-// a 12 px gap. Below this the empty state overflows — silently, because a
-// release build clips a RenderFlex overflow without a stripe or a log, so this
-// number is the only thing standing between a new card and an invisible defect.
+// Wi-Fi falls back to an icon-over-caption empty state. Below this the empty
+// state overflows silently in release mode.
 const double _flexibleCardFloor = 160.0;
+const double _compactBluetoothHeight = 164.0;
 
 void main() {
   testWidgets('dashboard fits its panel with the brightness bar installed', (
@@ -73,6 +71,23 @@ void main() {
     expect(find.textContaining('GPU'), findsNothing);
   });
 
+  testWidgets('input method sits between power modes and Wi-Fi', (
+    tester,
+  ) async {
+    await _pumpDashboard(tester);
+
+    final powerModesY = tester.getTopLeft(find.text('Power modes')).dy;
+    final inputMethodY = tester
+        .getTopLeft(find.byType(DesktopInputMethodCard))
+        .dy;
+    final wifiY = tester.getTopLeft(find.byType(DesktopDashboardWifiCard)).dy;
+
+    expect(inputMethodY, greaterThan(powerModesY));
+    expect(inputMethodY, lessThan(wifiY));
+    expect(find.text('EN'), findsOneWidget);
+    expect(find.text('\u4e2d'), findsOneWidget);
+  });
+
   testWidgets('brightness is labelled and read out like volume', (
     tester,
   ) async {
@@ -102,18 +117,20 @@ void main() {
     expect(find.text('42%'), findsOneWidget);
   });
 
-  testWidgets('the flexible cards keep room for their empty state', (
-    tester,
-  ) async {
+  testWidgets('Wi-Fi keeps room and Bluetooth stays compact', (tester) async {
     await _pumpDashboard(tester);
 
-    // Wi-Fi and Bluetooth are the column's only flexible children and share the
-    // remainder evenly, so measuring one covers both. Asserting the floor and
-    // not just the absence of an overflow keeps the next card added above them
-    // from landing a pixel short of it.
     expect(
       tester.getSize(find.byType(DesktopDashboardWifiCard)).height,
       greaterThanOrEqualTo(_flexibleCardFloor),
+    );
+    expect(
+      tester
+          .getSize(
+            find.byKey(const ValueKey('desktop-dashboard-bluetooth-card')),
+          )
+          .height,
+      _compactBluetoothHeight,
     );
   });
 

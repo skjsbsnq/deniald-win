@@ -552,6 +552,20 @@ class AppLocalizationsEn extends AppLocalizations {
   String get desktopPowerModesTitle => 'Power modes';
 
   @override
+  String get inputMethodTitle => 'Input method';
+
+  @override
+  String get inputMethodEnglish => 'Switch to English input';
+
+  @override
+  String get inputMethodChinese => 'Switch to Chinese input';
+
+  @override
+  String inputMethodCurrent(String label) {
+    return 'Current input method: $label';
+  }
+
+  @override
   String get desktopPowerModesUnavailable => 'Power modes are unavailable.';
 
   @override

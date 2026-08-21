@@ -1,11 +1,14 @@
 import 'dart:ui' show PointerDeviceKind;
 
 import 'package:denial_dart_shell/src/desktop/desktop_status_cluster.dart';
+import 'package:denial_dart_shell/src/desktop/desktop_input_method.dart';
 import 'package:denial_dart_shell/src/desktop/desktop_workspace.dart';
 import 'package:denial_dart_shell/src/input/shell_interaction_registry.dart';
 import 'package:denial_dart_shell/src/localization/denial_localizations.dart';
 import 'package:denial_dart_shell/src/models/battery_status.dart';
 import 'package:denial_dart_shell/src/services/network_manager_service.dart';
+import 'package:denial_dart_shell/src/services/fcitx5_service.dart';
+import 'package:denial_dart_shell/src/state/fcitx5.dart';
 import 'package:denial_dart_shell/src/state/network_connectivity.dart';
 import 'package:denial_dart_shell/src/state/quick_settings.dart';
 import 'package:denial_dart_shell/src/state/system_status.dart';
@@ -55,6 +58,8 @@ void main() {
         );
 
         expect(find.byType(DesktopStatusCluster), findsOneWidget);
+        expect(find.text('EN'), findsOneWidget);
+        expect(find.byIcon(Icons.translate_rounded), findsOneWidget);
         expect(find.byIcon(Icons.wifi_rounded), findsOneWidget);
         expect(find.byIcon(Icons.volume_up_rounded), findsOneWidget);
         expect(find.byType(BatteryIconMark), findsOneWidget);
@@ -69,6 +74,29 @@ void main() {
         expect(find.bySemanticsLabel(RegExp(r'85%')), findsOneWidget);
       },
     );
+
+    testWidgets('places the live input method mark before Wi-Fi', (
+      tester,
+    ) async {
+      await _pumpCluster(
+        tester,
+        inputMethod: const Fcitx5Snapshot(
+          available: true,
+          inputMethod: 'pinyin',
+          label: 'Pinyin',
+          languageCode: 'zh_CN',
+        ),
+      );
+
+      final inputX = tester.getTopLeft(find.byType(DesktopInputMethodMark)).dx;
+      final inputIconX = tester
+          .getTopLeft(find.byIcon(Icons.translate_rounded))
+          .dx;
+      final wifiX = tester.getTopLeft(find.byIcon(Icons.wifi_rounded)).dx;
+      expect(find.text('\u4e2d'), findsOneWidget);
+      expect(inputIconX, lessThan(wifiX));
+      expect(inputX, lessThan(wifiX));
+    });
 
     testWidgets('omits battery icon when device has no battery data', (
       tester,
@@ -349,6 +377,12 @@ Future<void> _pumpCluster(
   VoidCallback? onTap,
   DesktopPanel panel = DesktopPanel.none,
   Locale locale = const Locale('en'),
+  Fcitx5Snapshot inputMethod = const Fcitx5Snapshot(
+    available: true,
+    inputMethod: 'keyboard-us',
+    label: 'Keyboard - English (US)',
+    languageCode: 'en',
+  ),
 }) async {
   final networkState = NetworkConnectivityState(
     snapshot:
@@ -387,6 +421,7 @@ Future<void> _pumpCluster(
         networkConnectivityProvider.overrideWithBuild(
           (ref, controller) => networkState,
         ),
+        fcitx5Provider.overrideWithBuild((ref, controller) => inputMethod),
       ],
       child: MaterialApp(
         home: DenialLocalizationScope(

@@ -264,7 +264,7 @@ class ShellOverlaySettings {
     this.dashboard = const ShellPopupPlacement(
       anchor: ShellPopupAnchor.bottomLeft,
       width: 470,
-      height: 780,
+      height: 900,
       margin: 14,
     ),
     this.notifications = const ShellPopupPlacement(

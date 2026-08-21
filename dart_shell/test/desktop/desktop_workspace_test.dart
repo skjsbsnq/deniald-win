@@ -1032,6 +1032,7 @@ void main() {
     expect(launcher.bottom, 1408 - DesktopMetrics.panelMargin);
     expect(dashboard.bottom, 1408 - DesktopMetrics.panelMargin);
     expect(dashboard.right, secondOutput.right - DesktopMetrics.panelMargin);
+    expect(dashboard.height, DesktopMetrics.dashboardHeight);
   });
 
   test('desktop panels and hover triggers follow configured anchors', () {

@@ -794,6 +794,27 @@
   "@desktopPowerModesTitle": {
     "description": "English UI text for desktopPowerModesTitle."
   },
+  "inputMethodTitle": "Input method",
+  "@inputMethodTitle": {
+    "description": "Title for the Fcitx5 input-method controls in the desktop dashboard."
+  },
+  "inputMethodEnglish": "Switch to English input",
+  "@inputMethodEnglish": {
+    "description": "Accessible label for selecting the English Fcitx5 input method."
+  },
+  "inputMethodChinese": "Switch to Chinese input",
+  "@inputMethodChinese": {
+    "description": "Accessible label for selecting the Chinese Fcitx5 input method."
+  },
+  "inputMethodCurrent": "Current input method: {label}",
+  "@inputMethodCurrent": {
+    "description": "Accessible label for the current input method in the desktop system bar.",
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
   "desktopPowerModesUnavailable": "Power modes are unavailable.",
   "@desktopPowerModesUnavailable": {
     "description": "English UI text for desktopPowerModesUnavailable."

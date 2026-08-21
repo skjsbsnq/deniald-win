@@ -1016,6 +1016,30 @@ abstract class AppLocalizations {
   /// **'Power modes'**
   String get desktopPowerModesTitle;
 
+  /// Title for the Fcitx5 input-method controls in the desktop dashboard.
+  ///
+  /// In en, this message translates to:
+  /// **'Input method'**
+  String get inputMethodTitle;
+
+  /// Accessible label for selecting the English Fcitx5 input method.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch to English input'**
+  String get inputMethodEnglish;
+
+  /// Accessible label for selecting the Chinese Fcitx5 input method.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch to Chinese input'**
+  String get inputMethodChinese;
+
+  /// Accessible label for the current input method in the desktop system bar.
+  ///
+  /// In en, this message translates to:
+  /// **'Current input method: {label}'**
+  String inputMethodCurrent(String label);
+
   /// English UI text for desktopPowerModesUnavailable.
   ///
   /// In en, this message translates to:
