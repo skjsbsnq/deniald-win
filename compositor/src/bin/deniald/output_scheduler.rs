@@ -513,7 +513,7 @@ pub(super) struct OutputScheduler {
     /// Outputs whose KMS commit succeeded in the current submit pass. Keeping
     /// this allocation lets the Wayland frontend route every window once and
     /// flush clients once, even when one atlas frame touches several CRTCs.
-    submitted_outputs: Vec<OutputId>,
+    submitted_outputs: Vec<(OutputId, bool)>,
     /// Page flips retired by one calloop dispatch, published to Wayland as one
     /// batch so Space refresh and socket flushing do not scale with outputs.
     presented_outputs: Vec<PresentedOutput>,
@@ -771,7 +771,8 @@ impl OutputScheduler {
                     if let Some(audit) = self.audit.as_mut() {
                         audit.record_real_submission(pipeline_index, commit.frame, true);
                     }
-                    self.submitted_outputs.push(scanout.output.id);
+                    self.submitted_outputs
+                        .push((scanout.output.id, scanout.output.vrr_enabled));
                 }
                 volition::Event::Stalled(failure) => {
                     // Keep the pending frame and its Flutter ownership intact.
@@ -882,7 +883,8 @@ impl OutputScheduler {
                 // close it after its final output user enters KMS.
                 debug_assert!(ready_fences[frame_index].fence.is_none());
             }
-            self.submitted_outputs.push(scanout.output.id);
+            self.submitted_outputs
+                .push((scanout.output.id, scanout.output.vrr_enabled));
         }
         if let Some(frontend) = events.wayland.as_mut() {
             frontend.outputs_submitted(&self.submitted_outputs)?;

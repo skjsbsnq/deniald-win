@@ -58,7 +58,7 @@ impl OutputPresentationBatch {
         }
     }
 
-    pub(super) fn begin(&mut self, output: &Output) {
+    pub(super) fn begin(&mut self, output: &Output, variable_refresh: bool) {
         // A second submit before page-flip supersedes the old attribution.
         // Discard its callbacks explicitly, but retain Smithay's internal
         // callback Vec for the next frame on this same output.
@@ -67,7 +67,7 @@ impl OutputPresentationBatch {
         }
         self.active = 0;
         self.slots.truncate(MAX_REUSABLE_OUTPUT_FEEDBACKS);
-        self.refresh = output_refresh(output);
+        self.refresh = output_refresh(output, variable_refresh);
     }
 
     pub(super) fn submit_window(&mut self, output: &Output, window: &Window) {
@@ -129,7 +129,7 @@ impl PresentationTracker {
         self.shared_pending.clear();
 
         for (window, output) in windows {
-            let mut pending = PendingPresentation::new(&output, output_refresh(&output));
+            let mut pending = PendingPresentation::new(&output, output_refresh(&output, false));
             send_window_frame_callbacks(&window, callback_time);
             collect_window_presentation_feedback(&window, &mut pending.feedbacks);
             self.shared_pending.push(pending);
@@ -280,12 +280,21 @@ pub(super) fn send_surface_frame_callbacks(root: &WlSurface, callback_millis: u3
     sent
 }
 
-fn output_refresh(output: &Output) -> Refresh {
-    output
-        .current_mode()
-        .and_then(|mode| refresh_interval(mode.refresh))
-        .map(Refresh::fixed)
-        .unwrap_or(Refresh::Unknown)
+fn output_refresh(output: &Output, variable_refresh: bool) -> Refresh {
+    output.current_mode().map_or(Refresh::Unknown, |mode| {
+        refresh_for_mode(mode.refresh, variable_refresh)
+    })
+}
+
+fn refresh_for_mode(refresh_millihz: i32, variable_refresh: bool) -> Refresh {
+    let Some(interval) = refresh_interval(refresh_millihz) else {
+        return Refresh::Unknown;
+    };
+    if variable_refresh {
+        Refresh::variable(interval)
+    } else {
+        Refresh::fixed(interval)
+    }
 }
 
 fn refresh_interval(refresh_millihz: i32) -> Option<Duration> {
@@ -299,7 +308,8 @@ const fn next_presentation_sequence(current: u64) -> u64 {
 
 #[cfg(test)]
 mod tests {
-    use super::{next_presentation_sequence, refresh_interval};
+    use super::{next_presentation_sequence, refresh_for_mode, refresh_interval};
+    use smithay::wayland::presentation::Refresh;
     use std::time::Duration;
 
     #[test]
@@ -308,6 +318,14 @@ mod tests {
         assert_eq!(interval, Duration::from_nanos(5_555_555));
         assert_eq!(refresh_interval(0), None);
         assert_eq!(refresh_interval(-1), None);
+    }
+
+    #[test]
+    fn presentation_refresh_reports_variable_only_when_vrr_is_enabled() {
+        let interval = Duration::from_nanos(4_166_666);
+        assert_eq!(refresh_for_mode(240_000, true), Refresh::Variable(interval));
+        assert_eq!(refresh_for_mode(240_000, false), Refresh::Fixed(interval));
+        assert_eq!(refresh_for_mode(0, true), Refresh::Unknown);
     }
 
     #[test]

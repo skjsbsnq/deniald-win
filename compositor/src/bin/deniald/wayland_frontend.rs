@@ -3778,16 +3778,24 @@ impl WaylandFrontend {
     }
 
     #[cfg(feature = "flutter")]
-    pub fn outputs_submitted(&mut self, output_ids: &[OutputId]) -> Result<(), Box<dyn Error>> {
-        if output_ids.is_empty() {
+    pub fn outputs_submitted(
+        &mut self,
+        submitted_outputs: &[(OutputId, bool)],
+    ) -> Result<(), Box<dyn Error>> {
+        if submitted_outputs.is_empty() {
             return Ok(());
         }
 
         self.presentation.begin_output_batch();
         for entry in &mut self.outputs {
-            entry.submitted_this_batch = output_ids.contains(&entry.id);
-            if entry.submitted_this_batch {
-                entry.presentation_batch.begin(&entry.output);
+            let variable_refresh = submitted_outputs
+                .iter()
+                .find_map(|(id, variable_refresh)| (*id == entry.id).then_some(*variable_refresh));
+            entry.submitted_this_batch = variable_refresh.is_some();
+            if let Some(variable_refresh) = variable_refresh {
+                entry
+                    .presentation_batch
+                    .begin(&entry.output, variable_refresh);
                 for window in self.output_window_membership.windows(entry.id) {
                     entry
                         .presentation_batch
