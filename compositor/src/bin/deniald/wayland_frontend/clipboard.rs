@@ -396,6 +396,24 @@ fn start_representation_capture(
         }
         return Err(error.into());
     }
+    let flush_result = state
+        .wayland
+        .as_mut()
+        .expect("missing Wayland frontend")
+        .display_handle
+        .flush_clients();
+    if let Err(error) = flush_result {
+        state
+            .wayland
+            .as_ref()
+            .expect("missing Wayland frontend")
+            .loop_handle
+            .remove(reader_token);
+        if !completed.swap(true, Ordering::AcqRel) {
+            state.clipboard.finish_capture(epoch, &mime_type, None);
+        }
+        return Err(error.into());
+    }
 
     let timeout_completed = Arc::clone(&completed);
     let timeout_manager = state.clipboard.clone();
