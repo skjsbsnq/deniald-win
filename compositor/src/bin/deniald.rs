@@ -3295,11 +3295,31 @@ fn run_flutter_event_loop(
                             scanout.output.crtc != output.crtc
                                 || scanout.output.mode != output.mode
                                 || scanout.output.connector != output.connector
-                                || scanout.output.vrr_enabled != output.vrr_enabled
+                                || scanout.output.transform != output.transform
                         })
                 });
+            let vrr_changed = outputs.iter().any(|output| {
+                scanouts
+                    .iter()
+                    .find(|scanout| scanout.output.id == output.id)
+                    .is_some_and(|scanout| scanout.output.vrr_enabled != output.vrr_enabled)
+            });
             let topology_changed = preview.outputs != topology.snapshot().outputs;
             if !scanout_rebased && !hardware_changed && !topology_changed {
+                if vrr_changed
+                    && let Err(error) = stage_vrr_only_configuration(
+                        scanouts,
+                        &outputs,
+                        swapchain.current_framebuffer(),
+                    )
+                {
+                    request.reply(Err(output_control::OutputControlFailure::new(
+                        "apply_failed",
+                        error.to_string(),
+                    )));
+                    events.output_control_dirty = true;
+                    continue;
+                }
                 output_configuration = staged_configuration;
                 events.output_control_dirty = true;
                 events.output_power_requests.extend(desired_power);
@@ -6367,6 +6387,97 @@ fn stage_output_vrr(surface: &DrmSurface, output: &ConnectedOutput) -> Result<()
     surface
         .use_vrr(output.vrr_enabled)
         .map_err(|error| format!("{} VRR staging failed: {error}", output.name).into())
+}
+
+/// Stages a VRR-only output-control change without rebuilding the shared
+/// Flutter atlas. VRR is a CRTC property; unlike a mode, connector, or layout
+/// change it does not alter the atlas dimensions or Flutter's target set.
+fn stage_vrr_only_configuration(
+    scanouts: &mut [Scanout],
+    outputs: &[ConnectedOutput],
+    framebuffer: framebuffer::Handle,
+) -> Result<(), Box<dyn Error>> {
+    let mut changed = Vec::new();
+    for output in outputs {
+        let index = scanouts
+            .iter()
+            .position(|scanout| scanout.output.id == output.id)
+            .ok_or_else(|| format!("{} is missing from the active scanout set", output.name))?;
+        let previous_vrr = scanouts[index].surface.vrr_enabled();
+        if previous_vrr == output.vrr_enabled {
+            continue;
+        }
+        changed.push((index, previous_vrr));
+        if let Err(error) = stage_output_vrr(&scanouts[index].surface, output) {
+            rollback_vrr_staging(scanouts, &changed, framebuffer);
+            return Err(error);
+        }
+        if scanouts[index].powered
+            && let Err(error) = scanouts[index]
+                .surface
+                .test_state([plane_state(&scanouts[index], framebuffer)], true)
+        {
+            rollback_vrr_staging(scanouts, &changed, framebuffer);
+            return Err(format!("{} VRR TEST_ONLY failed: {error}", output.name).into());
+        }
+        if scanouts[index].powered
+            && let Err(error) = scanouts[index]
+                .surface
+                .commit([plane_state(&scanouts[index], framebuffer)], false)
+        {
+            rollback_vrr_staging(scanouts, &changed, framebuffer);
+            return Err(format!("{} VRR commit failed: {error}", output.name).into());
+        }
+    }
+    for output in outputs {
+        if let Some(scanout) = scanouts
+            .iter_mut()
+            .find(|scanout| scanout.output.id == output.id)
+        {
+            scanout.output.vrr_enabled = output.vrr_enabled;
+        }
+    }
+    Ok(())
+}
+
+fn rollback_vrr_staging(
+    scanouts: &mut [Scanout],
+    changed: &[(usize, bool)],
+    framebuffer: framebuffer::Handle,
+) {
+    for &(index, enabled) in changed.iter().rev() {
+        if let Err(error) = scanouts[index].surface.use_vrr(enabled) {
+            warn!(
+                output = scanouts[index].output.name,
+                %error,
+                "failed to roll back pending VRR state"
+            );
+            continue;
+        }
+        if scanouts[index].powered {
+            if let Err(error) = scanouts[index]
+                .surface
+                .test_state([plane_state(&scanouts[index], framebuffer)], true)
+            {
+                warn!(
+                    output = scanouts[index].output.name,
+                    %error,
+                    "failed to test rolled-back VRR state"
+                );
+                continue;
+            }
+            if let Err(error) = scanouts[index]
+                .surface
+                .commit([plane_state(&scanouts[index], framebuffer)], false)
+            {
+                warn!(
+                    output = scanouts[index].output.name,
+                    %error,
+                    "failed to commit rolled-back VRR state"
+                );
+            }
+        }
+    }
 }
 
 const REFRESH_FALLBACK_WARNING_MILLIHERTZ: u32 = 1_000;
