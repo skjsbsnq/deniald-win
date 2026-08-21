@@ -17,7 +17,7 @@ use std::fs;
 use std::io;
 #[cfg(feature = "flutter")]
 use std::panic::{AssertUnwindSafe, catch_unwind};
-use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU8, AtomicU64, Ordering};
 use std::sync::{Once, OnceLock};
 use std::time::Duration;
 
@@ -34,6 +34,7 @@ const RTKIT_DBUS_TIMEOUT: Duration = Duration::from_secs(2);
 const DEFAULT_RT_TIME_SOFT_US: libc::rlim_t = 200_000;
 const PREFERRED_NICE_LEVEL: libc::c_int = -10;
 const MAX_REGISTERED_PRIORITY_THREADS: usize = 8;
+const RT_RECOVERY_COOLDOWN_TICKS: u8 = 5;
 
 static INITIALIZE: Once = Once::new();
 static PRIORITY_GUARD_START: Once = Once::new();
@@ -42,7 +43,9 @@ static SCHEDULING_ENABLED: AtomicBool = AtomicBool::new(false);
 static RT_PRIORITY: AtomicI32 = AtomicI32::new(0);
 static HIGH_PRIORITY_NICE: AtomicI32 = AtomicI32::new(0);
 static RT_LIMIT_ARMED: AtomicBool = AtomicBool::new(false);
+static RT_SOFT_LIMIT_US: AtomicU64 = AtomicU64::new(0);
 static RT_BUDGET_EXCEEDED: AtomicBool = AtomicBool::new(false);
+static RT_BUDGET_GENERATION: AtomicU64 = AtomicU64::new(0);
 static PRIORITY_THREAD_IDS: [AtomicI32; MAX_REGISTERED_PRIORITY_THREADS] =
     [const { AtomicI32::new(0) }; MAX_REGISTERED_PRIORITY_THREADS];
 static PRIORITY_THREAD_ROLES: [AtomicU8; MAX_REGISTERED_PRIORITY_THREADS] =
@@ -264,6 +267,7 @@ fn initialize_once() {
         return;
     }
     RT_LIMIT_ARMED.store(true, Ordering::Release);
+    RT_SOFT_LIMIT_US.store(limit.soft, Ordering::Release);
     if let Err(error) = install_sigxcpu_handler() {
         let _ = restore_rt_time_soft_limit();
         RT_LIMIT_ARMED.store(false, Ordering::Release);
@@ -300,8 +304,25 @@ fn start_priority_guard() {
             .name("denial-priority-guard".into())
             .spawn(|| {
                 normalize_current_worker("priority-guard");
+                let mut last_generation = RT_BUDGET_GENERATION.load(Ordering::Acquire);
+                let mut quiet_ticks = 0u8;
                 loop {
                     std::thread::sleep(Duration::from_secs(1));
+                    let generation = RT_BUDGET_GENERATION.load(Ordering::Acquire);
+                    if RT_BUDGET_EXCEEDED.load(Ordering::Acquire) {
+                        if recovery_cooldown_elapsed(
+                            &mut last_generation,
+                            &mut quiet_ticks,
+                            generation,
+                        ) && recover_realtime_budget(generation)
+                        {
+                            quiet_ticks = 0;
+                            last_generation = RT_BUDGET_GENERATION.load(Ordering::Acquire);
+                        }
+                    } else {
+                        quiet_ticks = 0;
+                        last_generation = generation;
+                    }
                     contain_unregistered_priority_threads();
                 }
             });
@@ -309,6 +330,91 @@ fn start_priority_guard() {
             warn!(%error, "could not start the CPU-priority inheritance guard");
         }
     });
+}
+
+fn recovery_cooldown_elapsed(
+    last_generation: &mut u64,
+    quiet_ticks: &mut u8,
+    generation: u64,
+) -> bool {
+    if generation != *last_generation {
+        *last_generation = generation;
+        *quiet_ticks = 0;
+        return false;
+    }
+    *quiet_ticks = quiet_ticks.saturating_add(1);
+    *quiet_ticks >= RT_RECOVERY_COOLDOWN_TICKS
+}
+
+fn demote_registered_priority_threads() {
+    for slot in &PRIORITY_THREAD_IDS {
+        let tid = slot.load(Ordering::Acquire);
+        if tid > 0 {
+            let _ = demote_scheduler_raw(tid) & set_nice_raw(tid, PREFERRED_NICE_LEVEL);
+        }
+    }
+}
+
+fn recover_realtime_budget(expected_generation: u64) -> bool {
+    if !RT_BUDGET_EXCEEDED.load(Ordering::Acquire)
+        || !RT_LIMIT_ARMED.load(Ordering::Acquire)
+        || RT_PRIORITY.load(Ordering::Acquire) <= 0
+    {
+        return false;
+    }
+    let soft = RT_SOFT_LIMIT_US.load(Ordering::Acquire);
+    if soft == 0
+        || set_rt_time_limit(RealtimeLimit {
+            soft,
+            hard: libc::RLIM_INFINITY,
+        })
+        .is_err()
+    {
+        return false;
+    }
+    let mut restored = true;
+    for slot in &PRIORITY_THREAD_IDS {
+        let tid = slot.load(Ordering::Acquire);
+        if tid <= 0 {
+            continue;
+        }
+        let priority = RT_PRIORITY.load(Ordering::Acquire);
+        if promote_current_thread_high_priority(tid).is_err()
+            || set_scheduler(tid, libc::SCHED_RR | libc::SCHED_RESET_ON_FORK, priority).is_err()
+            || !scheduler_policy(tid).is_ok_and(is_realtime_policy)
+        {
+            restored = false;
+        }
+    }
+    if !restored
+        || !commit_realtime_recovery(
+            &RT_BUDGET_EXCEEDED,
+            &RT_BUDGET_GENERATION,
+            expected_generation,
+        )
+    {
+        demote_registered_priority_threads();
+        return false;
+    }
+    info!("realtime CPU scheduling restored after cooldown");
+    true
+}
+
+fn commit_realtime_recovery(
+    exceeded: &AtomicBool,
+    generation: &AtomicU64,
+    expected_generation: u64,
+) -> bool {
+    if generation.load(Ordering::SeqCst) != expected_generation {
+        return false;
+    }
+    exceeded.store(false, Ordering::SeqCst);
+    if generation.load(Ordering::SeqCst) == expected_generation {
+        true
+    } else {
+        exceeded.store(true, Ordering::SeqCst);
+        false
+    }
 }
 
 /// Elevates the compositor event-loop thread after startup workers and native
@@ -805,14 +911,15 @@ fn install_sigxcpu_handler() -> io::Result<()> {
 unsafe extern "C" fn handle_sigxcpu(_signal: libc::c_int) {
     // SAFETY: errno storage is thread-local and valid in a signal handler.
     let saved_errno = unsafe { *libc::__errno_location() };
+    RT_BUDGET_GENERATION.fetch_add(1, Ordering::SeqCst);
     RT_BUDGET_EXCEEDED.store(true, Ordering::SeqCst);
-    RT_PRIORITY.store(0, Ordering::SeqCst);
 
     // Also normalize the signal recipient. A native helper that inherited
     // realtime policy may not yet be in Denial's registry.
     let current = current_tid();
     let recipient_role = registered_priority_role(current);
-    let mut all_demoted = demote_scheduler_raw(current) & set_nice_raw(current, 0);
+    let mut all_demoted =
+        demote_scheduler_raw(current) & set_nice_raw(current, PREFERRED_NICE_LEVEL);
     for slot in &PRIORITY_THREAD_IDS {
         let tid = slot.load(Ordering::Acquire);
         if tid <= 0 || tid == current {
@@ -820,7 +927,7 @@ unsafe extern "C" fn handle_sigxcpu(_signal: libc::c_int) {
         }
         // Retain RESET_ON_FORK while demoting: an unprivileged thread may not
         // clear that flag after it has been set.
-        all_demoted &= demote_scheduler_raw(tid) & set_nice_raw(tid, 0);
+        all_demoted &= demote_scheduler_raw(tid) & set_nice_raw(tid, PREFERRED_NICE_LEVEL);
     }
 
     let message: &[u8] = match (recipient_role, all_demoted) {
@@ -947,6 +1054,33 @@ mod tests {
         for disabled in ["", "0", "false", "anything"] {
             assert!(!flag_value_enabled(disabled));
         }
+    }
+
+    #[test]
+    fn realtime_recovery_requires_a_quiet_cooldown() {
+        let mut generation = 7;
+        let mut quiet = 0;
+        for tick in 0..RT_RECOVERY_COOLDOWN_TICKS {
+            assert_eq!(
+                recovery_cooldown_elapsed(&mut generation, &mut quiet, 7),
+                tick + 1 >= RT_RECOVERY_COOLDOWN_TICKS
+            );
+        }
+        assert_eq!(quiet, RT_RECOVERY_COOLDOWN_TICKS);
+        assert!(!recovery_cooldown_elapsed(&mut generation, &mut quiet, 8));
+        assert_eq!(quiet, 0);
+    }
+
+    #[test]
+    fn realtime_recovery_commit_rejects_a_racing_signal() {
+        let exceeded = AtomicBool::new(true);
+        let generation = AtomicU64::new(3);
+        assert!(commit_realtime_recovery(&exceeded, &generation, 3));
+        assert!(!exceeded.load(Ordering::Acquire));
+        exceeded.store(true, Ordering::Release);
+        generation.store(4, Ordering::Release);
+        assert!(!commit_realtime_recovery(&exceeded, &generation, 3));
+        assert!(exceeded.load(Ordering::Acquire));
     }
 
     #[test]
