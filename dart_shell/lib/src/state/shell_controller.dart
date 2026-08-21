@@ -431,7 +431,7 @@ class ShellController extends Notifier<ShellState>
     required String appName,
     required String? iconPath,
   }) {
-    if (!window.isUserApp) {
+    if (!window.isUserApp || window.isTransientPopup) {
       return null;
     }
     return _beginLauncherTransition(
@@ -607,7 +607,7 @@ class ShellController extends Notifier<ShellState>
   }
 
   void focusWindow(DenialWindow window) {
-    if (!window.isUserApp) {
+    if (!window.isUserApp || window.isTransientPopup) {
       return;
     }
 

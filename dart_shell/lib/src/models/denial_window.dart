@@ -214,6 +214,14 @@ class DenialWindow {
 
   bool get isUserApp => !isHome && !isSystemUi;
 
+  /// An undecorated native surface such as an X11 menu or tooltip.
+  ///
+  /// These surfaces remain in the desktop scene because they are real visual
+  /// and input layers, but they are not independent applications for focus,
+  /// taskbar, or window-switching purposes.
+  bool get isTransientPopup =>
+      !serverSideDecorated && !isLocalFlutter && !isInputMethodPopup;
+
   /// Whether this scene entry should play Denial's one-time window entrance.
   ///
   /// A replacement Flutter engine reconstructs windows which were already
