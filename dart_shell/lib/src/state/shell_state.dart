@@ -150,12 +150,12 @@ class ShellState {
 
   DenialWindow? get foregroundWindow {
     final window = windowByObjectId(foregroundObjectId);
-    return window != null && window.isUserApp ? window : null;
+    return window != null && _isOpenAppWindow(window) ? window : null;
   }
 
   DenialWindow? get launchingWindow {
     final window = windowByObjectId(launchingObjectId);
-    return window != null && window.isUserApp ? window : null;
+    return window != null && _isOpenAppWindow(window) ? window : null;
   }
 
   bool get launchTransitionActive => launchRequest != null;
@@ -177,13 +177,13 @@ class ShellState {
   }
 
   List<DenialWindow> get openAppWindows {
-    return windows.where((window) => window.isUserApp).toList(growable: false);
+    return windows.where(_isOpenAppWindow).toList(growable: false);
   }
 
   int get openAppWindowCount {
     var count = 0;
     for (final window in windows) {
-      if (window.isUserApp) {
+      if (_isOpenAppWindow(window)) {
         count += 1;
       }
     }
@@ -217,7 +217,7 @@ class ShellState {
     var userWindowCount = 0;
     for (var index = 0; index < windows.length; index += 1) {
       final window = windows[index];
-      if (!window.isUserApp) {
+      if (!_isOpenAppWindow(window)) {
         continue;
       }
       userWindowCount += 1;
@@ -239,7 +239,7 @@ class ShellState {
       targetIndex += direction
     ) {
       final target = windows[targetIndex];
-      if (target.isUserApp) {
+      if (_isOpenAppWindow(target)) {
         return target;
       }
     }
@@ -267,5 +267,9 @@ class ShellState {
       }
     }
     return null;
+  }
+
+  bool _isOpenAppWindow(DenialWindow window) {
+    return window.isUserApp && !window.isTransientPopup;
   }
 }

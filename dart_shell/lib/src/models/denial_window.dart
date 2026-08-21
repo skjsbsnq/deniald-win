@@ -203,6 +203,15 @@ class DenialWindow {
       appId == 'denia-systemui-input-method' ||
       title == 'denia-systemui-input-method';
 
+  /// Whether this is a transient client popup rather than an application
+  /// window that should participate in desktop activation state.
+  ///
+  /// Transient X11 surfaces still need a placement so their pixels and input
+  /// can be rendered, but they must not compete with their parent for focus,
+  /// taskbar membership, or the active-window z calculation.
+  bool get isTransientPopup =>
+      !serverSideDecorated && !isLocalFlutter && !isInputMethodPopup;
+
   bool get isUserApp => !isHome && !isSystemUi;
 
   /// Whether this scene entry should play Denial's one-time window entrance.

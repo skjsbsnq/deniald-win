@@ -1325,9 +1325,7 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
         ),
       ),
     );
-    final topZ = placements
-        .where((placement) => !placement.minimized)
-        .fold<int>(0, (value, placement) => math.max(value, placement.z));
+    final topZ = desktopTopZ(placements, windowsById);
     final systemBars = _systemBarGeometries(viewSize, displayLayout);
     final primaryBarRect = systemBars.firstOrNull?.rect;
     final primaryBarSide = displayLayout?.systemBarSide ?? SystemBarSide.hidden;

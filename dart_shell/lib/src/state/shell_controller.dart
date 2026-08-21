@@ -646,7 +646,9 @@ class ShellController extends Notifier<ShellState>
 
   void _handleNativeWindowActivated(int windowId) {
     for (final window in state.windows) {
-      if (window.windowId == windowId && window.isUserApp) {
+      if (window.windowId == windowId &&
+          window.isUserApp &&
+          !window.isTransientPopup) {
         final appId = AppLaunchRequest.normalizeAppId(window.appId);
         if (_backgroundLaunchAppIds.remove(appId)) {
           return;

@@ -374,6 +374,23 @@ int compareDesktopWindowStack(
   return zOrder != 0 ? zOrder : a.objectId.compareTo(b.objectId);
 }
 
+/// Returns the z value used to determine which decorated application titlebar
+/// is active. Client popups remain in [placements] so they can be painted and
+/// receive input, but they do not represent a focusable application window.
+int desktopTopZ(
+  Iterable<DesktopWindowPlacement> placements,
+  Map<int, DenialWindow> windowsById,
+) {
+  return placements
+      .where((placement) {
+        final window = windowsById[placement.objectId];
+        return !placement.minimized &&
+            window != null &&
+            !window.isTransientPopup;
+      })
+      .fold<int>(0, (value, placement) => math.max(value, placement.z));
+}
+
 /// Returns the visually topmost window at [position] using the same pinned and
 /// focus ordering as painting and native input publication.
 DenialWindow? desktopWindowAtPosition({
