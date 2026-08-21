@@ -2954,6 +2954,9 @@ fn run_flutter_event_loop(
                 raster_frames = raster_frames.saturating_add(1);
             }
 
+            if let Some(interval) = frame_scheduler.render_interval() {
+                runtime.update_frame_interval(interval);
+            }
             let frame_action = frame_scheduler.step(Instant::now(), runtime.pending_frame());
             match frame_action {
                 frame_scheduler::FrameAction::Skip => {}

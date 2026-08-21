@@ -5621,6 +5621,10 @@ impl FlutterRuntime {
         self.handler.release_output(index).map_err(Into::into)
     }
 
+    pub fn update_frame_interval(&mut self, interval: Duration) {
+        self.frame_interval = interval;
+    }
+
     pub fn pending_frame(&self) -> PendingFrame {
         // Flutter may consume OnVsync without ever enqueueing a raster task.
         // A render-thread sentinel cannot safely detect that immediately: the

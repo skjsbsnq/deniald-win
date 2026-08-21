@@ -200,6 +200,23 @@ fn refresh_interval(scanout: &Scanout) -> Duration {
     Duration::from_nanos(1_000_000_000_000 / refresh_millihz)
 }
 
+fn measured_interval(
+    previous_at: Instant,
+    observed_at: Instant,
+    sequence_delta: u64,
+    nominal: Duration,
+) -> Option<Duration> {
+    if sequence_delta == 0 || observed_at <= previous_at {
+        return None;
+    }
+    let nanos = observed_at
+        .duration_since(previous_at)
+        .as_nanos()
+        .checked_div(u128::from(sequence_delta))?;
+    let interval = Duration::from_nanos(u64::try_from(nanos).ok()?);
+    (interval >= nominal / 4 && interval <= nominal.saturating_mul(8)).then_some(interval)
+}
+
 #[derive(Debug)]
 struct OutputPipeline {
     scanout_index: usize,
@@ -211,7 +228,9 @@ struct OutputPipeline {
     powering_off: bool,
     request: PlaneCommit,
     refresh_interval: Duration,
+    variable_refresh: bool,
     next_presentation_at: Instant,
+    last_presentation: Option<(Instant, u64)>,
 }
 
 #[derive(Debug)]
@@ -554,7 +573,9 @@ impl OutputScheduler {
                     powering_off: false,
                     request: plane_commit(scanout)?,
                     refresh_interval,
+                    variable_refresh: scanout.output.vrr_enabled,
                     next_presentation_at: Instant::now() + refresh_interval,
+                    last_presentation: None,
                 })
             })
             .collect::<Result<Vec<_>, Box<dyn Error>>>()?;
@@ -812,9 +833,10 @@ impl OutputScheduler {
                     frame: frame_index,
                 };
                 let now = Instant::now();
+                let submit_lead = pipeline.refresh_interval / 10;
                 let not_before = pipeline
                     .next_presentation_at
-                    .checked_sub(VOLITION_SUBMIT_LEAD)
+                    .checked_sub(submit_lead.min(VOLITION_SUBMIT_LEAD))
                     .unwrap_or(now)
                     .max(now);
                 let submission = presentation.submit_lookahead(
@@ -934,6 +956,22 @@ impl OutputScheduler {
             let previous = pipeline.scanning;
             pipeline.scanning = presented.index;
             pipeline.scanning_screenshot_request_id = presented.screenshot_request_id;
+            if pipeline.variable_refresh
+                && let Some(sequence) = completion.sequence
+            {
+                if let Some((previous_at, previous_sequence)) = pipeline.last_presentation {
+                    let sequence_delta = sequence.wrapping_sub(previous_sequence);
+                    if let Some(interval) = measured_interval(
+                        previous_at,
+                        completion.observed_at,
+                        sequence_delta,
+                        pipeline.refresh_interval,
+                    ) {
+                        pipeline.refresh_interval = interval;
+                    }
+                }
+                pipeline.last_presentation = Some((completion.observed_at, sequence));
+            }
             pipeline.next_presentation_at = completion.observed_at + pipeline.refresh_interval;
             if let Err(error) = runtime.release_output(previous) {
                 processing_error = Some(error);
@@ -1196,7 +1234,9 @@ impl OutputScheduler {
             powering_off: false,
             request: plane_commit(output)?,
             refresh_interval,
+            variable_refresh: output.output.vrr_enabled,
             next_presentation_at: Instant::now() + refresh_interval,
+            last_presentation: None,
         });
         self.latest_index = framebuffer_index;
         Ok(())

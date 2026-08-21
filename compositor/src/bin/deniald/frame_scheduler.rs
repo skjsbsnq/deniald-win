@@ -114,6 +114,14 @@ impl FrameScheduler {
     pub(super) fn limit_dispatch_timeout(&self, now: Instant, timeout: Duration) -> Duration {
         self.outputs.limit_dispatch_timeout(now, timeout)
     }
+
+    pub(super) fn render_interval(&self) -> Option<Duration> {
+        self.outputs
+            .clocks
+            .iter()
+            .find(|clock| Some(clock.source.output) == self.outputs.render_output)
+            .map(|clock| clock.interval)
+    }
 }
 
 #[derive(Debug)]
@@ -213,13 +221,16 @@ impl OutputClocks {
 struct ClockSource {
     output: OutputId,
     interval: Duration,
+    variable_refresh: bool,
 }
 
 #[derive(Debug)]
 struct DisplayClock {
     source: ClockSource,
+    interval: Duration,
     next_tick: Instant,
     last_tick: Option<Instant>,
+    last_presentation: Option<(Instant, u64)>,
     presented_tick: Option<FrameTick>,
 }
 
@@ -227,8 +238,10 @@ impl DisplayClock {
     fn new(source: ClockSource, now: Instant) -> Self {
         Self {
             source,
+            interval: source.interval,
             next_tick: now,
             last_tick: None,
+            last_presentation: None,
             presented_tick: None,
         }
     }
@@ -239,11 +252,28 @@ impl DisplayClock {
         }
 
         let observed_at = presentation.observed_at;
+        if self.source.variable_refresh
+            && let Some(sequence) = presentation.sequence
+        {
+            if let Some((previous_at, previous_sequence)) = self.last_presentation {
+                let sequence_delta = sequence.wrapping_sub(previous_sequence);
+                if sequence_delta > 0 {
+                    if let Some(interval) = measured_interval(
+                        previous_at,
+                        observed_at,
+                        sequence_delta,
+                        self.source.interval,
+                    ) {
+                        self.interval = interval;
+                    }
+                }
+            }
+            self.last_presentation = Some((observed_at, sequence));
+        }
         let same_edge = self.last_tick.is_some_and(|last_tick| {
-            observed_at <= last_tick
-                || observed_at.duration_since(last_tick) <= self.source.interval / 2
+            observed_at <= last_tick || observed_at.duration_since(last_tick) <= self.interval / 2
         });
-        let observed_next = observed_at + self.source.interval;
+        let observed_next = observed_at + self.interval;
 
         // A DRM event may reach the compositor after the timer has already
         // issued that physical edge. Rephase from its kernel timestamp, but
@@ -252,7 +282,7 @@ impl DisplayClock {
         // second vsync, producing a device-latency-dependent cadence.
         self.next_tick = if same_edge {
             self.last_tick.map_or(observed_next, |last_tick| {
-                observed_next.max(last_tick + self.source.interval)
+                observed_next.max(last_tick + self.interval)
             })
         } else {
             observed_next
@@ -261,7 +291,7 @@ impl DisplayClock {
         if !same_edge {
             self.presented_tick = Some(FrameTick {
                 output: self.source.output,
-                interval: self.source.interval,
+                interval: self.interval,
                 observed_at,
                 presented_at: presentation.presented_at,
             });
@@ -277,25 +307,42 @@ impl DisplayClock {
             return None;
         }
 
-        let interval_nanos = self.source.interval.as_nanos().max(1);
+        let interval_nanos = self.interval.as_nanos().max(1);
         let elapsed_periods =
             now.saturating_duration_since(self.next_tick).as_nanos() / interval_nanos;
         let observed_at = if let Ok(elapsed_periods) = u32::try_from(elapsed_periods) {
-            self.next_tick + self.source.interval * elapsed_periods
+            self.next_tick + self.interval * elapsed_periods
         } else {
             // A very long suspend has no useful historical phase. Resume
             // with one current edge instead of replaying missed frames.
             now
         };
-        self.next_tick = observed_at + self.source.interval;
+        self.next_tick = observed_at + self.interval;
         self.last_tick = Some(observed_at);
         Some(FrameTick {
             output: self.source.output,
-            interval: self.source.interval,
+            interval: self.interval,
             observed_at,
             presented_at: None,
         })
     }
+}
+
+fn measured_interval(
+    previous_at: Instant,
+    observed_at: Instant,
+    sequence_delta: u64,
+    nominal: Duration,
+) -> Option<Duration> {
+    if sequence_delta == 0 || observed_at <= previous_at {
+        return None;
+    }
+    let elapsed = observed_at.duration_since(previous_at);
+    let nanos = elapsed.as_nanos().checked_div(u128::from(sequence_delta))?;
+    let interval = Duration::from_nanos(u64::try_from(nanos).ok()?);
+    let minimum = nominal / 4;
+    let maximum = nominal.saturating_mul(8);
+    (interval >= minimum && interval <= maximum).then_some(interval)
 }
 
 fn render_source(scanouts: &[Scanout]) -> Option<ClockSource> {
@@ -310,6 +357,7 @@ fn clock_source(scanout: &Scanout) -> ClockSource {
     ClockSource {
         output: scanout.output.id,
         interval: refresh_interval(scanout),
+        variable_refresh: scanout.output.vrr_enabled,
     }
 }
 
@@ -356,6 +404,7 @@ mod tests {
                             ClockSource {
                                 output: *output,
                                 interval: *interval,
+                                variable_refresh: false,
                             },
                             now,
                         )
@@ -624,5 +673,51 @@ mod tests {
         );
         assert!(scheduler.output_ticks().is_empty());
         assert!(scheduler.waiting_for_flutter.is_none());
+    }
+
+    #[test]
+    fn measured_interval_uses_sequence_delta_to_ignore_missed_vblanks() {
+        let now = Instant::now();
+        assert_eq!(
+            measured_interval(now, now + Duration::from_millis(30), 3, INTERVAL),
+            Some(INTERVAL)
+        );
+    }
+
+    #[test]
+    fn measured_interval_rejects_implausible_samples() {
+        let now = Instant::now();
+        assert_eq!(
+            measured_interval(now, now + Duration::from_millis(1), 1, INTERVAL),
+            None
+        );
+        assert_eq!(
+            measured_interval(now, now + Duration::from_secs(1), 1, INTERVAL),
+            None
+        );
+    }
+
+    #[test]
+    fn vrr_presentation_updates_tick_interval() {
+        let now = Instant::now();
+        let mut scheduler = scheduler(now);
+        scheduler.outputs.clocks[0].source.variable_refresh = true;
+        scheduler.observe_presentation(PresentedOutput {
+            id: FAST_OUTPUT,
+            observed_at: now + Duration::from_millis(12),
+            presented_at: None,
+            sequence: Some(1),
+        });
+        scheduler.observe_presentation(PresentedOutput {
+            id: FAST_OUTPUT,
+            observed_at: now + Duration::from_millis(24),
+            presented_at: None,
+            sequence: Some(2),
+        });
+        scheduler.step(now + Duration::from_millis(24), pending(false, false, true));
+        assert_eq!(
+            scheduler.output_ticks()[0].interval,
+            Duration::from_millis(12)
+        );
     }
 }
