@@ -5,7 +5,6 @@ import 'package:flutter/widgets.dart';
 
 import '../theme/shell_theme.dart';
 import '../theme/tokens.dart';
-import '../widgets/shell_cursor.dart';
 import 'desktop_window_render_telemetry.dart';
 import 'desktop_workspace.dart';
 
@@ -20,20 +19,12 @@ class DesktopWindowFrameLayers extends StatelessWidget {
     required this.windowId,
     required this.borderPainter,
     required this.child,
-    this.resizeHotRegions = const <DesktopWindowResizeHotRegion>[],
-    this.onBeginResize,
-    this.onResizeBy,
-    this.onEndResize,
     super.key,
   });
 
   final int windowId;
   final CustomPainter borderPainter;
   final Widget child;
-  final List<DesktopWindowResizeHotRegion> resizeHotRegions;
-  final void Function(DesktopWindowResizeEdge edge)? onBeginResize;
-  final ValueChanged<Offset>? onResizeBy;
-  final VoidCallback? onEndResize;
 
   @override
   Widget build(BuildContext context) {
@@ -55,65 +46,8 @@ class DesktopWindowFrameLayers extends StatelessWidget {
           ),
         ),
         child,
-        if (resizeHotRegions.isNotEmpty &&
-            onBeginResize != null &&
-            onResizeBy != null &&
-            onEndResize != null)
-          for (final region in resizeHotRegions)
-            Positioned.fromRect(
-              rect: region.rect,
-              child: _DesktopWindowResizeHandle(
-                edge: region.edge,
-                onBeginResize: onBeginResize!,
-                onResizeBy: onResizeBy!,
-                onEndResize: onEndResize!,
-              ),
-            ),
         IgnorePointer(child: CustomPaint(painter: borderPainter)),
       ],
-    );
-  }
-}
-
-class _DesktopWindowResizeHandle extends StatefulWidget {
-  const _DesktopWindowResizeHandle({
-    required this.edge,
-    required this.onBeginResize,
-    required this.onResizeBy,
-    required this.onEndResize,
-  });
-
-  final DesktopWindowResizeEdge edge;
-  final void Function(DesktopWindowResizeEdge edge) onBeginResize;
-  final ValueChanged<Offset> onResizeBy;
-  final VoidCallback onEndResize;
-
-  @override
-  State<_DesktopWindowResizeHandle> createState() =>
-      _DesktopWindowResizeHandleState();
-}
-
-class _DesktopWindowResizeHandleState
-    extends State<_DesktopWindowResizeHandle> {
-  MouseCursor get _cursor => switch (widget.edge) {
-    DesktopWindowResizeEdge.top ||
-    DesktopWindowResizeEdge.bottom => ShellMouseCursors.verticalResize,
-    DesktopWindowResizeEdge.left ||
-    DesktopWindowResizeEdge.right => ShellMouseCursors.horizontalResize,
-  };
-
-  @override
-  Widget build(BuildContext context) {
-    return MouseRegion(
-      cursor: _cursor,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onPanStart: (_) => widget.onBeginResize(widget.edge),
-        onPanUpdate: (details) => widget.onResizeBy(details.delta),
-        onPanEnd: (_) => widget.onEndResize(),
-        onPanCancel: widget.onEndResize,
-        child: const SizedBox.expand(),
-      ),
     );
   }
 }
