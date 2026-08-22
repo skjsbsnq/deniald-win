@@ -1,5 +1,7 @@
 #[cfg(feature = "flutter")]
 use super::super::render_audit_enabled;
+#[cfg(feature = "flutter")]
+use super::super::scanout_audit;
 use super::window_management::{
     activate_window, clear_toplevel_state, configure_toplevel_for_output, toplevel_has_state,
 };
@@ -77,11 +79,18 @@ fn record_surface_commit_audit(
     if !render_audit_enabled() {
         return;
     }
-
     let mut root = surface.clone();
     while let Some(parent) = get_parent(&root) {
         root = parent;
     }
+    scanout_audit::record_surface_commit(
+        frontend.surface_id(surface),
+        frontend.surface_id(&root),
+        sample.visual_update,
+        sample.has_damage,
+        sample.has_frame_callbacks,
+        sample.buffer_attached || sample.buffer_removed,
+    );
     let surface_id = frontend.surface_id(surface);
     let root_id = frontend.surface_id(&root);
     with_states(surface, |states| {

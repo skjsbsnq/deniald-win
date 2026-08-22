@@ -49,6 +49,7 @@ use super::frame_scheduler::{FrameTick, PendingFrame};
 use super::idle_policy;
 use super::native_app_plugin::NativeBufferRelease;
 use super::render_audit_enabled;
+use super::scanout_audit;
 use super::wire::{self, WireBridge};
 
 #[path = "flutter_runtime/mouse_cursor.rs"]
@@ -3172,10 +3173,12 @@ impl FlutterGlHandler {
             expects_sample,
         } in frames
         {
-            sources
+            let revision = source.generation();
+            let queued = sources
                 .entry(texture_id)
                 .or_default()
                 .queue(source, expects_sample);
+            scanout_audit::record_texture_update(texture_id, revision, expects_sample, queued);
         }
     }
 
@@ -5681,6 +5684,7 @@ impl FlutterRuntime {
             .as_ref()
             .expect("Flutter runtime is shutting down")
             .engine();
+        scanout_audit::record_flutter_schedule(self.pending_frame_texture_ids.len());
         engine.schedule_frame_for_external_textures(&self.pending_frame_texture_ids)?;
         self.pending_frame_texture_ids.clear();
         Ok(true)

@@ -44,6 +44,9 @@ mod output_control;
 #[cfg(feature = "flutter")]
 #[path = "deniald/output_scheduler.rs"]
 mod output_scheduler;
+#[cfg(feature = "flutter")]
+#[path = "deniald/scanout_audit.rs"]
+mod scanout_audit;
 #[path = "deniald/scene_sync.rs"]
 mod scene_sync;
 #[cfg(feature = "flutter")]

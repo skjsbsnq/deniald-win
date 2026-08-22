@@ -106,6 +106,10 @@ use super::frame_scheduler::FrameTick;
 #[cfg(feature = "flutter")]
 use super::local_windows::{LocalFlutterWindows, LocalWindowError};
 use super::native_shortcut::ShortcutManager;
+#[cfg(feature = "flutter")]
+use super::render_audit_enabled;
+#[cfg(feature = "flutter")]
+use super::scanout_audit;
 use super::settings::SettingsManager;
 use super::window_grab::{
     MoveSurfaceGrab, ResizeEdges, ResizeSurfaceGrab, X11ResizeSurfaceGrab, checked_pointer_grab,
@@ -3219,10 +3223,15 @@ impl WaylandFrontend {
             } else {
                 fallback_height
             };
-            let monitor_id = self
+            let (monitor_id, report_exact_geometry) = self
                 .output_for_geometry(geometry)
-                .and_then(|entry| i64::try_from(entry.id.0).ok())
-                .unwrap_or(-1);
+                .map(|entry| {
+                    (
+                        i64::try_from(entry.id.0).unwrap_or(-1),
+                        entry.logical_geometry == geometry,
+                    )
+                })
+                .unwrap_or((-1, false));
             let (suppress_animations, server_side_decorated, window_opacity) = x11
                 .as_ref()
                 .map(|x11| {
@@ -3252,6 +3261,66 @@ impl WaylandFrontend {
                 )
             })
             .unwrap_or(WindowOpacityClass::ContentTranslucent);
+            if render_audit_enabled() {
+                let report_format = with_renderer_surface_state(&surface, |state| {
+                    state
+                        .buffer()
+                        .and_then(|buffer| get_dmabuf(buffer).ok())
+                        .map(|dmabuf| dmabuf.format())
+                })
+                .flatten();
+                let format = report_format
+                    .map(|format| format!("{:#010x}", format.code as u32))
+                    .unwrap_or_else(|| "unknown".to_owned());
+                let modifier = report_format
+                    .map(|format| format!("{:#018x}", u64::from(format.modifier)))
+                    .unwrap_or_else(|| "unknown".to_owned());
+                let report_texture_id = texture_id;
+                let visibility_epoch = self.input_layout.as_ref().map(|layout| layout.epoch);
+                let report_single_root = layers.len() == 1
+                    && layers
+                        .first()
+                        .is_some_and(|layer| layer.surface_id == stable_id);
+                let report = scanout_audit::evaluate(scanout_audit::EligibilitySnapshot {
+                    visible: !self.input_visibility_known
+                        || self.visible_window_ids.contains(&stable_id),
+                    sampled: expects_sample,
+                    minimized: self.minimized_windows.contains(&surface.id()),
+                    has_popup_or_subsurface: complex_windows.contains(&stable_id),
+                    importable: report_format.is_some(),
+                    exact_geometry: report_exact_geometry,
+                    opaque_and_color_compatible: matches!(
+                        opacity_class,
+                        WindowOpacityClass::FullyOpaque
+                    ),
+                    single_root_surface: report_single_root,
+                    sync_proven: false,
+                    input_visibility_epoch: visibility_epoch,
+                    certificate_epoch: None,
+                    has_damage: report_texture_id > 0,
+                    ..scanout_audit::EligibilitySnapshot::default()
+                });
+                scanout_audit::record_eligibility(
+                    scanout_audit::EligibilityContext {
+                        output_id: u64::try_from(monitor_id.max(0)).unwrap_or_default(),
+                        window_id: stable_id,
+                        root_surface_id: stable_id,
+                        buffer_revision: self
+                            .surface_buffer_revisions
+                            .get(&surface.id())
+                            .copied()
+                            .unwrap_or_default(),
+                        format: &format,
+                        modifier: &modifier,
+                        source_rect: (texture_source_width, texture_source_height),
+                        destination_rect: (f64::from(width), f64::from(height)),
+                        opacity: opacity * window_opacity,
+                        visibility_epoch,
+                        certificate_epoch: None,
+                    },
+                    &report,
+                );
+            }
             let description = WindowDescription {
                 object_id: stable_id,
                 surface_id: stable_id,
@@ -3845,10 +3914,15 @@ impl WaylandFrontend {
             .unwrap_or_else(|| self.presentation.monotonic_now());
         let mut sent = 0usize;
         for window in self.output_window_membership.windows(tick.output) {
-            sent = sent.saturating_add(presentation::send_window_frame_callbacks(
-                window,
-                callback_time,
-            ));
+            let window_sent = presentation::send_window_frame_callbacks(window, callback_time);
+            scanout_audit::record_frame_callbacks(
+                tick.output.0,
+                self.window_root_surface(window)
+                    .as_ref()
+                    .and_then(|surface| self.surface_id(surface)),
+                window_sent,
+            );
+            sent = sent.saturating_add(window_sent);
         }
         let callback_millis = callback_time.as_millis() as u32;
         for popup in self.input_method.visible_popups() {
@@ -3856,10 +3930,14 @@ impl WaylandFrontend {
                 .surface_id(popup.surface())
                 .is_some_and(|surface_id| self.visible_window_ids.contains(&surface_id))
             {
-                sent = sent.saturating_add(presentation::send_surface_frame_callbacks(
-                    popup.surface(),
-                    callback_millis,
-                ));
+                let popup_sent =
+                    presentation::send_surface_frame_callbacks(popup.surface(), callback_millis);
+                scanout_audit::record_frame_callbacks(
+                    tick.output.0,
+                    self.surface_id(popup.surface()),
+                    popup_sent,
+                );
+                sent = sent.saturating_add(popup_sent);
             }
         }
         if sent == 0 {
