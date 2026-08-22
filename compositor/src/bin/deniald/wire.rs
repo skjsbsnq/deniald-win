@@ -74,6 +74,43 @@ pub const INPUT_WINDOW_VISIBLE: u32 = 1 << 0;
 pub const INPUT_WINDOW_HIT_TEST_DISABLED: u32 = 1 << 1;
 pub const INPUT_WINDOW_GEOMETRY_LOCKED: u32 = 1 << 2;
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum CompositionColorClass {
+    Unknown,
+    SdrCompatible,
+    HdrCompatible,
+    Incompatible,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct CompositionCertificate {
+    pub certificate_epoch: u64,
+    pub layout_epoch: u64,
+    pub output_id: i64,
+    pub output_configuration_epoch: u64,
+    pub sole_root_surface_id: u64,
+    pub surface_tree_revision: u64,
+    pub buffer_revision: u64,
+    pub source_rect: InputRect,
+    pub destination_rect: InputRect,
+    pub output_pixel_size: (f64, f64),
+    pub scale: f64,
+    pub transform: u32,
+    pub known_opaque: bool,
+    pub shell_fully_transparent: bool,
+    pub requires_client_sampling: bool,
+    pub has_popup: bool,
+    pub has_subsurface: bool,
+    pub has_drag_icon: bool,
+    pub has_ime: bool,
+    pub has_preview: bool,
+    pub has_capture: bool,
+    pub has_effect: bool,
+    pub color_class: CompositionColorClass,
+    pub reason_flags: u32,
+    pub engine_generation: u64,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct InputRect {
     pub x: f64,
@@ -535,6 +572,7 @@ pub struct WireBridge {
     // former finished_data().to_vec() copy.
     outbound_builder: FlatBufferBuilder<'static>,
     pending_input_layout: Option<InputLayoutSnapshot>,
+    pending_composition_certificate: Option<CompositionCertificate>,
     input_layout_scratch: InputLayoutSnapshot,
     input_layout_identities_scratch: HashSet<u64>,
     pending_window_commands: VecDeque<WindowCommand>,
@@ -560,6 +598,7 @@ impl WireBridge {
             restored_window_ids: Vec::new(),
             outbound_builder: FlatBufferBuilder::with_capacity(1024),
             pending_input_layout: None,
+            pending_composition_certificate: None,
             input_layout_scratch: InputLayoutSnapshot::default(),
             input_layout_identities_scratch: HashSet::new(),
             pending_window_commands: VecDeque::new(),
@@ -621,6 +660,10 @@ impl WireBridge {
 
     pub fn recycle_input_layout(&mut self, layout: InputLayoutSnapshot) {
         self.input_layout_scratch = layout;
+    }
+
+    pub fn take_composition_certificate(&mut self) -> Option<CompositionCertificate> {
+        self.pending_composition_certificate.take()
     }
 
     pub fn drain_window_commands(&mut self) -> impl Iterator<Item = WindowCommand> + '_ {
@@ -1043,6 +1086,19 @@ impl WireBridge {
                 if let Some(displaced) = self.pending_input_layout.replace(decoded) {
                     self.input_layout_scratch = displaced;
                 }
+                Ok(None)
+            }
+            fb::Payload::CompositionCertificate => {
+                let certificate = envelope
+                    .payload_as_composition_certificate()
+                    .ok_or(WireError::Payload)?;
+                let decoded = decode_composition_certificate(certificate)?;
+                if let Some(previous) = &self.pending_composition_certificate
+                    && decoded.certificate_epoch < previous.certificate_epoch
+                {
+                    return Err(WireError::Sequence);
+                }
+                self.pending_composition_certificate = Some(decoded);
                 Ok(None)
             }
             fb::Payload::KeyboardCommand => {
@@ -1851,6 +1907,94 @@ fn decode_input_rect(rect: &fb::WireRect) -> Result<InputRect, WireError> {
         return Err(WireError::Geometry);
     }
     Ok(rect)
+}
+
+fn decode_composition_certificate(
+    certificate: fb::CompositionCertificate<'_>,
+) -> Result<CompositionCertificate, WireError> {
+    if certificate.protocol_version() != PROTOCOL_VERSION
+        || certificate.certificate_epoch() == 0
+        || certificate.layout_epoch() == 0
+        || certificate.output_id() < 0
+        || !certificate.scale().is_finite()
+        || certificate.scale() <= 0.0
+        || certificate.engine_generation() == 0
+    {
+        return Err(WireError::Payload);
+    }
+    if certificate.sole_root_surface_id() == 0 {
+        if !certificate.requires_client_sampling() {
+            return Err(WireError::Payload);
+        }
+    } else if certificate.surface_tree_revision() == 0 || certificate.buffer_revision() == 0 {
+        return Err(WireError::Payload);
+    }
+    let source = certificate.source_rect().ok_or(WireError::Payload)?;
+    let destination = certificate.destination_rect().ok_or(WireError::Payload)?;
+    let pixel_size = certificate.output_pixel_size().ok_or(WireError::Payload)?;
+    if !pixel_size.width().is_finite()
+        || !pixel_size.height().is_finite()
+        || pixel_size.width() <= 0.0
+        || pixel_size.height() <= 0.0
+    {
+        return Err(WireError::Geometry);
+    }
+    Ok(CompositionCertificate {
+        certificate_epoch: certificate.certificate_epoch(),
+        layout_epoch: certificate.layout_epoch(),
+        output_id: certificate.output_id(),
+        output_configuration_epoch: certificate.output_configuration_epoch(),
+        sole_root_surface_id: certificate.sole_root_surface_id(),
+        surface_tree_revision: certificate.surface_tree_revision(),
+        buffer_revision: certificate.buffer_revision(),
+        source_rect: decode_certificate_rect(source, certificate.sole_root_surface_id() == 0)?,
+        destination_rect: decode_certificate_rect(
+            destination,
+            certificate.sole_root_surface_id() == 0,
+        )?,
+        output_pixel_size: (pixel_size.width(), pixel_size.height()),
+        scale: certificate.scale(),
+        transform: certificate.transform(),
+        known_opaque: certificate.known_opaque(),
+        shell_fully_transparent: certificate.shell_fully_transparent(),
+        requires_client_sampling: certificate.requires_client_sampling(),
+        has_popup: certificate.has_popup(),
+        has_subsurface: certificate.has_subsurface(),
+        has_drag_icon: certificate.has_drag_icon(),
+        has_ime: certificate.has_ime(),
+        has_preview: certificate.has_preview(),
+        has_capture: certificate.has_capture(),
+        has_effect: certificate.has_effect(),
+        color_class: match certificate.color_class() {
+            fb::CompositionColorClass::SdrCompatible => CompositionColorClass::SdrCompatible,
+            fb::CompositionColorClass::HdrCompatible => CompositionColorClass::HdrCompatible,
+            fb::CompositionColorClass::Incompatible => CompositionColorClass::Incompatible,
+            fb::CompositionColorClass::Unknown => CompositionColorClass::Unknown,
+            _ => CompositionColorClass::Unknown,
+        },
+        reason_flags: certificate.reason_flags(),
+        engine_generation: certificate.engine_generation(),
+    })
+}
+
+fn decode_certificate_rect(rect: &fb::WireRect, allow_empty: bool) -> Result<InputRect, WireError> {
+    let decoded = InputRect {
+        x: rect.x(),
+        y: rect.y(),
+        width: rect.width(),
+        height: rect.height(),
+    };
+    if !decoded.x.is_finite()
+        || !decoded.y.is_finite()
+        || !decoded.width.is_finite()
+        || !decoded.height.is_finite()
+        || decoded.width < 0.0
+        || decoded.height < 0.0
+        || (!allow_empty && (decoded.width == 0.0 || decoded.height == 0.0))
+    {
+        return Err(WireError::Geometry);
+    }
+    Ok(decoded)
 }
 
 fn validate_topology(snapshot: &TopologySnapshot, atlas: &AtlasPlan) -> Result<(), WireError> {
@@ -4508,6 +4652,47 @@ mod tests {
         assert!(state.legacy());
         assert_eq!(state.content_hint(), 3);
         assert_eq!(state.content_purpose(), 6);
+    }
+
+    #[test]
+    fn rejects_invalid_composition_certificate_without_consuming_sequence() {
+        let mut builder = flatbuffers::FlatBufferBuilder::new();
+        let source = fb::WireRect::new(0.0, 0.0, 1920.0, 1080.0);
+        let destination = fb::WireRect::new(0.0, 0.0, 1920.0, 1080.0);
+        let pixels = fb::WireSize::new(1920.0, 1080.0);
+        let certificate = fb::CompositionCertificate::create(
+            &mut builder,
+            &fb::CompositionCertificateArgs {
+                certificate_epoch: 1,
+                layout_epoch: 1,
+                output_id: 1,
+                output_configuration_epoch: 1,
+                sole_root_surface_id: 1,
+                surface_tree_revision: 1,
+                buffer_revision: 1,
+                source_rect: Some(&source),
+                destination_rect: Some(&destination),
+                output_pixel_size: Some(&pixels),
+                scale: 1.0,
+                engine_generation: 1,
+                ..Default::default()
+            },
+        );
+        let envelope = fb::Envelope::create(
+            &mut builder,
+            &fb::EnvelopeArgs {
+                protocol_version: PROTOCOL_VERSION + 1,
+                sequence: 1,
+                payload_type: fb::Payload::CompositionCertificate,
+                payload: Some(certificate.as_union_value()),
+                ..Default::default()
+            },
+        );
+        fb::finish_envelope_buffer(&mut builder, envelope);
+        let bytes = builder.finished_data().to_vec();
+        let mut bridge = bridge();
+        assert!(bridge.handle(&bytes).is_err());
+        assert!(bridge.take_composition_certificate().is_none());
     }
 
     #[test]

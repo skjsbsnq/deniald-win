@@ -375,6 +375,99 @@ impl<'a> flatbuffers::Verifiable for WindowOpacityClass {
 
 impl flatbuffers::SimpleToVerifyInSlice for WindowOpacityClass {}
 #[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
+pub const ENUM_MIN_COMPOSITION_COLOR_CLASS: u8 = 0;
+#[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
+pub const ENUM_MAX_COMPOSITION_COLOR_CLASS: u8 = 3;
+#[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
+#[allow(non_camel_case_types)]
+pub const ENUM_VALUES_COMPOSITION_COLOR_CLASS: [CompositionColorClass; 4] = [
+  CompositionColorClass::Unknown,
+  CompositionColorClass::SdrCompatible,
+  CompositionColorClass::HdrCompatible,
+  CompositionColorClass::Incompatible,
+];
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+#[repr(transparent)]
+pub struct CompositionColorClass(pub u8);
+#[allow(non_upper_case_globals)]
+impl CompositionColorClass {
+  pub const Unknown: Self = Self(0);
+  pub const SdrCompatible: Self = Self(1);
+  pub const HdrCompatible: Self = Self(2);
+  pub const Incompatible: Self = Self(3);
+
+  pub const ENUM_MIN: u8 = 0;
+  pub const ENUM_MAX: u8 = 3;
+  pub const ENUM_VALUES: &'static [Self] = &[
+    Self::Unknown,
+    Self::SdrCompatible,
+    Self::HdrCompatible,
+    Self::Incompatible,
+  ];
+  /// Returns the variant's name or "" if unknown.
+  pub fn variant_name(self) -> Option<&'static str> {
+    match self {
+      Self::Unknown => Some("Unknown"),
+      Self::SdrCompatible => Some("SdrCompatible"),
+      Self::HdrCompatible => Some("HdrCompatible"),
+      Self::Incompatible => Some("Incompatible"),
+      _ => None,
+    }
+  }
+}
+impl core::fmt::Debug for CompositionColorClass {
+  fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+    if let Some(name) = self.variant_name() {
+      f.write_str(name)
+    } else {
+      f.write_fmt(format_args!("<UNKNOWN {:?}>", self.0))
+    }
+  }
+}
+impl<'a> flatbuffers::Follow<'a> for CompositionColorClass {
+  type Inner = Self;
+  #[inline]
+  unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+    let b = unsafe { flatbuffers::read_scalar_at::<u8>(buf, loc) };
+    Self(b)
+  }
+}
+
+impl flatbuffers::Push for CompositionColorClass {
+    type Output = CompositionColorClass;
+    #[inline]
+    unsafe fn push(&self, dst: &mut [u8], _written_len: usize) {
+        unsafe { flatbuffers::emplace_scalar::<u8>(dst, self.0); }
+    }
+}
+
+impl flatbuffers::EndianScalar for CompositionColorClass {
+  type Scalar = u8;
+  #[inline]
+  fn to_little_endian(self) -> u8 {
+    self.0.to_le()
+  }
+  #[inline]
+  #[allow(clippy::wrong_self_convention)]
+  fn from_little_endian(v: u8) -> Self {
+    let b = u8::from_le(v);
+    Self(b)
+  }
+}
+
+impl<'a> flatbuffers::Verifiable for CompositionColorClass {
+  #[inline]
+  fn run_verifier(
+    v: &mut flatbuffers::Verifier, pos: usize
+  ) -> Result<(), flatbuffers::InvalidFlatbuffer> {
+    use self::flatbuffers::Verifiable;
+    u8::run_verifier(v, pos)
+  }
+}
+
+impl flatbuffers::SimpleToVerifyInSlice for CompositionColorClass {}
+#[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
 pub const ENUM_MIN_WINDOW_REQUEST_KIND: u8 = 0;
 #[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
 pub const ENUM_MAX_WINDOW_REQUEST_KIND: u8 = 6;
@@ -2072,10 +2165,10 @@ pub struct ShortcutTargetUnionTableOffset {}
 #[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
 pub const ENUM_MIN_PAYLOAD: u8 = 0;
 #[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
-pub const ENUM_MAX_PAYLOAD: u8 = 15;
+pub const ENUM_MAX_PAYLOAD: u8 = 16;
 #[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
 #[allow(non_camel_case_types)]
-pub const ENUM_VALUES_PAYLOAD: [Payload; 16] = [
+pub const ENUM_VALUES_PAYLOAD: [Payload; 17] = [
   Payload::NONE,
   Payload::InputLayout,
   Payload::WindowSnapshot,
@@ -2092,6 +2185,7 @@ pub const ENUM_VALUES_PAYLOAD: [Payload; 16] = [
   Payload::SettingsRequest,
   Payload::SettingsResponse,
   Payload::TextInputState,
+  Payload::CompositionCertificate,
 ];
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
@@ -2115,9 +2209,10 @@ impl Payload {
   pub const SettingsRequest: Self = Self(13);
   pub const SettingsResponse: Self = Self(14);
   pub const TextInputState: Self = Self(15);
+  pub const CompositionCertificate: Self = Self(16);
 
   pub const ENUM_MIN: u8 = 0;
-  pub const ENUM_MAX: u8 = 15;
+  pub const ENUM_MAX: u8 = 16;
   pub const ENUM_VALUES: &'static [Self] = &[
     Self::NONE,
     Self::InputLayout,
@@ -2135,6 +2230,7 @@ impl Payload {
     Self::SettingsRequest,
     Self::SettingsResponse,
     Self::TextInputState,
+    Self::CompositionCertificate,
   ];
   /// Returns the variant's name or "" if unknown.
   pub fn variant_name(self) -> Option<&'static str> {
@@ -2155,6 +2251,7 @@ impl Payload {
       Self::SettingsRequest => Some("SettingsRequest"),
       Self::SettingsResponse => Some("SettingsResponse"),
       Self::TextInputState => Some("TextInputState"),
+      Self::CompositionCertificate => Some("CompositionCertificate"),
       _ => None,
     }
   }
@@ -2914,6 +3011,528 @@ impl<'a> InputWindowRegion {
 
 }
 
+pub enum CompositionCertificateOffset {}
+#[derive(Copy, Clone, PartialEq)]
+
+pub struct CompositionCertificate<'a> {
+  pub _tab: flatbuffers::Table<'a>,
+}
+
+impl<'a> flatbuffers::Follow<'a> for CompositionCertificate<'a> {
+  type Inner = CompositionCertificate<'a>;
+  #[inline]
+  unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+    Self { _tab: unsafe { flatbuffers::Table::new(buf, loc) } }
+  }
+}
+
+impl<'a> CompositionCertificate<'a> {
+  pub const VT_PROTOCOL_VERSION: flatbuffers::VOffsetT = 4;
+  pub const VT_CERTIFICATE_EPOCH: flatbuffers::VOffsetT = 6;
+  pub const VT_LAYOUT_EPOCH: flatbuffers::VOffsetT = 8;
+  pub const VT_OUTPUT_ID: flatbuffers::VOffsetT = 10;
+  pub const VT_OUTPUT_CONFIGURATION_EPOCH: flatbuffers::VOffsetT = 12;
+  pub const VT_SOLE_ROOT_SURFACE_ID: flatbuffers::VOffsetT = 14;
+  pub const VT_SURFACE_TREE_REVISION: flatbuffers::VOffsetT = 16;
+  pub const VT_BUFFER_REVISION: flatbuffers::VOffsetT = 18;
+  pub const VT_SOURCE_RECT: flatbuffers::VOffsetT = 20;
+  pub const VT_DESTINATION_RECT: flatbuffers::VOffsetT = 22;
+  pub const VT_OUTPUT_PIXEL_SIZE: flatbuffers::VOffsetT = 24;
+  pub const VT_SCALE: flatbuffers::VOffsetT = 26;
+  pub const VT_TRANSFORM: flatbuffers::VOffsetT = 28;
+  pub const VT_KNOWN_OPAQUE: flatbuffers::VOffsetT = 30;
+  pub const VT_SHELL_FULLY_TRANSPARENT: flatbuffers::VOffsetT = 32;
+  pub const VT_REQUIRES_CLIENT_SAMPLING: flatbuffers::VOffsetT = 34;
+  pub const VT_HAS_POPUP: flatbuffers::VOffsetT = 36;
+  pub const VT_HAS_SUBSURFACE: flatbuffers::VOffsetT = 38;
+  pub const VT_HAS_DRAG_ICON: flatbuffers::VOffsetT = 40;
+  pub const VT_HAS_IME: flatbuffers::VOffsetT = 42;
+  pub const VT_HAS_PREVIEW: flatbuffers::VOffsetT = 44;
+  pub const VT_HAS_CAPTURE: flatbuffers::VOffsetT = 46;
+  pub const VT_HAS_EFFECT: flatbuffers::VOffsetT = 48;
+  pub const VT_COLOR_CLASS: flatbuffers::VOffsetT = 50;
+  pub const VT_REASON_FLAGS: flatbuffers::VOffsetT = 52;
+  pub const VT_ENGINE_GENERATION: flatbuffers::VOffsetT = 54;
+
+  #[inline]
+  pub unsafe fn init_from_table(table: flatbuffers::Table<'a>) -> Self {
+    CompositionCertificate { _tab: table }
+  }
+  #[allow(unused_mut)]
+  pub fn create<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr, A: flatbuffers::Allocator + 'bldr>(
+    _fbb: &'mut_bldr mut flatbuffers::FlatBufferBuilder<'bldr, A>,
+    args: &'args CompositionCertificateArgs<'args>
+  ) -> flatbuffers::WIPOffset<CompositionCertificate<'bldr>> {
+    let mut builder = CompositionCertificateBuilder::new(_fbb);
+    builder.add_engine_generation(args.engine_generation);
+    builder.add_scale(args.scale);
+    builder.add_buffer_revision(args.buffer_revision);
+    builder.add_surface_tree_revision(args.surface_tree_revision);
+    builder.add_sole_root_surface_id(args.sole_root_surface_id);
+    builder.add_output_configuration_epoch(args.output_configuration_epoch);
+    builder.add_output_id(args.output_id);
+    builder.add_layout_epoch(args.layout_epoch);
+    builder.add_certificate_epoch(args.certificate_epoch);
+    builder.add_reason_flags(args.reason_flags);
+    builder.add_transform(args.transform);
+    if let Some(x) = args.output_pixel_size { builder.add_output_pixel_size(x); }
+    if let Some(x) = args.destination_rect { builder.add_destination_rect(x); }
+    if let Some(x) = args.source_rect { builder.add_source_rect(x); }
+    builder.add_protocol_version(args.protocol_version);
+    builder.add_color_class(args.color_class);
+    builder.add_has_effect(args.has_effect);
+    builder.add_has_capture(args.has_capture);
+    builder.add_has_preview(args.has_preview);
+    builder.add_has_ime(args.has_ime);
+    builder.add_has_drag_icon(args.has_drag_icon);
+    builder.add_has_subsurface(args.has_subsurface);
+    builder.add_has_popup(args.has_popup);
+    builder.add_requires_client_sampling(args.requires_client_sampling);
+    builder.add_shell_fully_transparent(args.shell_fully_transparent);
+    builder.add_known_opaque(args.known_opaque);
+    builder.finish()
+  }
+
+
+  #[inline]
+  pub fn protocol_version(&self) -> u16 {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<u16>(CompositionCertificate::VT_PROTOCOL_VERSION, Some(1)).unwrap()}
+  }
+  #[inline]
+  pub fn certificate_epoch(&self) -> u64 {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<u64>(CompositionCertificate::VT_CERTIFICATE_EPOCH, Some(0)).unwrap()}
+  }
+  #[inline]
+  pub fn layout_epoch(&self) -> u64 {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<u64>(CompositionCertificate::VT_LAYOUT_EPOCH, Some(0)).unwrap()}
+  }
+  #[inline]
+  pub fn output_id(&self) -> i64 {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<i64>(CompositionCertificate::VT_OUTPUT_ID, Some(0)).unwrap()}
+  }
+  #[inline]
+  pub fn output_configuration_epoch(&self) -> u64 {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<u64>(CompositionCertificate::VT_OUTPUT_CONFIGURATION_EPOCH, Some(0)).unwrap()}
+  }
+  #[inline]
+  pub fn sole_root_surface_id(&self) -> u64 {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<u64>(CompositionCertificate::VT_SOLE_ROOT_SURFACE_ID, Some(0)).unwrap()}
+  }
+  #[inline]
+  pub fn surface_tree_revision(&self) -> u64 {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<u64>(CompositionCertificate::VT_SURFACE_TREE_REVISION, Some(0)).unwrap()}
+  }
+  #[inline]
+  pub fn buffer_revision(&self) -> u64 {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<u64>(CompositionCertificate::VT_BUFFER_REVISION, Some(0)).unwrap()}
+  }
+  #[inline]
+  pub fn source_rect(&self) -> Option<&'a WireRect> {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<WireRect>(CompositionCertificate::VT_SOURCE_RECT, None)}
+  }
+  #[inline]
+  pub fn destination_rect(&self) -> Option<&'a WireRect> {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<WireRect>(CompositionCertificate::VT_DESTINATION_RECT, None)}
+  }
+  #[inline]
+  pub fn output_pixel_size(&self) -> Option<&'a WireSize> {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<WireSize>(CompositionCertificate::VT_OUTPUT_PIXEL_SIZE, None)}
+  }
+  #[inline]
+  pub fn scale(&self) -> f64 {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<f64>(CompositionCertificate::VT_SCALE, Some(1.0)).unwrap()}
+  }
+  #[inline]
+  pub fn transform(&self) -> u32 {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<u32>(CompositionCertificate::VT_TRANSFORM, Some(0)).unwrap()}
+  }
+  #[inline]
+  pub fn known_opaque(&self) -> bool {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<bool>(CompositionCertificate::VT_KNOWN_OPAQUE, Some(false)).unwrap()}
+  }
+  #[inline]
+  pub fn shell_fully_transparent(&self) -> bool {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<bool>(CompositionCertificate::VT_SHELL_FULLY_TRANSPARENT, Some(false)).unwrap()}
+  }
+  #[inline]
+  pub fn requires_client_sampling(&self) -> bool {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<bool>(CompositionCertificate::VT_REQUIRES_CLIENT_SAMPLING, Some(false)).unwrap()}
+  }
+  #[inline]
+  pub fn has_popup(&self) -> bool {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<bool>(CompositionCertificate::VT_HAS_POPUP, Some(false)).unwrap()}
+  }
+  #[inline]
+  pub fn has_subsurface(&self) -> bool {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<bool>(CompositionCertificate::VT_HAS_SUBSURFACE, Some(false)).unwrap()}
+  }
+  #[inline]
+  pub fn has_drag_icon(&self) -> bool {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<bool>(CompositionCertificate::VT_HAS_DRAG_ICON, Some(false)).unwrap()}
+  }
+  #[inline]
+  pub fn has_ime(&self) -> bool {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<bool>(CompositionCertificate::VT_HAS_IME, Some(false)).unwrap()}
+  }
+  #[inline]
+  pub fn has_preview(&self) -> bool {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<bool>(CompositionCertificate::VT_HAS_PREVIEW, Some(false)).unwrap()}
+  }
+  #[inline]
+  pub fn has_capture(&self) -> bool {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<bool>(CompositionCertificate::VT_HAS_CAPTURE, Some(false)).unwrap()}
+  }
+  #[inline]
+  pub fn has_effect(&self) -> bool {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<bool>(CompositionCertificate::VT_HAS_EFFECT, Some(false)).unwrap()}
+  }
+  #[inline]
+  pub fn color_class(&self) -> CompositionColorClass {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<CompositionColorClass>(CompositionCertificate::VT_COLOR_CLASS, Some(CompositionColorClass::Unknown)).unwrap()}
+  }
+  #[inline]
+  pub fn reason_flags(&self) -> u32 {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<u32>(CompositionCertificate::VT_REASON_FLAGS, Some(0)).unwrap()}
+  }
+  #[inline]
+  pub fn engine_generation(&self) -> u64 {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<u64>(CompositionCertificate::VT_ENGINE_GENERATION, Some(0)).unwrap()}
+  }
+}
+
+impl flatbuffers::Verifiable for CompositionCertificate<'_> {
+  #[inline]
+  fn run_verifier(
+    v: &mut flatbuffers::Verifier, pos: usize
+  ) -> Result<(), flatbuffers::InvalidFlatbuffer> {
+    use self::flatbuffers::Verifiable;
+    v.visit_table(pos)?
+     .visit_field::<u16>("protocol_version", Self::VT_PROTOCOL_VERSION, false)?
+     .visit_field::<u64>("certificate_epoch", Self::VT_CERTIFICATE_EPOCH, false)?
+     .visit_field::<u64>("layout_epoch", Self::VT_LAYOUT_EPOCH, false)?
+     .visit_field::<i64>("output_id", Self::VT_OUTPUT_ID, false)?
+     .visit_field::<u64>("output_configuration_epoch", Self::VT_OUTPUT_CONFIGURATION_EPOCH, false)?
+     .visit_field::<u64>("sole_root_surface_id", Self::VT_SOLE_ROOT_SURFACE_ID, false)?
+     .visit_field::<u64>("surface_tree_revision", Self::VT_SURFACE_TREE_REVISION, false)?
+     .visit_field::<u64>("buffer_revision", Self::VT_BUFFER_REVISION, false)?
+     .visit_field::<WireRect>("source_rect", Self::VT_SOURCE_RECT, false)?
+     .visit_field::<WireRect>("destination_rect", Self::VT_DESTINATION_RECT, false)?
+     .visit_field::<WireSize>("output_pixel_size", Self::VT_OUTPUT_PIXEL_SIZE, false)?
+     .visit_field::<f64>("scale", Self::VT_SCALE, false)?
+     .visit_field::<u32>("transform", Self::VT_TRANSFORM, false)?
+     .visit_field::<bool>("known_opaque", Self::VT_KNOWN_OPAQUE, false)?
+     .visit_field::<bool>("shell_fully_transparent", Self::VT_SHELL_FULLY_TRANSPARENT, false)?
+     .visit_field::<bool>("requires_client_sampling", Self::VT_REQUIRES_CLIENT_SAMPLING, false)?
+     .visit_field::<bool>("has_popup", Self::VT_HAS_POPUP, false)?
+     .visit_field::<bool>("has_subsurface", Self::VT_HAS_SUBSURFACE, false)?
+     .visit_field::<bool>("has_drag_icon", Self::VT_HAS_DRAG_ICON, false)?
+     .visit_field::<bool>("has_ime", Self::VT_HAS_IME, false)?
+     .visit_field::<bool>("has_preview", Self::VT_HAS_PREVIEW, false)?
+     .visit_field::<bool>("has_capture", Self::VT_HAS_CAPTURE, false)?
+     .visit_field::<bool>("has_effect", Self::VT_HAS_EFFECT, false)?
+     .visit_field::<CompositionColorClass>("color_class", Self::VT_COLOR_CLASS, false)?
+     .visit_field::<u32>("reason_flags", Self::VT_REASON_FLAGS, false)?
+     .visit_field::<u64>("engine_generation", Self::VT_ENGINE_GENERATION, false)?
+     .finish();
+    Ok(())
+  }
+}
+pub struct CompositionCertificateArgs<'a> {
+    pub protocol_version: u16,
+    pub certificate_epoch: u64,
+    pub layout_epoch: u64,
+    pub output_id: i64,
+    pub output_configuration_epoch: u64,
+    pub sole_root_surface_id: u64,
+    pub surface_tree_revision: u64,
+    pub buffer_revision: u64,
+    pub source_rect: Option<&'a WireRect>,
+    pub destination_rect: Option<&'a WireRect>,
+    pub output_pixel_size: Option<&'a WireSize>,
+    pub scale: f64,
+    pub transform: u32,
+    pub known_opaque: bool,
+    pub shell_fully_transparent: bool,
+    pub requires_client_sampling: bool,
+    pub has_popup: bool,
+    pub has_subsurface: bool,
+    pub has_drag_icon: bool,
+    pub has_ime: bool,
+    pub has_preview: bool,
+    pub has_capture: bool,
+    pub has_effect: bool,
+    pub color_class: CompositionColorClass,
+    pub reason_flags: u32,
+    pub engine_generation: u64,
+}
+impl<'a> Default for CompositionCertificateArgs<'a> {
+  #[inline]
+  fn default() -> Self {
+    CompositionCertificateArgs {
+      protocol_version: 1,
+      certificate_epoch: 0,
+      layout_epoch: 0,
+      output_id: 0,
+      output_configuration_epoch: 0,
+      sole_root_surface_id: 0,
+      surface_tree_revision: 0,
+      buffer_revision: 0,
+      source_rect: None,
+      destination_rect: None,
+      output_pixel_size: None,
+      scale: 1.0,
+      transform: 0,
+      known_opaque: false,
+      shell_fully_transparent: false,
+      requires_client_sampling: false,
+      has_popup: false,
+      has_subsurface: false,
+      has_drag_icon: false,
+      has_ime: false,
+      has_preview: false,
+      has_capture: false,
+      has_effect: false,
+      color_class: CompositionColorClass::Unknown,
+      reason_flags: 0,
+      engine_generation: 0,
+    }
+  }
+}
+
+pub struct CompositionCertificateBuilder<'a: 'b, 'b, A: flatbuffers::Allocator + 'a> {
+  fbb_: &'b mut flatbuffers::FlatBufferBuilder<'a, A>,
+  start_: flatbuffers::WIPOffset<flatbuffers::TableUnfinishedWIPOffset>,
+}
+impl<'a: 'b, 'b, A: flatbuffers::Allocator + 'a> CompositionCertificateBuilder<'a, 'b, A> {
+  #[inline]
+  pub fn add_protocol_version(&mut self, protocol_version: u16) {
+    self.fbb_.push_slot::<u16>(CompositionCertificate::VT_PROTOCOL_VERSION, protocol_version, 1);
+  }
+  #[inline]
+  pub fn add_certificate_epoch(&mut self, certificate_epoch: u64) {
+    self.fbb_.push_slot::<u64>(CompositionCertificate::VT_CERTIFICATE_EPOCH, certificate_epoch, 0);
+  }
+  #[inline]
+  pub fn add_layout_epoch(&mut self, layout_epoch: u64) {
+    self.fbb_.push_slot::<u64>(CompositionCertificate::VT_LAYOUT_EPOCH, layout_epoch, 0);
+  }
+  #[inline]
+  pub fn add_output_id(&mut self, output_id: i64) {
+    self.fbb_.push_slot::<i64>(CompositionCertificate::VT_OUTPUT_ID, output_id, 0);
+  }
+  #[inline]
+  pub fn add_output_configuration_epoch(&mut self, output_configuration_epoch: u64) {
+    self.fbb_.push_slot::<u64>(CompositionCertificate::VT_OUTPUT_CONFIGURATION_EPOCH, output_configuration_epoch, 0);
+  }
+  #[inline]
+  pub fn add_sole_root_surface_id(&mut self, sole_root_surface_id: u64) {
+    self.fbb_.push_slot::<u64>(CompositionCertificate::VT_SOLE_ROOT_SURFACE_ID, sole_root_surface_id, 0);
+  }
+  #[inline]
+  pub fn add_surface_tree_revision(&mut self, surface_tree_revision: u64) {
+    self.fbb_.push_slot::<u64>(CompositionCertificate::VT_SURFACE_TREE_REVISION, surface_tree_revision, 0);
+  }
+  #[inline]
+  pub fn add_buffer_revision(&mut self, buffer_revision: u64) {
+    self.fbb_.push_slot::<u64>(CompositionCertificate::VT_BUFFER_REVISION, buffer_revision, 0);
+  }
+  #[inline]
+  pub fn add_source_rect(&mut self, source_rect: &WireRect) {
+    self.fbb_.push_slot_always::<&WireRect>(CompositionCertificate::VT_SOURCE_RECT, source_rect);
+  }
+  #[inline]
+  pub fn add_destination_rect(&mut self, destination_rect: &WireRect) {
+    self.fbb_.push_slot_always::<&WireRect>(CompositionCertificate::VT_DESTINATION_RECT, destination_rect);
+  }
+  #[inline]
+  pub fn add_output_pixel_size(&mut self, output_pixel_size: &WireSize) {
+    self.fbb_.push_slot_always::<&WireSize>(CompositionCertificate::VT_OUTPUT_PIXEL_SIZE, output_pixel_size);
+  }
+  #[inline]
+  pub fn add_scale(&mut self, scale: f64) {
+    self.fbb_.push_slot::<f64>(CompositionCertificate::VT_SCALE, scale, 1.0);
+  }
+  #[inline]
+  pub fn add_transform(&mut self, transform: u32) {
+    self.fbb_.push_slot::<u32>(CompositionCertificate::VT_TRANSFORM, transform, 0);
+  }
+  #[inline]
+  pub fn add_known_opaque(&mut self, known_opaque: bool) {
+    self.fbb_.push_slot::<bool>(CompositionCertificate::VT_KNOWN_OPAQUE, known_opaque, false);
+  }
+  #[inline]
+  pub fn add_shell_fully_transparent(&mut self, shell_fully_transparent: bool) {
+    self.fbb_.push_slot::<bool>(CompositionCertificate::VT_SHELL_FULLY_TRANSPARENT, shell_fully_transparent, false);
+  }
+  #[inline]
+  pub fn add_requires_client_sampling(&mut self, requires_client_sampling: bool) {
+    self.fbb_.push_slot::<bool>(CompositionCertificate::VT_REQUIRES_CLIENT_SAMPLING, requires_client_sampling, false);
+  }
+  #[inline]
+  pub fn add_has_popup(&mut self, has_popup: bool) {
+    self.fbb_.push_slot::<bool>(CompositionCertificate::VT_HAS_POPUP, has_popup, false);
+  }
+  #[inline]
+  pub fn add_has_subsurface(&mut self, has_subsurface: bool) {
+    self.fbb_.push_slot::<bool>(CompositionCertificate::VT_HAS_SUBSURFACE, has_subsurface, false);
+  }
+  #[inline]
+  pub fn add_has_drag_icon(&mut self, has_drag_icon: bool) {
+    self.fbb_.push_slot::<bool>(CompositionCertificate::VT_HAS_DRAG_ICON, has_drag_icon, false);
+  }
+  #[inline]
+  pub fn add_has_ime(&mut self, has_ime: bool) {
+    self.fbb_.push_slot::<bool>(CompositionCertificate::VT_HAS_IME, has_ime, false);
+  }
+  #[inline]
+  pub fn add_has_preview(&mut self, has_preview: bool) {
+    self.fbb_.push_slot::<bool>(CompositionCertificate::VT_HAS_PREVIEW, has_preview, false);
+  }
+  #[inline]
+  pub fn add_has_capture(&mut self, has_capture: bool) {
+    self.fbb_.push_slot::<bool>(CompositionCertificate::VT_HAS_CAPTURE, has_capture, false);
+  }
+  #[inline]
+  pub fn add_has_effect(&mut self, has_effect: bool) {
+    self.fbb_.push_slot::<bool>(CompositionCertificate::VT_HAS_EFFECT, has_effect, false);
+  }
+  #[inline]
+  pub fn add_color_class(&mut self, color_class: CompositionColorClass) {
+    self.fbb_.push_slot::<CompositionColorClass>(CompositionCertificate::VT_COLOR_CLASS, color_class, CompositionColorClass::Unknown);
+  }
+  #[inline]
+  pub fn add_reason_flags(&mut self, reason_flags: u32) {
+    self.fbb_.push_slot::<u32>(CompositionCertificate::VT_REASON_FLAGS, reason_flags, 0);
+  }
+  #[inline]
+  pub fn add_engine_generation(&mut self, engine_generation: u64) {
+    self.fbb_.push_slot::<u64>(CompositionCertificate::VT_ENGINE_GENERATION, engine_generation, 0);
+  }
+  #[inline]
+  pub fn new(_fbb: &'b mut flatbuffers::FlatBufferBuilder<'a, A>) -> CompositionCertificateBuilder<'a, 'b, A> {
+    let start = _fbb.start_table();
+    CompositionCertificateBuilder {
+      fbb_: _fbb,
+      start_: start,
+    }
+  }
+  #[inline]
+  pub fn finish(self) -> flatbuffers::WIPOffset<CompositionCertificate<'a>> {
+    let o = self.fbb_.end_table(self.start_);
+    flatbuffers::WIPOffset::new(o.value())
+  }
+}
+
+impl core::fmt::Debug for CompositionCertificate<'_> {
+  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    let mut ds = f.debug_struct("CompositionCertificate");
+      ds.field("protocol_version", &self.protocol_version());
+      ds.field("certificate_epoch", &self.certificate_epoch());
+      ds.field("layout_epoch", &self.layout_epoch());
+      ds.field("output_id", &self.output_id());
+      ds.field("output_configuration_epoch", &self.output_configuration_epoch());
+      ds.field("sole_root_surface_id", &self.sole_root_surface_id());
+      ds.field("surface_tree_revision", &self.surface_tree_revision());
+      ds.field("buffer_revision", &self.buffer_revision());
+      ds.field("source_rect", &self.source_rect());
+      ds.field("destination_rect", &self.destination_rect());
+      ds.field("output_pixel_size", &self.output_pixel_size());
+      ds.field("scale", &self.scale());
+      ds.field("transform", &self.transform());
+      ds.field("known_opaque", &self.known_opaque());
+      ds.field("shell_fully_transparent", &self.shell_fully_transparent());
+      ds.field("requires_client_sampling", &self.requires_client_sampling());
+      ds.field("has_popup", &self.has_popup());
+      ds.field("has_subsurface", &self.has_subsurface());
+      ds.field("has_drag_icon", &self.has_drag_icon());
+      ds.field("has_ime", &self.has_ime());
+      ds.field("has_preview", &self.has_preview());
+      ds.field("has_capture", &self.has_capture());
+      ds.field("has_effect", &self.has_effect());
+      ds.field("color_class", &self.color_class());
+      ds.field("reason_flags", &self.reason_flags());
+      ds.field("engine_generation", &self.engine_generation());
+      ds.finish()
+  }
+}
 pub enum InputLayoutOffset {}
 #[derive(Copy, Clone, PartialEq)]
 
@@ -9269,6 +9888,21 @@ impl<'a> Envelope<'a> {
     }
   }
 
+  #[inline]
+  #[allow(non_snake_case)]
+  pub fn payload_as_composition_certificate(&self) -> Option<CompositionCertificate<'a>> {
+    if self.payload_type() == Payload::CompositionCertificate {
+      self.payload().map(|t| {
+       // Safety:
+       // Created from a valid Table for this object
+       // Which contains a valid union in this slot
+       unsafe { CompositionCertificate::init_from_table(t) }
+     })
+    } else {
+      None
+    }
+  }
+
 }
 
 impl flatbuffers::Verifiable for Envelope<'_> {
@@ -9298,6 +9932,7 @@ impl flatbuffers::Verifiable for Envelope<'_> {
           Payload::SettingsRequest => v.verify_union_variant::<flatbuffers::ForwardsUOffset<SettingsRequest>>("Payload::SettingsRequest", pos),
           Payload::SettingsResponse => v.verify_union_variant::<flatbuffers::ForwardsUOffset<SettingsResponse>>("Payload::SettingsResponse", pos),
           Payload::TextInputState => v.verify_union_variant::<flatbuffers::ForwardsUOffset<TextInputState>>("Payload::TextInputState", pos),
+          Payload::CompositionCertificate => v.verify_union_variant::<flatbuffers::ForwardsUOffset<CompositionCertificate>>("Payload::CompositionCertificate", pos),
           _ => Ok(()),
         }
      })?
@@ -9473,6 +10108,13 @@ impl core::fmt::Debug for Envelope<'_> {
         },
         Payload::TextInputState => {
           if let Some(x) = self.payload_as_text_input_state() {
+            ds.field("payload", &x)
+          } else {
+            ds.field("payload", &"InvalidFlatbuffer: Union discriminant does not match value.")
+          }
+        },
+        Payload::CompositionCertificate => {
+          if let Some(x) = self.payload_as_composition_certificate() {
             ds.field("payload", &x)
           } else {
             ds.field("payload", &"InvalidFlatbuffer: Union discriminant does not match value.")

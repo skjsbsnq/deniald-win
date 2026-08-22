@@ -37,6 +37,13 @@ enum WindowOpacityClass : ubyte {
   FullyOpaque = 2
 }
 
+enum CompositionColorClass : ubyte {
+  Unknown = 0,
+  SdrCompatible = 1,
+  HdrCompatible = 2,
+  Incompatible = 3
+}
+
 enum WindowRequestKind : ubyte {
   ListWindows = 0,
   GetDisplayLayout = 1,
@@ -192,6 +199,35 @@ struct WirePoint {
 struct WireSize {
   width:double;
   height:double;
+}
+
+table CompositionCertificate {
+  protocol_version:ushort = 1;
+  certificate_epoch:ulong;
+  layout_epoch:ulong;
+  output_id:long;
+  output_configuration_epoch:ulong;
+  sole_root_surface_id:ulong;
+  surface_tree_revision:ulong;
+  buffer_revision:ulong;
+  source_rect:WireRect;
+  destination_rect:WireRect;
+  output_pixel_size:WireSize;
+  scale:double = 1.0;
+  transform:uint;
+  known_opaque:bool;
+  shell_fully_transparent:bool;
+  requires_client_sampling:bool;
+  has_popup:bool;
+  has_subsurface:bool;
+  has_drag_icon:bool;
+  has_ime:bool;
+  has_preview:bool;
+  has_capture:bool;
+  has_effect:bool;
+  color_class:CompositionColorClass = Unknown;
+  reason_flags:uint;
+  engine_generation:ulong;
 }
 
 // InputLayout.flags:
@@ -606,7 +642,8 @@ union Payload {
   DesktopNotificationCommand,
   SettingsRequest,
   SettingsResponse,
-  TextInputState
+  TextInputState,
+  CompositionCertificate
 }
 
 table Envelope {

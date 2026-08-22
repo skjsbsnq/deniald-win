@@ -121,9 +121,9 @@ use super::window_placement_store::{
 };
 #[cfg(feature = "flutter")]
 use super::wire::{
-    InputLayoutSnapshot, SurfaceLayerDescription, SurfaceRoleDescription, WindowAction,
-    WindowContentKind, WindowDescription, WindowGeometry, WindowOpacityClass, WindowPlacement,
-    WindowPlacementChange, WindowPlacementPhase,
+    CompositionCertificate, InputLayoutSnapshot, SurfaceLayerDescription, SurfaceRoleDescription,
+    WindowAction, WindowContentKind, WindowDescription, WindowGeometry, WindowOpacityClass,
+    WindowPlacement, WindowPlacementChange, WindowPlacementPhase,
 };
 
 #[path = "wayland_frontend/clipboard.rs"]
@@ -391,6 +391,8 @@ pub(super) struct WaylandFrontend {
     local_vertical_restore_geometries: HashMap<u64, (f64, f64)>,
     #[cfg(feature = "flutter")]
     input_layout: Option<InputLayoutSnapshot>,
+    #[cfg(feature = "flutter")]
+    composition_certificate: Option<CompositionCertificate>,
     #[cfg(feature = "flutter")]
     shell_fullscreen_locks: HashSet<ObjectId>,
     #[cfg(feature = "flutter")]
@@ -1168,6 +1170,8 @@ impl WaylandFrontend {
             local_vertical_restore_geometries: HashMap::new(),
             #[cfg(feature = "flutter")]
             input_layout: None,
+            #[cfg(feature = "flutter")]
+            composition_certificate: None,
             #[cfg(feature = "flutter")]
             shell_fullscreen_locks: HashSet::new(),
             #[cfg(feature = "flutter")]
@@ -3317,6 +3321,11 @@ impl WaylandFrontend {
                     .unwrap_or_else(|| "unknown".to_owned());
                 let report_texture_id = texture_id;
                 let visibility_epoch = self.input_layout.as_ref().map(|layout| layout.epoch);
+                let certificate = self.composition_certificate.as_ref().filter(|certificate| {
+                    certificate.output_id == monitor_id
+                        && certificate.sole_root_surface_id == stable_id
+                        && certificate.layout_epoch == visibility_epoch.unwrap_or_default()
+                });
                 let report_single_root = layers.len() == 1
                     && layers
                         .first()
@@ -3334,9 +3343,13 @@ impl WaylandFrontend {
                         WindowOpacityClass::FullyOpaque
                     ),
                     single_root_surface: report_single_root,
-                    sync_proven: false,
+                    sync_proven: certificate.is_some_and(|certificate| {
+                        !certificate.requires_client_sampling
+                            && certificate.shell_fully_transparent
+                            && certificate.known_opaque
+                    }),
                     input_visibility_epoch: visibility_epoch,
-                    certificate_epoch: None,
+                    certificate_epoch: certificate.map(|certificate| certificate.layout_epoch),
                     has_damage: report_texture_id > 0,
                     ..scanout_audit::EligibilitySnapshot::default()
                 });
@@ -3356,7 +3369,8 @@ impl WaylandFrontend {
                         destination_rect: (f64::from(width), f64::from(height)),
                         opacity: opacity * window_opacity,
                         visibility_epoch,
-                        certificate_epoch: None,
+                        certificate_epoch: certificate
+                            .map(|certificate| certificate.certificate_epoch),
                     },
                     &report,
                 );
@@ -3708,6 +3722,18 @@ impl WaylandFrontend {
             visibility_changed || input_method_changed,
             routing_changed,
         )
+    }
+
+    #[cfg(feature = "flutter")]
+    pub fn install_composition_certificate(&mut self, certificate: CompositionCertificate) {
+        if self
+            .composition_certificate
+            .as_ref()
+            .is_some_and(|previous| certificate.certificate_epoch < previous.certificate_epoch)
+        {
+            return;
+        }
+        self.composition_certificate = Some(certificate);
     }
 
     #[cfg(feature = "flutter")]

@@ -47,6 +47,62 @@ const int _keyboardReleased = 1 << 2;
 const int _placementPacketBytes = 80;
 const int _dragIconPacketBytes = 128;
 
+class DenialCompositionCertificate {
+  const DenialCompositionCertificate({
+    required this.certificateEpoch,
+    required this.layoutEpoch,
+    required this.outputId,
+    required this.outputConfigurationEpoch,
+    required this.soleRootSurfaceId,
+    required this.surfaceTreeRevision,
+    required this.bufferRevision,
+    required this.sourceRect,
+    required this.destinationRect,
+    required this.outputPixelSize,
+    required this.scale,
+    required this.transform,
+    required this.knownOpaque,
+    required this.shellFullyTransparent,
+    required this.requiresClientSampling,
+    required this.hasPopup,
+    required this.hasSubsurface,
+    required this.hasDragIcon,
+    required this.hasIme,
+    required this.hasPreview,
+    required this.hasCapture,
+    required this.hasEffect,
+    required this.colorClass,
+    required this.reasonFlags,
+    required this.engineGeneration,
+  });
+
+  final int certificateEpoch;
+  final int layoutEpoch;
+  final int outputId;
+  final int outputConfigurationEpoch;
+  final int soleRootSurfaceId;
+  final int surfaceTreeRevision;
+  final int bufferRevision;
+  final Rect sourceRect;
+  final Rect destinationRect;
+  final Size outputPixelSize;
+  final double scale;
+  final int transform;
+  final bool knownOpaque;
+  final bool shellFullyTransparent;
+  final bool requiresClientSampling;
+  final bool hasPopup;
+  final bool hasSubsurface;
+  final bool hasDragIcon;
+  final bool hasIme;
+  final bool hasPreview;
+  final bool hasCapture;
+  final bool hasEffect;
+  final generated.CompositionColorClass colorClass;
+  final int reasonFlags;
+  final int engineGeneration;
+}
+
 enum DenialKeyboardKeyPhase { tap, pressed, released }
 
 bool isDenialPlacementPacket(ByteData? data) {
@@ -169,6 +225,58 @@ class DenialWireCodec {
         windows: windows,
         visibleSurfaceIds: snapshot.visibleSurfaceIds,
         softwareKeyboardRegions: softwareKeyboardRegions,
+      ),
+    );
+  }
+
+  Uint8List? encodeCompositionCertificate(DenialCompositionCertificate certificate) {
+    if (certificate.certificateEpoch <= 0 ||
+        certificate.layoutEpoch <= 0 ||
+        certificate.outputId < 0 ||
+        certificate.outputConfigurationEpoch <= 0 ||
+        certificate.scale <= 0.0 ||
+        !certificate.scale.isFinite ||
+        certificate.engineGeneration <= 0 ||
+        (certificate.requiresClientSampling
+            ? !_finiteRect(certificate.sourceRect) ||
+                !_finiteRect(certificate.destinationRect)
+            : !_validRect(certificate.sourceRect) ||
+                !_validRect(certificate.destinationRect)) ||
+        certificate.outputPixelSize.width <= 0.0 ||
+        certificate.outputPixelSize.height <= 0.0) {
+      return null;
+    }
+    return _encodeEnvelope(
+      generated.PayloadTypeId.CompositionCertificate,
+      generated.CompositionCertificateObjectBuilder(
+        certificateEpoch: certificate.certificateEpoch,
+        layoutEpoch: certificate.layoutEpoch,
+        outputId: certificate.outputId,
+        outputConfigurationEpoch: certificate.outputConfigurationEpoch,
+        soleRootSurfaceId: certificate.soleRootSurfaceId,
+        surfaceTreeRevision: certificate.surfaceTreeRevision,
+        bufferRevision: certificate.bufferRevision,
+        sourceRect: _rectBuilder(certificate.sourceRect),
+        destinationRect: _rectBuilder(certificate.destinationRect),
+        outputPixelSize: generated.WireSizeObjectBuilder(
+          width: certificate.outputPixelSize.width,
+          height: certificate.outputPixelSize.height,
+        ),
+        scale: certificate.scale,
+        transform: certificate.transform,
+        knownOpaque: certificate.knownOpaque,
+        shellFullyTransparent: certificate.shellFullyTransparent,
+        requiresClientSampling: certificate.requiresClientSampling,
+        hasPopup: certificate.hasPopup,
+        hasSubsurface: certificate.hasSubsurface,
+        hasDragIcon: certificate.hasDragIcon,
+        hasIme: certificate.hasIme,
+        hasPreview: certificate.hasPreview,
+        hasCapture: certificate.hasCapture,
+        hasEffect: certificate.hasEffect,
+        colorClass: certificate.colorClass,
+        reasonFlags: certificate.reasonFlags,
+        engineGeneration: certificate.engineGeneration,
       ),
     );
   }
@@ -1329,6 +1437,15 @@ class DenialWireCodec {
     _nextSequence = sequence >= 0x7ffffffffffffffe ? 1 : sequence + 1;
     return sequence;
   }
+}
+
+bool _finiteRect(Rect rect) {
+  return rect.left.isFinite &&
+      rect.top.isFinite &&
+      rect.width.isFinite &&
+      rect.height.isFinite &&
+      rect.width >= 0.0 &&
+      rect.height >= 0.0;
 }
 
 // flat_buffers 25.9.23's Dart writeListOfStructs() does not pre-align the

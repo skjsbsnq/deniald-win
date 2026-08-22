@@ -147,6 +147,44 @@ class _WindowOpacityClassReader extends fb.Reader<WindowOpacityClass> {
       WindowOpacityClass.fromValue(const fb.Uint8Reader().read(bc, offset));
 }
 
+enum CompositionColorClass {
+  Unknown(0),
+  SdrCompatible(1),
+  HdrCompatible(2),
+  Incompatible(3);
+
+  final int value;
+  const CompositionColorClass(this.value);
+
+  factory CompositionColorClass.fromValue(int value) {
+    switch (value) {
+      case 0: return CompositionColorClass.Unknown;
+      case 1: return CompositionColorClass.SdrCompatible;
+      case 2: return CompositionColorClass.HdrCompatible;
+      case 3: return CompositionColorClass.Incompatible;
+      default: throw StateError('Invalid value $value for bit flag enum');
+    }
+  }
+
+  static CompositionColorClass? _createOrNull(int? value) =>
+      value == null ? null : CompositionColorClass.fromValue(value);
+
+  static const int minValue = 0;
+  static const int maxValue = 3;
+  static const fb.Reader<CompositionColorClass> reader = _CompositionColorClassReader();
+}
+
+class _CompositionColorClassReader extends fb.Reader<CompositionColorClass> {
+  const _CompositionColorClassReader();
+
+  @override
+  int get size => 1;
+
+  @override
+  CompositionColorClass read(fb.BufferContext bc, int offset) =>
+      CompositionColorClass.fromValue(const fb.Uint8Reader().read(bc, offset));
+}
+
 enum WindowRequestKind {
   ListWindows(0),
   GetDisplayLayout(1),
@@ -865,7 +903,8 @@ enum PayloadTypeId {
   DesktopNotificationCommand(12),
   SettingsRequest(13),
   SettingsResponse(14),
-  TextInputState(15);
+  TextInputState(15),
+  CompositionCertificate(16);
 
   final int value;
   const PayloadTypeId(this.value);
@@ -888,6 +927,7 @@ enum PayloadTypeId {
       case 13: return PayloadTypeId.SettingsRequest;
       case 14: return PayloadTypeId.SettingsResponse;
       case 15: return PayloadTypeId.TextInputState;
+      case 16: return PayloadTypeId.CompositionCertificate;
       default: throw StateError('Invalid value $value for bit flag enum');
     }
   }
@@ -896,7 +936,7 @@ enum PayloadTypeId {
       value == null ? null : PayloadTypeId.fromValue(value);
 
   static const int minValue = 0;
-  static const int maxValue = 15;
+  static const int maxValue = 16;
   static const fb.Reader<PayloadTypeId> reader = _PayloadTypeIdReader();
 }
 
@@ -1117,6 +1157,308 @@ class WireSizeObjectBuilder extends fb.ObjectBuilder {
     fbBuilder.putFloat64(_height);
     fbBuilder.putFloat64(_width);
     return fbBuilder.offset;
+  }
+
+  /// Convenience method to serialize to byte list.
+  @override
+  Uint8List toBytes([String? fileIdentifier]) {
+    final fbBuilder = fb.Builder(deduplicateTables: false);
+    fbBuilder.finish(finish(fbBuilder), fileIdentifier);
+    return fbBuilder.buffer;
+  }
+}
+class CompositionCertificate {
+  CompositionCertificate._(this._bc, this._bcOffset);
+  factory CompositionCertificate(List<int> bytes) {
+    final rootRef = fb.BufferContext.fromBytes(bytes);
+    return reader.read(rootRef, 0);
+  }
+
+  static const fb.Reader<CompositionCertificate> reader = _CompositionCertificateReader();
+
+  final fb.BufferContext _bc;
+  final int _bcOffset;
+
+  int get protocolVersion => const fb.Uint16Reader().vTableGet(_bc, _bcOffset, 4, 1);
+  int get certificateEpoch => const fb.Uint64Reader().vTableGet(_bc, _bcOffset, 6, 0);
+  int get layoutEpoch => const fb.Uint64Reader().vTableGet(_bc, _bcOffset, 8, 0);
+  int get outputId => const fb.Int64Reader().vTableGet(_bc, _bcOffset, 10, 0);
+  int get outputConfigurationEpoch => const fb.Uint64Reader().vTableGet(_bc, _bcOffset, 12, 0);
+  int get soleRootSurfaceId => const fb.Uint64Reader().vTableGet(_bc, _bcOffset, 14, 0);
+  int get surfaceTreeRevision => const fb.Uint64Reader().vTableGet(_bc, _bcOffset, 16, 0);
+  int get bufferRevision => const fb.Uint64Reader().vTableGet(_bc, _bcOffset, 18, 0);
+  WireRect? get sourceRect => WireRect.reader.vTableGetNullable(_bc, _bcOffset, 20);
+  WireRect? get destinationRect => WireRect.reader.vTableGetNullable(_bc, _bcOffset, 22);
+  WireSize? get outputPixelSize => WireSize.reader.vTableGetNullable(_bc, _bcOffset, 24);
+  double get scale => const fb.Float64Reader().vTableGet(_bc, _bcOffset, 26, 1.0);
+  int get transform => const fb.Uint32Reader().vTableGet(_bc, _bcOffset, 28, 0);
+  bool get knownOpaque => const fb.BoolReader().vTableGet(_bc, _bcOffset, 30, false);
+  bool get shellFullyTransparent => const fb.BoolReader().vTableGet(_bc, _bcOffset, 32, false);
+  bool get requiresClientSampling => const fb.BoolReader().vTableGet(_bc, _bcOffset, 34, false);
+  bool get hasPopup => const fb.BoolReader().vTableGet(_bc, _bcOffset, 36, false);
+  bool get hasSubsurface => const fb.BoolReader().vTableGet(_bc, _bcOffset, 38, false);
+  bool get hasDragIcon => const fb.BoolReader().vTableGet(_bc, _bcOffset, 40, false);
+  bool get hasIme => const fb.BoolReader().vTableGet(_bc, _bcOffset, 42, false);
+  bool get hasPreview => const fb.BoolReader().vTableGet(_bc, _bcOffset, 44, false);
+  bool get hasCapture => const fb.BoolReader().vTableGet(_bc, _bcOffset, 46, false);
+  bool get hasEffect => const fb.BoolReader().vTableGet(_bc, _bcOffset, 48, false);
+  CompositionColorClass get colorClass => CompositionColorClass.fromValue(const fb.Uint8Reader().vTableGet(_bc, _bcOffset, 50, 0));
+  int get reasonFlags => const fb.Uint32Reader().vTableGet(_bc, _bcOffset, 52, 0);
+  int get engineGeneration => const fb.Uint64Reader().vTableGet(_bc, _bcOffset, 54, 0);
+
+  @override
+  String toString() {
+    return 'CompositionCertificate{protocolVersion: ${protocolVersion}, certificateEpoch: ${certificateEpoch}, layoutEpoch: ${layoutEpoch}, outputId: ${outputId}, outputConfigurationEpoch: ${outputConfigurationEpoch}, soleRootSurfaceId: ${soleRootSurfaceId}, surfaceTreeRevision: ${surfaceTreeRevision}, bufferRevision: ${bufferRevision}, sourceRect: ${sourceRect}, destinationRect: ${destinationRect}, outputPixelSize: ${outputPixelSize}, scale: ${scale}, transform: ${transform}, knownOpaque: ${knownOpaque}, shellFullyTransparent: ${shellFullyTransparent}, requiresClientSampling: ${requiresClientSampling}, hasPopup: ${hasPopup}, hasSubsurface: ${hasSubsurface}, hasDragIcon: ${hasDragIcon}, hasIme: ${hasIme}, hasPreview: ${hasPreview}, hasCapture: ${hasCapture}, hasEffect: ${hasEffect}, colorClass: ${colorClass}, reasonFlags: ${reasonFlags}, engineGeneration: ${engineGeneration}}';
+  }
+}
+
+class _CompositionCertificateReader extends fb.TableReader<CompositionCertificate> {
+  const _CompositionCertificateReader();
+
+  @override
+  CompositionCertificate createObject(fb.BufferContext bc, int offset) => 
+    CompositionCertificate._(bc, offset);
+}
+
+class CompositionCertificateBuilder {
+  CompositionCertificateBuilder(this.fbBuilder);
+
+  final fb.Builder fbBuilder;
+
+  void begin() {
+    fbBuilder.startTable(26);
+  }
+
+  int addProtocolVersion(int? protocolVersion) {
+    fbBuilder.addUint16(0, protocolVersion);
+    return fbBuilder.offset;
+  }
+  int addCertificateEpoch(int? certificateEpoch) {
+    fbBuilder.addUint64(1, certificateEpoch);
+    return fbBuilder.offset;
+  }
+  int addLayoutEpoch(int? layoutEpoch) {
+    fbBuilder.addUint64(2, layoutEpoch);
+    return fbBuilder.offset;
+  }
+  int addOutputId(int? outputId) {
+    fbBuilder.addInt64(3, outputId);
+    return fbBuilder.offset;
+  }
+  int addOutputConfigurationEpoch(int? outputConfigurationEpoch) {
+    fbBuilder.addUint64(4, outputConfigurationEpoch);
+    return fbBuilder.offset;
+  }
+  int addSoleRootSurfaceId(int? soleRootSurfaceId) {
+    fbBuilder.addUint64(5, soleRootSurfaceId);
+    return fbBuilder.offset;
+  }
+  int addSurfaceTreeRevision(int? surfaceTreeRevision) {
+    fbBuilder.addUint64(6, surfaceTreeRevision);
+    return fbBuilder.offset;
+  }
+  int addBufferRevision(int? bufferRevision) {
+    fbBuilder.addUint64(7, bufferRevision);
+    return fbBuilder.offset;
+  }
+  int addSourceRect(int offset) {
+    fbBuilder.addStruct(8, offset);
+    return fbBuilder.offset;
+  }
+  int addDestinationRect(int offset) {
+    fbBuilder.addStruct(9, offset);
+    return fbBuilder.offset;
+  }
+  int addOutputPixelSize(int offset) {
+    fbBuilder.addStruct(10, offset);
+    return fbBuilder.offset;
+  }
+  int addScale(double? scale) {
+    fbBuilder.addFloat64(11, scale);
+    return fbBuilder.offset;
+  }
+  int addTransform(int? transform) {
+    fbBuilder.addUint32(12, transform);
+    return fbBuilder.offset;
+  }
+  int addKnownOpaque(bool? knownOpaque) {
+    fbBuilder.addBool(13, knownOpaque);
+    return fbBuilder.offset;
+  }
+  int addShellFullyTransparent(bool? shellFullyTransparent) {
+    fbBuilder.addBool(14, shellFullyTransparent);
+    return fbBuilder.offset;
+  }
+  int addRequiresClientSampling(bool? requiresClientSampling) {
+    fbBuilder.addBool(15, requiresClientSampling);
+    return fbBuilder.offset;
+  }
+  int addHasPopup(bool? hasPopup) {
+    fbBuilder.addBool(16, hasPopup);
+    return fbBuilder.offset;
+  }
+  int addHasSubsurface(bool? hasSubsurface) {
+    fbBuilder.addBool(17, hasSubsurface);
+    return fbBuilder.offset;
+  }
+  int addHasDragIcon(bool? hasDragIcon) {
+    fbBuilder.addBool(18, hasDragIcon);
+    return fbBuilder.offset;
+  }
+  int addHasIme(bool? hasIme) {
+    fbBuilder.addBool(19, hasIme);
+    return fbBuilder.offset;
+  }
+  int addHasPreview(bool? hasPreview) {
+    fbBuilder.addBool(20, hasPreview);
+    return fbBuilder.offset;
+  }
+  int addHasCapture(bool? hasCapture) {
+    fbBuilder.addBool(21, hasCapture);
+    return fbBuilder.offset;
+  }
+  int addHasEffect(bool? hasEffect) {
+    fbBuilder.addBool(22, hasEffect);
+    return fbBuilder.offset;
+  }
+  int addColorClass(CompositionColorClass? colorClass) {
+    fbBuilder.addUint8(23, colorClass?.value);
+    return fbBuilder.offset;
+  }
+  int addReasonFlags(int? reasonFlags) {
+    fbBuilder.addUint32(24, reasonFlags);
+    return fbBuilder.offset;
+  }
+  int addEngineGeneration(int? engineGeneration) {
+    fbBuilder.addUint64(25, engineGeneration);
+    return fbBuilder.offset;
+  }
+
+  int finish() {
+    return fbBuilder.endTable();
+  }
+}
+
+class CompositionCertificateObjectBuilder extends fb.ObjectBuilder {
+  final int? _protocolVersion;
+  final int? _certificateEpoch;
+  final int? _layoutEpoch;
+  final int? _outputId;
+  final int? _outputConfigurationEpoch;
+  final int? _soleRootSurfaceId;
+  final int? _surfaceTreeRevision;
+  final int? _bufferRevision;
+  final WireRectObjectBuilder? _sourceRect;
+  final WireRectObjectBuilder? _destinationRect;
+  final WireSizeObjectBuilder? _outputPixelSize;
+  final double? _scale;
+  final int? _transform;
+  final bool? _knownOpaque;
+  final bool? _shellFullyTransparent;
+  final bool? _requiresClientSampling;
+  final bool? _hasPopup;
+  final bool? _hasSubsurface;
+  final bool? _hasDragIcon;
+  final bool? _hasIme;
+  final bool? _hasPreview;
+  final bool? _hasCapture;
+  final bool? _hasEffect;
+  final CompositionColorClass? _colorClass;
+  final int? _reasonFlags;
+  final int? _engineGeneration;
+
+  CompositionCertificateObjectBuilder({
+    int? protocolVersion,
+    int? certificateEpoch,
+    int? layoutEpoch,
+    int? outputId,
+    int? outputConfigurationEpoch,
+    int? soleRootSurfaceId,
+    int? surfaceTreeRevision,
+    int? bufferRevision,
+    WireRectObjectBuilder? sourceRect,
+    WireRectObjectBuilder? destinationRect,
+    WireSizeObjectBuilder? outputPixelSize,
+    double? scale,
+    int? transform,
+    bool? knownOpaque,
+    bool? shellFullyTransparent,
+    bool? requiresClientSampling,
+    bool? hasPopup,
+    bool? hasSubsurface,
+    bool? hasDragIcon,
+    bool? hasIme,
+    bool? hasPreview,
+    bool? hasCapture,
+    bool? hasEffect,
+    CompositionColorClass? colorClass,
+    int? reasonFlags,
+    int? engineGeneration,
+  })
+      : _protocolVersion = protocolVersion,
+        _certificateEpoch = certificateEpoch,
+        _layoutEpoch = layoutEpoch,
+        _outputId = outputId,
+        _outputConfigurationEpoch = outputConfigurationEpoch,
+        _soleRootSurfaceId = soleRootSurfaceId,
+        _surfaceTreeRevision = surfaceTreeRevision,
+        _bufferRevision = bufferRevision,
+        _sourceRect = sourceRect,
+        _destinationRect = destinationRect,
+        _outputPixelSize = outputPixelSize,
+        _scale = scale,
+        _transform = transform,
+        _knownOpaque = knownOpaque,
+        _shellFullyTransparent = shellFullyTransparent,
+        _requiresClientSampling = requiresClientSampling,
+        _hasPopup = hasPopup,
+        _hasSubsurface = hasSubsurface,
+        _hasDragIcon = hasDragIcon,
+        _hasIme = hasIme,
+        _hasPreview = hasPreview,
+        _hasCapture = hasCapture,
+        _hasEffect = hasEffect,
+        _colorClass = colorClass,
+        _reasonFlags = reasonFlags,
+        _engineGeneration = engineGeneration;
+
+  /// Finish building, and store into the [fbBuilder].
+  @override
+  int finish(fb.Builder fbBuilder) {
+    fbBuilder.startTable(26);
+    fbBuilder.addUint16(0, _protocolVersion);
+    fbBuilder.addUint64(1, _certificateEpoch);
+    fbBuilder.addUint64(2, _layoutEpoch);
+    fbBuilder.addInt64(3, _outputId);
+    fbBuilder.addUint64(4, _outputConfigurationEpoch);
+    fbBuilder.addUint64(5, _soleRootSurfaceId);
+    fbBuilder.addUint64(6, _surfaceTreeRevision);
+    fbBuilder.addUint64(7, _bufferRevision);
+    if (_sourceRect != null) {
+      fbBuilder.addStruct(8, _sourceRect!.finish(fbBuilder));
+    }
+    if (_destinationRect != null) {
+      fbBuilder.addStruct(9, _destinationRect!.finish(fbBuilder));
+    }
+    if (_outputPixelSize != null) {
+      fbBuilder.addStruct(10, _outputPixelSize!.finish(fbBuilder));
+    }
+    fbBuilder.addFloat64(11, _scale);
+    fbBuilder.addUint32(12, _transform);
+    fbBuilder.addBool(13, _knownOpaque);
+    fbBuilder.addBool(14, _shellFullyTransparent);
+    fbBuilder.addBool(15, _requiresClientSampling);
+    fbBuilder.addBool(16, _hasPopup);
+    fbBuilder.addBool(17, _hasSubsurface);
+    fbBuilder.addBool(18, _hasDragIcon);
+    fbBuilder.addBool(19, _hasIme);
+    fbBuilder.addBool(20, _hasPreview);
+    fbBuilder.addBool(21, _hasCapture);
+    fbBuilder.addBool(22, _hasEffect);
+    fbBuilder.addUint8(23, _colorClass?.value);
+    fbBuilder.addUint32(24, _reasonFlags);
+    fbBuilder.addUint64(25, _engineGeneration);
+    return fbBuilder.endTable();
   }
 
   /// Convenience method to serialize to byte list.
@@ -5192,6 +5534,7 @@ class Envelope {
       case 13: return SettingsRequest.reader.vTableGetNullable(_bc, _bcOffset, 12);
       case 14: return SettingsResponse.reader.vTableGetNullable(_bc, _bcOffset, 12);
       case 15: return TextInputState.reader.vTableGetNullable(_bc, _bcOffset, 12);
+      case 16: return CompositionCertificate.reader.vTableGetNullable(_bc, _bcOffset, 12);
       default: return null;
     }
   }

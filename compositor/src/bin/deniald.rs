@@ -3745,6 +3745,7 @@ fn run_flutter_event_loop(
         synchronize_flutter_window_management(runtime, &mut events)?;
         synchronize_flutter_scene(runtime, &mut events)?;
         synchronize_flutter_input_layout(runtime, &mut events)?;
+        synchronize_flutter_composition_certificate(runtime, &mut events);
         synchronize_wayland_cursor(runtime, &mut events)?;
         if background_started.elapsed() >= COMPOSITOR_BACKGROUND_SLICE {
             event_loop.dispatch(Duration::ZERO, &mut events)?;
@@ -4182,6 +4183,7 @@ fn wait_for_flutter_frame(
         synchronize_flutter_window_management(runtime, events)?;
         synchronize_flutter_scene(runtime, events)?;
         synchronize_flutter_input_layout(runtime, events)?;
+        synchronize_flutter_composition_certificate(runtime, events);
         synchronize_wayland_cursor(runtime, events)?;
         if let Some(index) = runtime.take_ready() {
             return Ok(Some(index));
@@ -4368,6 +4370,19 @@ fn synchronize_flutter_input_layout(
     // it so releasing a local Flutter surface exposes an already-active
     // Wayland editor in this iteration instead of waiting for unrelated input.
     publish_software_keyboard_state(runtime, events)
+}
+
+#[cfg(feature = "flutter")]
+fn synchronize_flutter_composition_certificate(
+    runtime: &mut flutter_runtime::FlutterRuntime,
+    events: &mut RuntimeState,
+) {
+    let Some(certificate) = runtime.take_composition_certificate() else {
+        return;
+    };
+    if let Some(frontend) = events.wayland.as_mut() {
+        frontend.install_composition_certificate(certificate);
+    }
 }
 
 #[cfg(feature = "flutter")]

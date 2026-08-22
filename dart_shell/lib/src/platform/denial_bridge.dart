@@ -666,6 +666,15 @@ class DenialBridge {
     return true;
   }
 
+  bool publishCompositionCertificate(wire.DenialCompositionCertificate certificate) {
+    final bytes = _wireCodec.encodeCompositionCertificate(certificate);
+    if (bytes == null) {
+      return false;
+    }
+    _sendWire(bytes);
+    return true;
+  }
+
   /// Requests a compositor-owned window whose content is built by the
   /// embedded Flutter shell instead of sampled from a client surface.
   bool createLocalWindow({

@@ -11,6 +11,9 @@ import '../state/shell_controller.dart';
 import 'desktop_taskbar_preview.dart';
 import 'desktop_visibility.dart';
 import 'desktop_workspace.dart';
+import '../platform/denial_wire.dart' as wire;
+import '../models/display_layout.dart';
+import '../state/display_layout.dart';
 
 class DesktopInputLayoutPublisher extends ConsumerStatefulWidget {
   const DesktopInputLayoutPublisher({required this.child, super.key});
@@ -28,6 +31,8 @@ class _DesktopInputLayoutPublisherState
       DesktopWindowConfigureTracker();
   bool _scheduled = false;
   int _epoch = 0;
+  int _certificateEpoch = 0;
+  String? _lastCertificateKey;
   InputLayoutSnapshot? _lastSnapshot;
 
   @override
@@ -304,8 +309,100 @@ class _DesktopInputLayoutPublisherState
     if (!ref.read(denialBridgeProvider).publishInputLayout(snapshot)) {
       return;
     }
+    _publishCompositionCertificate(
+      viewSize: viewSize,
+      windows: windows,
+      placements: placements,
+      interactions: interactions,
+      layoutEpoch: layoutEpoch,
+      outputLayout: ref.read(displayLayoutProvider),
+      previewActive: previewTarget != null || desktop.overviewActive,
+    );
     _epoch = snapshot.epoch;
     _lastSnapshot = snapshot;
+  }
+
+  void _publishCompositionCertificate({
+    required Size viewSize,
+    required List<DenialWindow> windows,
+    required List<DesktopWindowPlacement> placements,
+    required ShellInteractionSnapshot interactions,
+    required int layoutEpoch,
+    required DisplayLayout? outputLayout,
+    required bool previewActive,
+  }) {
+    final bridge = ref.read(denialBridgeProvider);
+    final output = outputLayout?.outputs.length == 1
+        ? outputLayout!.outputs.single
+        : null;
+    final candidate = placements.length == 1 ? placements.single : null;
+    DenialWindow? window;
+    if (candidate != null) {
+      for (final item in windows) {
+        if (item.objectId == candidate.objectId) {
+          window = item;
+          break;
+        }
+      }
+    }
+    final eligibleShape = output != null &&
+        candidate != null &&
+        window != null &&
+        candidate.fullscreen &&
+        !candidate.minimized &&
+        !interactions.capturesFullScene &&
+        !previewActive &&
+        window.isUserApp &&
+        window.popupRoots.isEmpty &&
+        window.surfaceLayers.length == 1 &&
+        window.isOpaque &&
+        window.transform == 0 &&
+        candidate.contentRect == output.logicalRect &&
+        window.contentCoordinateRect.width > 0.0 &&
+        window.contentCoordinateRect.height > 0.0;
+    final certificateKey = <Object?>[
+      layoutEpoch,
+      output?.monitorId ?? 0,
+      outputLayout?.epoch ?? layoutEpoch,
+      eligibleShape ? window!.objectId : 0,
+      eligibleShape,
+      previewActive,
+      interactions.capturesFullScene,
+      candidate?.dragging ?? false,
+    ].join(':');
+    if (_lastCertificateKey == certificateKey) {
+      return;
+    }
+    _lastCertificateKey = certificateKey;
+    _certificateEpoch += 1;
+    final certificate = wire.DenialCompositionCertificate(
+      certificateEpoch: _certificateEpoch,
+      layoutEpoch: layoutEpoch,
+      outputId: output?.monitorId ?? 0,
+      outputConfigurationEpoch: outputLayout?.epoch ?? layoutEpoch,
+      soleRootSurfaceId: eligibleShape ? window!.objectId : 0,
+      surfaceTreeRevision: eligibleShape ? 1 : 0,
+      bufferRevision: eligibleShape ? 1 : 0,
+      sourceRect: eligibleShape ? window!.contentCoordinateRect : Rect.zero,
+      destinationRect: eligibleShape ? candidate!.contentRect : Rect.zero,
+      outputPixelSize: output?.pixelSize ?? viewSize,
+      scale: output?.scale ?? 1.0,
+      transform: output == null ? 0 : 0,
+      knownOpaque: eligibleShape,
+      shellFullyTransparent: eligibleShape,
+      requiresClientSampling: !eligibleShape,
+      hasPopup: window?.popupRoots.isNotEmpty ?? false,
+      hasSubsurface: (window?.surfaceLayers.length ?? 0) > 1,
+      hasDragIcon: candidate?.dragging ?? false,
+      hasIme: false,
+      hasPreview: previewActive,
+      hasCapture: interactions.capturesFullScene,
+      hasEffect: !eligibleShape,
+      colorClass: wire.CompositionColorClass.Unknown,
+      reasonFlags: eligibleShape ? 0 : 1,
+      engineGeneration: 1,
+    );
+    bridge.publishCompositionCertificate(certificate);
   }
 
   void _configureWindowGeometry(

@@ -5948,6 +5948,10 @@ impl FlutterRuntime {
         self.wire.take_input_layout_update()
     }
 
+    pub fn take_composition_certificate(&mut self) -> Option<wire::CompositionCertificate> {
+        self.wire.take_composition_certificate()
+    }
+
     pub fn recycle_input_layout(&mut self, layout: wire::InputLayoutSnapshot) {
         self.wire.recycle_input_layout(layout);
     }
