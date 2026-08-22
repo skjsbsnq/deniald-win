@@ -9,6 +9,7 @@ import '../models/denial_window.dart';
 import '../state/desktop_window_switcher.dart';
 import '../state/shell_controller.dart';
 import 'desktop_taskbar_preview.dart';
+import 'desktop_visibility.dart';
 import 'desktop_workspace.dart';
 
 class DesktopInputLayoutPublisher extends ConsumerStatefulWidget {
@@ -75,6 +76,7 @@ class _DesktopInputLayoutPublisherState
         ref.read(shellControllerProvider).windows,
         ref.read(desktopWorkspaceProvider),
         ref.read(shellInteractionRegistryProvider),
+        shell.windowSnapshotSequence,
       );
     });
   }
@@ -84,6 +86,7 @@ class _DesktopInputLayoutPublisherState
     List<DenialWindow> windows,
     DesktopWorkspaceState desktop,
     ShellInteractionSnapshot interactions,
+    int layoutEpoch,
   ) {
     if (viewSize.width <= 0.0 || viewSize.height <= 0.0) {
       return;
@@ -97,6 +100,7 @@ class _DesktopInputLayoutPublisherState
         .where((window) => window.isInputMethodPopup && window.geometry != null)
         .toList(growable: false);
     final switcher = ref.read(desktopWindowSwitcherProvider);
+    final previewTarget = ref.read(desktopTaskbarPreviewProvider);
     final sampledSwitcherIds =
         interactions.capturesFullScene && (switcher?.isSelecting ?? false)
         ? switcher!.objectIds.toSet()
@@ -107,7 +111,8 @@ class _DesktopInputLayoutPublisherState
               (placement) =>
                   (!placement.minimized ||
                       desktop.isInOverview(placement.objectId) ||
-                      sampledSwitcherIds.contains(placement.objectId)) &&
+                      sampledSwitcherIds.contains(placement.objectId) ||
+                      previewTarget?.objectId == placement.objectId) &&
                   windowsById.containsKey(placement.objectId),
             )
             .toList(growable: false)
@@ -178,9 +183,7 @@ class _DesktopInputLayoutPublisherState
     }
 
     final inputWindows = <InputWindowRegion>[];
-    final visibleSurfaceIds = <int>{};
     for (final popup in inputMethodPopups) {
-      visibleSurfaceIds.addAll(popup.visibleSurfaceIds);
       if (!interactions.capturesFullScene) {
         inputWindows.add(
           InputWindowRegion(
@@ -196,13 +199,6 @@ class _DesktopInputLayoutPublisherState
     }
     // Minimized windows do not need continuous presentation sampling unless
     // an active taskbar preview is currently hovering over them.
-    final previewTarget = ref.read(desktopTaskbarPreviewProvider);
-    if (previewTarget != null) {
-      final previewWindow = windowsById[previewTarget.objectId];
-      if (previewWindow != null) {
-        visibleSurfaceIds.addAll(previewWindow.visibleSurfaceIds);
-      }
-    }
     final zStride = placements.fold<int>(2, (stride, placement) {
       final layers = windowsById[placement.objectId]!.surfaceLayers.length + 2;
       return math.max(stride, layers);
@@ -217,12 +213,10 @@ class _DesktopInputLayoutPublisherState
     for (final placement in placements.reversed) {
       if (interactions.capturesFullScene) {
         final window = windowsById[placement.objectId]!;
-        visibleSurfaceIds.addAll(window.visibleSurfaceIds);
         _configureWindowGeometry(window, placement);
         continue;
       }
       final window = windowsById[placement.objectId]!;
-      visibleSurfaceIds.addAll(window.visibleSurfaceIds);
       final visualContentRect = placement.contentRect;
       final sourceRect = window.contentCoordinateRect;
       final baseZ = placementOrder[placement.objectId]! * zStride;
@@ -260,12 +254,46 @@ class _DesktopInputLayoutPublisherState
       _configureWindowGeometry(window, placement);
     }
 
+    final forcedWindowIds = <int>{
+      if (previewTarget != null) previewTarget.objectId,
+    };
+    // The current wire carries a global canvas, not output-scoped geometry.
+    // A single-output scene can safely use that canvas. With multiple monitor
+    // IDs, output ownership is unknown, so the evaluator must retain all
+    // clients until an output-scoped report is added to the wire.
+    final monitorIds = placements
+        .map((placement) => placement.monitorId)
+        .toSet();
+    final outputRects = monitorIds.length <= 1
+        ? <({int id, Rect rect})>[
+            (id: monitorIds.isEmpty ? -1 : monitorIds.first, rect: canvas),
+          ]
+        : <({int id, Rect rect})>[(id: -1, rect: Rect.zero)];
+    final visibility = <int>{};
+    for (final output in outputRects) {
+      visibility.addAll(
+        computeConservativeVisibleRegions(
+          layoutEpoch: layoutEpoch,
+          outputId: output.id,
+          outputRect: output.rect,
+          placements: placements,
+          windowsById: windowsById,
+          forcedWindowIds: forcedWindowIds,
+          forceAll: interactions.capturesFullScene,
+        ).visibleSurfaceIds,
+      );
+    }
+    for (final popup in inputMethodPopups) {
+      visibility.addAll(popup.visibleSurfaceIds);
+    }
+
     _configureTracker.retainWindowIds(windowsById.keys.toSet());
     final snapshot = InputLayoutSnapshot(
       epoch: _epoch + 1,
       shellRegions: shellRegions,
       windows: inputWindows,
-      visibleSurfaceIds: visibleSurfaceIds.toList(growable: false),
+      visibleSurfaceIds: visibility.toList(growable: false)..sort(),
+      visibilityEpoch: layoutEpoch,
       keyboardCapture: interactions.capturesKeyboard,
       exclusiveShellMode: interactions.compositorExclusive,
     );

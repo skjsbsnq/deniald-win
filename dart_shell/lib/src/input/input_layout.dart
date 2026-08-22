@@ -134,6 +134,7 @@ class InputLayoutSnapshot {
     required this.shellRegions,
     required this.windows,
     this.visibleSurfaceIds = const <int>[],
+    this.visibilityEpoch = 0,
     this.softwareKeyboardRegions = const <Rect>[],
     this.keyboardCapture = false,
     this.exclusiveShellMode = false,
@@ -143,6 +144,10 @@ class InputLayoutSnapshot {
   final List<Rect> shellRegions;
   final List<InputWindowRegion> windows;
   final List<int> visibleSurfaceIds;
+
+  /// Dart-only visibility/layout epoch. It is intentionally not encoded until
+  /// Rust has an output-scoped report consumer.
+  final int visibilityEpoch;
   final List<Rect> softwareKeyboardRegions;
   final bool keyboardCapture;
   final bool exclusiveShellMode;
@@ -150,6 +155,7 @@ class InputLayoutSnapshot {
   bool hasSameRoutingAs(InputLayoutSnapshot other) {
     if (keyboardCapture != other.keyboardCapture ||
         exclusiveShellMode != other.exclusiveShellMode ||
+        visibilityEpoch != other.visibilityEpoch ||
         shellRegions.length != other.shellRegions.length ||
         softwareKeyboardRegions.length !=
             other.softwareKeyboardRegions.length ||
