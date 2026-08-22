@@ -3818,7 +3818,11 @@ impl WaylandFrontend {
             return None;
         }
         let visibility_epoch = self.input_layout.as_ref()?.epoch;
-        if certificate.layout_epoch != visibility_epoch {
+        if self.input_visibility_known
+            && !self
+                .visible_window_ids
+                .contains(&certificate.sole_root_surface_id)
+        {
             return None;
         }
         let surface = self.surfaces_by_id.get(&certificate.sole_root_surface_id)?;

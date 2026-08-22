@@ -4578,7 +4578,7 @@ fn service_direct_scanout(
         dma_buf: candidate.dmabuf.num_planes() > 0,
         sync_proven: true,
         certificate_epoch: candidate.certificate.certificate_epoch,
-        visibility_epoch: candidate.visibility_epoch,
+        visibility_epoch: candidate.certificate.layout_epoch,
         certificate: Some(&candidate.certificate),
         geometry: direct_scanout::CandidateGeometry {
             output_width: u32::from(width),
