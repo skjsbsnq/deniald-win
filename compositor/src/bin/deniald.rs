@@ -1392,6 +1392,8 @@ struct RuntimeState {
     direct_scanout: direct_scanout::PromotionController,
     #[cfg(feature = "flutter")]
     direct_promotion: Option<direct_scanout::DirectPromotion>,
+    #[cfg(feature = "flutter")]
+    direct_candidate_armed: Option<(OutputId, u64, u64, u64, u64)>,
 }
 
 #[cfg(feature = "flutter")]
@@ -4452,6 +4454,9 @@ fn service_direct_scanout(
         if !active.confirmed {
             return Ok(());
         }
+        if active.fallback_pending {
+            return Ok(());
+        }
         let still_current = events.wayland.as_ref().and_then(|frontend| {
             frontend
                 .primary_scanout_candidate(OutputId(active.output))
@@ -4466,9 +4471,6 @@ fn service_direct_scanout(
 
         let output = OutputId(active.output);
         if let Some(scanout) = scanouts.iter().find(|scanout| scanout.output.id == output) {
-            if active.fallback_pending {
-                return Ok(());
-            }
             let atlas_index = scheduler
                 .scanning_framebuffer_index(output, scanouts)
                 .unwrap_or(swapchain.current);
@@ -4492,6 +4494,7 @@ fn service_direct_scanout(
     }
 
     if !events.direct_scanout.enabled() {
+        events.direct_candidate_armed = None;
         return Ok(());
     }
     let powered = scanouts
@@ -4502,6 +4505,13 @@ fn service_direct_scanout(
         return Ok(());
     }
     let scanout = powered[0];
+    if events
+        .wayland
+        .as_ref()
+        .is_some_and(|frontend| frontend.has_pending_screencopy_for_output(scanout.output.id))
+    {
+        return Ok(());
+    }
     if scanout.output.transform != OutputTransform::Normal {
         return Ok(());
     }
@@ -4510,9 +4520,19 @@ fn service_direct_scanout(
         .as_ref()
         .and_then(|frontend| frontend.primary_scanout_candidate(scanout.output.id))
     else {
+        events.direct_candidate_armed = None;
         return Ok(());
     };
     let (width, height) = scanout.output.mode.size();
+    if !candidate.opaque
+        || candidate.certificate.output_pixel_size != (f64::from(width), f64::from(height))
+        || candidate.source_rect.0 != 0.0
+        || candidate.source_rect.1 != 0.0
+        || candidate.source_rect.2 != f64::from(candidate.source_size.0)
+        || candidate.source_rect.3 != f64::from(candidate.source_size.1)
+    {
+        return Ok(());
+    }
     let metadata = direct_scanout::CandidateMetadata {
         single_output: true,
         dma_buf: candidate.dmabuf.num_planes() > 0,
@@ -4534,8 +4554,37 @@ fn service_direct_scanout(
         .direct_scanout
         .eligibility(metadata, candidate.buffer_revision);
     if let Some(reason) = decision.reason {
+        events.direct_candidate_armed = None;
         debug!(event = "rejected_reason", reason = reason.code(), output = ?scanout.output.id, "Direct Scanout candidate rejected");
         return Ok(());
+    }
+    let candidate_key = (
+        scanout.output.id,
+        candidate.root_surface_id,
+        candidate.buffer_revision,
+        candidate.certificate.certificate_epoch,
+    );
+    let presented_frames = scheduler.presented_frames();
+    match events.direct_candidate_armed {
+        Some((output, surface, revision, certificate_epoch, armed_at))
+            if (output, surface, revision, certificate_epoch) == candidate_key
+                && presented_frames > armed_at => {}
+        Some((output, surface, revision, certificate_epoch, _))
+            if (output, surface, revision, certificate_epoch) == candidate_key =>
+        {
+            return Ok(());
+        }
+        _ => {
+            events.direct_candidate_armed = Some((
+                candidate_key.0,
+                candidate_key.1,
+                candidate_key.2,
+                candidate_key.3,
+                presented_frames,
+            ));
+            info!(event = "eligible", output = ?candidate_key.0, surface = candidate_key.1, revision = candidate_key.2, "Direct Scanout candidate armed behind composed atlas");
+            return Ok(());
+        }
     }
     if decision.state != direct_scanout::PromotionState::Armed
         || !scheduler.can_switch_to_direct(scanout.output.id, scanouts)
@@ -4578,6 +4627,7 @@ fn service_direct_scanout(
         confirmed: false,
         fallback_pending: false,
     });
+    events.direct_candidate_armed = None;
     info!(event = "test_only_passed", output = ?scanout.output.id, surface = candidate.root_surface_id, revision = candidate.buffer_revision, "Direct Scanout primary promotion submitted");
     Ok(())
 }

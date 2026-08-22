@@ -695,6 +695,8 @@ pub(super) struct PrimaryScanoutCandidate {
     pub(super) source_size: (u32, u32),
     pub(super) destination_size: (u32, u32),
     pub(super) transform: u32,
+    pub(super) opaque: bool,
+    pub(super) source_rect: (f64, f64, f64, f64),
 }
 
 #[cfg(feature = "flutter")]
@@ -3811,6 +3813,8 @@ impl WaylandFrontend {
             || certificate.has_preview
             || certificate.has_capture
             || certificate.has_effect
+            || self.pointer_cursor_visible
+            || !matches!(self.cursor_status, CursorImageStatus::Hidden)
         {
             return None;
         }
@@ -3819,14 +3823,28 @@ impl WaylandFrontend {
             return None;
         }
         let surface = self.surfaces_by_id.get(&certificate.sole_root_surface_id)?;
-        let (view, buffer, transform) = with_renderer_surface_state(surface, |state| {
-            (
-                state.view(),
-                state.buffer().cloned(),
-                state.buffer_transform(),
-            )
-        })?;
+        let (view, buffer, transform, opaque, source) =
+            with_renderer_surface_state(surface, |state| {
+                let view = state.view();
+                let opaque = view.is_some_and(|view| {
+                    state.opaque_regions().is_some_and(|regions| {
+                        Rectangle::from_size(view.dst)
+                            .subtract_rects(regions.iter().copied())
+                            .is_empty()
+                    })
+                });
+                let transform = state.buffer_transform();
+                let scale = state.buffer_scale().max(1);
+                let source = view.and_then(|view| {
+                    state.buffer_size().map(|buffer_size| {
+                        view.src
+                            .to_buffer(f64::from(scale), transform, &buffer_size.to_f64())
+                    })
+                });
+                (view, state.buffer().cloned(), transform, opaque, source)
+            })?;
         let view = view?;
+        let source = source?;
         let renderer_buffer = buffer?;
         let dmabuf = get_dmabuf(&renderer_buffer).ok()?.clone();
         let revision = self.surface_buffer_revisions.get(&surface.id()).copied()?;
@@ -3847,6 +3865,8 @@ impl WaylandFrontend {
             certificate,
             visibility_epoch,
             transform: transform_to_wire(transform),
+            opaque,
+            source_rect: (source.loc.x, source.loc.y, source.size.w, source.size.h),
         })
     }
 

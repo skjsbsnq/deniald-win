@@ -246,6 +246,12 @@ fi
 if [[ -n "$flutter_renderer" ]]; then
   denial_args+=(--flutter-renderer "$flutter_renderer")
 fi
+experimental_primary_promotion="${DENIAL_EXPERIMENTAL_PRIMARY_PROMOTION:-0}"
+case "$experimental_primary_promotion" in
+  0) ;;
+  1) denial_args+=(--experimental-primary-promotion) ;;
+  *) die "DENIAL_EXPERIMENTAL_PRIMARY_PROMOTION must be 0 or 1, got: $experimental_primary_promotion" ;;
+esac
 if [[ -n "${DENIAL_FLUTTER_DEBUG_BUNDLE:-}" ]]; then
   [[ "$DENIAL_FLUTTER_DEBUG_BUNDLE" == /* ]] \
     || die "DENIAL_FLUTTER_DEBUG_BUNDLE must be absolute: $DENIAL_FLUTTER_DEBUG_BUNDLE"

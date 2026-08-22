@@ -291,7 +291,7 @@ mod tests {
         }
     }
 
-    fn candidate(cert: &'static CompositionCertificate) -> CandidateMetadata {
+    fn candidate(cert: &'static CompositionCertificate) -> CandidateMetadata<'static> {
         CandidateMetadata {
             single_output: true,
             dma_buf: true,
