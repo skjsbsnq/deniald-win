@@ -2323,22 +2323,45 @@ struct ExternalTextureSlot {
     queued: Option<ExternalTextureSource>,
     current_sampled: bool,
     expects_sample: bool,
+    schedule_pending: bool,
 }
 
 impl ExternalTextureSlot {
     fn queue(&mut self, source: ExternalTextureSource, expects_sample: bool) -> bool {
+        let was_sampling = self.expects_sample;
         self.expects_sample = expects_sample;
-        let unchanged = self
+        let current_unchanged = self
+            .current
+            .as_ref()
+            .is_some_and(|candidate| candidate.same_generation(&source));
+        let queued_unchanged = self
             .queued
             .as_ref()
-            .is_some_and(|candidate| candidate.same_generation(&source))
-            || self
-                .current
-                .as_ref()
-                .is_some_and(|candidate| candidate.same_generation(&source));
-        if unchanged {
+            .is_some_and(|candidate| candidate.same_generation(&source));
+
+        if !expects_sample {
+            // A held source has no active Flutter reader. Replace it in place
+            // and mark it as already safe to retire; later visible revisions
+            // must not wait for a sample which can never arrive.
+            self.queued = None;
+            self.current = Some(source);
+            self.current_sampled = true;
+            self.schedule_pending = false;
+            return !current_unchanged;
+        }
+
+        if current_unchanged || queued_unchanged {
+            // Hidden -> visible is a real consumer transition even when the
+            // client has not committed another buffer. Schedule the latest
+            // held revision exactly once.
+            if !was_sampling && current_unchanged {
+                self.schedule_pending = true;
+                self.current_sampled = false;
+                return true;
+            }
             return false;
         }
+
         // Client commits within one output interval are a mailbox. Preserve
         // the current generation being sampled and retain only the newest
         // successor for the next physical edge.
@@ -2347,14 +2370,36 @@ impl ExternalTextureSlot {
     }
 
     fn advance(&mut self) -> bool {
-        if self.queued.is_none()
-            || (self.current.is_some() && !self.current_sampled && self.expects_sample)
-        {
-            return false;
+        if let Some(queued) = self.queued.take() {
+            if self.current.is_some() && !self.current_sampled && self.expects_sample {
+                self.queued = Some(queued);
+                return self.needs_schedule();
+            }
+            self.current = Some(queued);
+            self.current_sampled = !self.expects_sample;
+            self.schedule_pending = self.expects_sample;
+            return true;
         }
-        self.current = self.queued.take();
-        self.current_sampled = false;
-        true
+
+        // `queue()` installs the first visible source directly as current.
+        // Report that source once so the scheduler can publish its external
+        // texture transaction even though no successor is waiting.
+        self.needs_schedule()
+    }
+
+    fn needs_schedule(&self) -> bool {
+        self.expects_sample && self.schedule_pending
+    }
+
+    fn has_pending_work(&self) -> bool {
+        self.needs_schedule()
+            || (self.expects_sample
+                && self.queued.is_some()
+                && (self.current.is_none() || self.current_sampled))
+    }
+
+    fn mark_scheduled(&mut self) {
+        self.schedule_pending = false;
     }
 }
 
@@ -2635,18 +2680,6 @@ impl ExternalTextureFrame {
                 revision,
             },
             expects_sample,
-        }
-    }
-
-    pub(super) fn from_owned_dmabuf(texture_id: i64, dmabuf: Dmabuf, revision: u64) -> Self {
-        Self {
-            texture_id,
-            source: ExternalTextureSource::Dmabuf {
-                dmabuf,
-                buffer_guard: None,
-                revision,
-            },
-            expects_sample: false,
         }
     }
 
@@ -3174,10 +3207,8 @@ impl FlutterGlHandler {
         } in frames
         {
             let revision = source.generation();
-            let queued = sources
-                .entry(texture_id)
-                .or_default()
-                .queue(source, expects_sample);
+            let slot = sources.entry(texture_id).or_default();
+            let queued = slot.queue(source, expects_sample);
             scanout_audit::record_texture_update(texture_id, revision, expects_sample, queued);
         }
     }
@@ -3185,16 +3216,35 @@ impl FlutterGlHandler {
     fn advance_external_texture_sources(&self, changed: &mut Vec<i64>) {
         let mut sources = lock(&self.external_texture_sources);
         for (texture_id, slot) in sources.iter_mut() {
-            if slot.advance() {
+            slot.advance();
+            if slot.needs_schedule() {
                 changed.push(*texture_id);
             }
         }
     }
 
-    fn has_queued_external_texture_sources(&self) -> bool {
+    fn has_pending_external_texture_sources(&self) -> bool {
         lock(&self.external_texture_sources)
             .values()
-            .any(|slot| slot.queued.is_some())
+            .any(ExternalTextureSlot::has_pending_work)
+    }
+
+    fn retain_pending_external_texture_ids(&self, texture_ids: &mut Vec<i64>) {
+        let sources = lock(&self.external_texture_sources);
+        texture_ids.retain(|texture_id| {
+            sources
+                .get(texture_id)
+                .is_some_and(ExternalTextureSlot::needs_schedule)
+        });
+    }
+
+    fn mark_external_texture_sources_scheduled(&self, texture_ids: &[i64]) {
+        let mut sources = lock(&self.external_texture_sources);
+        for texture_id in texture_ids {
+            if let Some(slot) = sources.get_mut(texture_id) {
+                slot.mark_scheduled();
+            }
+        }
     }
 
     fn current_external_texture(&self, texture_id: i64) -> Option<ExternalTextureSource> {
@@ -5647,8 +5697,7 @@ impl FlutterRuntime {
         }
         PendingFrame {
             flutter_requested: self.handler.has_pending_vsync(),
-            app_textures_updated: !self.pending_frame_texture_ids.is_empty()
-                || self.handler.has_queued_external_texture_sources(),
+            app_textures_updated: self.handler.has_pending_external_texture_sources(),
             producer_available: self.handler.producer_available(),
         }
     }
@@ -5676,6 +5725,8 @@ impl FlutterRuntime {
     }
 
     fn publish_external_texture_transaction(&mut self) -> Result<bool, Box<dyn Error>> {
+        self.handler
+            .retain_pending_external_texture_ids(&mut self.pending_frame_texture_ids);
         if self.pending_frame_texture_ids.is_empty() {
             return Ok(false);
         }
@@ -5686,6 +5737,8 @@ impl FlutterRuntime {
             .engine();
         scanout_audit::record_flutter_schedule(self.pending_frame_texture_ids.len());
         engine.schedule_frame_for_external_textures(&self.pending_frame_texture_ids)?;
+        self.handler
+            .mark_external_texture_sources_scheduled(&self.pending_frame_texture_ids);
         self.pending_frame_texture_ids.clear();
         Ok(true)
     }
@@ -6066,10 +6119,18 @@ impl FlutterRuntime {
             .ok_or("Flutter external texture identifiers are exhausted")?;
         self.host().engine().register_external_texture(texture_id)?;
         self.registered_external_textures.insert(texture_id);
+        // The screenshot selection surface is an explicit Flutter consumer,
+        // even though it is not part of the Wayland visibility set.
         self.handler
-            .set_external_texture_sources([ExternalTextureFrame::from_owned_dmabuf(
-                texture_id, dmabuf, revision,
-            )]);
+            .set_external_texture_sources([ExternalTextureFrame {
+                texture_id,
+                source: ExternalTextureSource::Dmabuf {
+                    dmabuf,
+                    buffer_guard: None,
+                    revision,
+                },
+                expects_sample: true,
+            }]);
         self.screenshot_texture_id = Some(texture_id);
         Ok(texture_id)
     }
@@ -7081,6 +7142,7 @@ mod tests {
         assert!(slot.advance());
         assert_eq!(slot.current.as_ref().unwrap().generation(), 1);
         assert!(!slot.current_sampled);
+        slot.mark_scheduled();
 
         assert!(slot.queue(source(2, 2), true));
         assert!(!slot.advance());
@@ -7099,8 +7161,46 @@ mod tests {
         // Like C++, off-scene surfaces do not wait forever for a sample which
         // the shell has explicitly said it will not draw.
         assert!(slot.queue(source(4, 4), false));
-        assert!(slot.advance());
+        assert!(!slot.advance());
         assert_eq!(slot.current.as_ref().unwrap().generation(), 4);
+        assert!(slot.current_sampled);
+        assert!(!slot.needs_schedule());
+
+        // Reappearance promotes the already-latest hidden revision exactly
+        // once; no old queued generation is replayed.
+        let latest = slot.current.as_ref().unwrap().clone();
+        assert!(slot.queue(latest, true));
+        assert!(slot.needs_schedule());
+        slot.mark_scheduled();
+        assert!(!slot.needs_schedule());
+        let latest = slot.current.as_ref().unwrap().clone();
+        assert!(!slot.queue(latest, true));
+        assert!(!slot.needs_schedule());
+    }
+
+    #[test]
+    fn hidden_mailbox_keeps_only_the_latest_revision_and_reveals_once() {
+        let source = |revision, value| {
+            ExternalTextureSource::Shm(
+                ShmTextureFrame::new(1, 1, revision, vec![value, 0, 0, 255]).unwrap(),
+            )
+        };
+        let mut slot = ExternalTextureSlot::default();
+
+        for revision in 1..=20 {
+            assert!(slot.queue(source(revision, revision as u8), false));
+            assert!(!slot.advance());
+            assert_eq!(slot.current.as_ref().unwrap().generation(), revision);
+            assert!(slot.current_sampled);
+            assert!(!slot.needs_schedule());
+        }
+        assert!(slot.queued.is_none());
+
+        let latest = slot.current.as_ref().unwrap().clone();
+        assert!(slot.queue(latest, true));
+        assert!(slot.needs_schedule());
+        slot.mark_scheduled();
+        assert!(!slot.needs_schedule());
     }
 
     #[test]

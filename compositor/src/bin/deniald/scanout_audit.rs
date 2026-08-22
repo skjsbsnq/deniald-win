@@ -198,6 +198,7 @@ struct ProducerAudit {
     flutter_schedules: u64,
     flutter_texture_ids: u64,
     frame_callbacks: u64,
+    callback_suppressed: u64,
     eligibility_reports: u64,
     eligible: u64,
     reason_counts: [u64; 14],
@@ -219,6 +220,7 @@ impl Default for ProducerAudit {
             flutter_schedules: 0,
             flutter_texture_ids: 0,
             frame_callbacks: 0,
+            callback_suppressed: 0,
             eligibility_reports: 0,
             eligible: 0,
             reason_counts: [0; 14],
@@ -257,6 +259,7 @@ fn with_audit(mut update: impl FnMut(&mut ProducerAudit)) {
         flutter_schedules = audit.flutter_schedules,
         flutter_texture_ids = audit.flutter_texture_ids,
         frame_callbacks = audit.frame_callbacks,
+        callback_suppressed = audit.callback_suppressed,
         eligibility_reports = audit.eligibility_reports,
         eligible = audit.eligible,
         reason_counts = ?audit.reason_counts,
@@ -335,6 +338,24 @@ pub(super) fn record_frame_callbacks(output_id: u64, window_id: Option<u64>, sen
                 ),
             );
         }
+    });
+}
+
+pub(super) fn record_frame_callback_suppressed(
+    output_id: u64,
+    window_id: Option<u64>,
+    reason: &'static str,
+    visibility_epoch: Option<u64>,
+) {
+    with_audit(|audit| {
+        audit.callback_suppressed = audit.callback_suppressed.saturating_add(1);
+        sample(
+            audit,
+            format!(
+                "frame_callbacks_suppressed output={} window={:?} reason={} epoch={:?}",
+                output_id, window_id, reason, visibility_epoch
+            ),
+        );
     });
 }
 

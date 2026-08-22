@@ -1,10 +1,12 @@
+use std::collections::HashSet;
 use std::time::Duration;
 
 use smithay::desktop::{PopupManager, Window, utils::SurfacePresentationFeedback};
 use smithay::output::{Output, WeakOutput};
 use smithay::reexports::wayland_protocols::wp::presentation_time::server::wp_presentation_feedback;
-use smithay::reexports::wayland_server::DisplayHandle;
+use smithay::reexports::wayland_server::backend::ObjectId;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
+use smithay::reexports::wayland_server::{DisplayHandle, Resource};
 #[cfg(feature = "flutter")]
 use smithay::utils::Time;
 use smithay::utils::{Clock, Monotonic};
@@ -243,27 +245,50 @@ fn collect_surface_presentation_feedback(
 /// The returned count lets the caller avoid refreshing and flushing an idle
 /// Wayland space.
 pub(super) fn send_window_frame_callbacks(window: &Window, callback_time: Duration) -> usize {
+    let mut seen = HashSet::new();
+    send_window_frame_callbacks_deduplicated(window, callback_time, &mut seen)
+}
+
+/// Drain callbacks for one window while ensuring a surface is only visited
+/// once in a display-clock tick. Popup trees can otherwise overlap with an
+/// independently tracked consumer (for example an input-method popup).
+pub(super) fn send_window_frame_callbacks_deduplicated(
+    window: &Window,
+    callback_time: Duration,
+    seen: &mut HashSet<ObjectId>,
+) -> usize {
     let Some(root) = window.wl_surface() else {
         return 0;
     };
     let callback_millis = callback_time.as_millis() as u32;
-    let mut sent = send_surface_frame_callbacks(&root, callback_millis);
+    let mut sent = send_surface_frame_callbacks_deduplicated(&root, callback_millis, seen);
     for (popup, _) in PopupManager::popups_for_surface(&root) {
-        sent = sent.saturating_add(send_surface_frame_callbacks(
+        sent = sent.saturating_add(send_surface_frame_callbacks_deduplicated(
             popup.wl_surface(),
             callback_millis,
+            seen,
         ));
     }
     sent
 }
 
-pub(super) fn send_surface_frame_callbacks(root: &WlSurface, callback_millis: u32) -> usize {
+pub(super) fn send_surface_frame_callbacks_deduplicated(
+    root: &WlSurface,
+    callback_millis: u32,
+    seen: &mut HashSet<ObjectId>,
+) -> usize {
+    if seen.contains(&root.id()) {
+        return 0;
+    }
     let mut sent = 0usize;
     with_surface_tree_downward(
         root,
         (),
         |_, _, &()| TraversalAction::DoChildren(()),
-        |_, states, &()| {
+        |surface, states, &()| {
+            if !seen.insert(surface.id()) {
+                return;
+            }
             for callback in states
                 .cached_state
                 .get::<SurfaceAttributes>()

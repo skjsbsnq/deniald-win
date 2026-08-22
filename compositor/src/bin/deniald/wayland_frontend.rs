@@ -710,6 +710,46 @@ fn window_expects_sample(
 }
 
 #[cfg(feature = "flutter")]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum FrameCallbackPolicy {
+    Send,
+    ConservativeUnknown,
+    SuppressOccluded,
+    SuppressMinimized,
+}
+
+#[cfg(feature = "flutter")]
+impl FrameCallbackPolicy {
+    const fn audit_reason(self) -> Option<&'static str> {
+        match self {
+            Self::Send | Self::ConservativeUnknown => None,
+            Self::SuppressOccluded => Some("fully_occluded"),
+            Self::SuppressMinimized => Some("minimized"),
+        }
+    }
+}
+
+#[cfg(feature = "flutter")]
+fn frame_callback_policy(
+    input_visibility_known: bool,
+    visible_window_ids: &HashSet<u64>,
+    minimized: bool,
+    window_id: Option<u64>,
+) -> FrameCallbackPolicy {
+    if !input_visibility_known || window_id.is_none() {
+        return FrameCallbackPolicy::ConservativeUnknown;
+    }
+    if minimized {
+        return FrameCallbackPolicy::SuppressMinimized;
+    }
+    if visible_window_ids.contains(&window_id.expect("checked above")) {
+        FrameCallbackPolicy::Send
+    } else {
+        FrameCallbackPolicy::SuppressOccluded
+    }
+}
+
+#[cfg(feature = "flutter")]
 fn flutter_compose_state() -> Option<xkb::compose::State> {
     let locale = ["LC_ALL", "LC_CTYPE", "LANG"]
         .into_iter()
@@ -3913,32 +3953,56 @@ impl WaylandFrontend {
             .presented_at
             .unwrap_or_else(|| self.presentation.monotonic_now());
         let mut sent = 0usize;
+        let mut seen_surfaces = HashSet::new();
+        let visibility_epoch = self.input_layout.as_ref().map(|layout| layout.epoch);
         for window in self.output_window_membership.windows(tick.output) {
-            let window_sent = presentation::send_window_frame_callbacks(window, callback_time);
-            scanout_audit::record_frame_callbacks(
-                tick.output.0,
-                self.window_root_surface(window)
-                    .as_ref()
-                    .and_then(|surface| self.surface_id(surface)),
-                window_sent,
+            let root = self.window_root_surface(window);
+            let window_id = root.as_ref().and_then(|surface| self.surface_id(surface));
+            let policy = frame_callback_policy(
+                self.input_visibility_known,
+                &self.visible_window_ids,
+                root.as_ref()
+                    .is_some_and(|surface| self.minimized_windows.contains(&surface.id())),
+                window_id,
             );
-            sent = sent.saturating_add(window_sent);
+            match policy {
+                FrameCallbackPolicy::Send | FrameCallbackPolicy::ConservativeUnknown => {
+                    let window_sent = presentation::send_window_frame_callbacks_deduplicated(
+                        window,
+                        callback_time,
+                        &mut seen_surfaces,
+                    );
+                    scanout_audit::record_frame_callbacks(tick.output.0, window_id, window_sent);
+                    sent = sent.saturating_add(window_sent);
+                }
+                suppressed => {
+                    scanout_audit::record_frame_callback_suppressed(
+                        tick.output.0,
+                        window_id,
+                        suppressed
+                            .audit_reason()
+                            .expect("only suppression policies reach this branch"),
+                        visibility_epoch,
+                    );
+                }
+            }
         }
         let callback_millis = callback_time.as_millis() as u32;
         for popup in self.input_method.visible_popups() {
-            if self
-                .surface_id(popup.surface())
-                .is_some_and(|surface_id| self.visible_window_ids.contains(&surface_id))
-            {
-                let popup_sent =
-                    presentation::send_surface_frame_callbacks(popup.surface(), callback_millis);
-                scanout_audit::record_frame_callbacks(
-                    tick.output.0,
-                    self.surface_id(popup.surface()),
-                    popup_sent,
-                );
-                sent = sent.saturating_add(popup_sent);
-            }
+            // Input-method popups are explicit visual consumers. Their root
+            // client may be covered, but the popup itself still needs its
+            // protocol clock and latest text-composition pixels.
+            let popup_sent = presentation::send_surface_frame_callbacks_deduplicated(
+                popup.surface(),
+                callback_millis,
+                &mut seen_surfaces,
+            );
+            scanout_audit::record_frame_callbacks(
+                tick.output.0,
+                self.surface_id(popup.surface()),
+                popup_sent,
+            );
+            sent = sent.saturating_add(popup_sent);
         }
         if sent == 0 {
             return Ok(());
@@ -4079,10 +4143,11 @@ mod tests {
     use super::OutputWindowMembership;
     #[cfg(feature = "flutter")]
     use super::{
-        CursorImageStatus, RoutedPointerTarget, ShellFullscreenTransition,
+        CursorImageStatus, FrameCallbackPolicy, RoutedPointerTarget, ShellFullscreenTransition,
         accepted_flutter_cursor_shape, classify_window_opacity, cursor_position_for_modality,
-        cursor_shape_for_modality, input_routing_changed, input_visibility_changed,
-        shell_fullscreen_transition, software_cursor_shape, window_expects_sample,
+        cursor_shape_for_modality, frame_callback_policy, input_routing_changed,
+        input_visibility_changed, shell_fullscreen_transition, software_cursor_shape,
+        window_expects_sample,
     };
     use super::{
         InitialXdgPlacementPolicy, MAX_PENDING_DMABUF_IMPORTS, dmabuf_import_queue_has_capacity,
@@ -4363,6 +4428,33 @@ mod tests {
         assert!(window_expects_sample(false, &visible, 7));
         assert!(window_expects_sample(true, &visible, 42));
         assert!(!window_expects_sample(true, &visible, 7));
+    }
+
+    #[cfg(feature = "flutter")]
+    #[test]
+    fn frame_callbacks_are_conservative_until_visibility_is_known() {
+        let visible = HashSet::from([42]);
+        assert_eq!(
+            frame_callback_policy(false, &visible, false, Some(7)),
+            FrameCallbackPolicy::ConservativeUnknown
+        );
+        assert_eq!(
+            frame_callback_policy(true, &visible, false, Some(42)),
+            FrameCallbackPolicy::Send
+        );
+        assert_eq!(
+            frame_callback_policy(true, &visible, false, Some(7)),
+            FrameCallbackPolicy::SuppressOccluded
+        );
+    }
+
+    #[cfg(feature = "flutter")]
+    #[test]
+    fn minimized_windows_are_suppressed_after_a_known_snapshot() {
+        assert_eq!(
+            frame_callback_policy(true, &HashSet::from([42]), true, Some(42)),
+            FrameCallbackPolicy::SuppressMinimized
+        );
     }
 
     #[cfg(feature = "flutter")]
