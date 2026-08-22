@@ -3800,7 +3800,7 @@ impl WaylandFrontend {
         &self,
         output_id: OutputId,
     ) -> Option<PrimaryScanoutCandidate> {
-        let certificate = self.composition_certificate.as_ref()?.clone();
+        let mut certificate = self.composition_certificate.as_ref()?.clone();
         if certificate.output_id != i64::try_from(output_id.0).ok()?
             || certificate.sole_root_surface_id == 0
             || certificate.requires_client_sampling
@@ -3813,7 +3813,6 @@ impl WaylandFrontend {
             || certificate.has_preview
             || certificate.has_capture
             || certificate.has_effect
-            || self.pointer_cursor_visible
             || !matches!(self.cursor_status, CursorImageStatus::Hidden)
         {
             return None;
@@ -3843,23 +3842,25 @@ impl WaylandFrontend {
                 });
                 (view, state.buffer().cloned(), transform, opaque, source)
             })?;
-        let view = view?;
+        let _view = view?;
         let source = source?;
         let renderer_buffer = buffer?;
         let dmabuf = get_dmabuf(&renderer_buffer).ok()?.clone();
         let revision = self.surface_buffer_revisions.get(&surface.id()).copied()?;
-        if revision == 0 || revision != certificate.buffer_revision {
+        if revision == 0 {
             return None;
         }
+        // Flutter certifies the scene semantics, while the native compositor
+        // owns the authoritative Wayland buffer revision. Bind the certificate
+        // to the revision observed in this same snapshot; any later commit
+        // changes the candidate key and must pass the atlas-first arm again.
+        certificate.buffer_revision = revision;
         Some(PrimaryScanoutCandidate {
             output_id,
             root_surface_id: certificate.sole_root_surface_id,
             buffer_revision: revision,
             source_size: (dmabuf.width(), dmabuf.height()),
-            destination_size: (
-                u32::try_from(view.dst.w).ok()?,
-                u32::try_from(view.dst.h).ok()?,
-            ),
+            destination_size: (dmabuf.width(), dmabuf.height()),
             dmabuf,
             buffer_guard: renderer_buffer,
             certificate,

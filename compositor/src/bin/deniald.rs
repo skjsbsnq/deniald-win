@@ -1393,6 +1393,8 @@ struct RuntimeState {
     #[cfg(feature = "flutter")]
     direct_promotion: Option<direct_scanout::DirectPromotion>,
     #[cfg(feature = "flutter")]
+    direct_replacement: Option<direct_scanout::DirectPromotion>,
+    #[cfg(feature = "flutter")]
     direct_candidate_armed: Option<(OutputId, u64, u64, u64, u64)>,
 }
 
@@ -4469,6 +4471,44 @@ fn service_direct_scanout(
             return Ok(());
         }
 
+        if let Some(candidate) = events
+            .wayland
+            .as_ref()
+            .and_then(|frontend| frontend.primary_scanout_candidate(OutputId(active.output)))
+        {
+            let output = OutputId(active.output);
+            if let Some(scanout) = scanouts.iter().find(|scanout| scanout.output.id == output)
+                && candidate.certificate.known_opaque
+                && candidate.certificate.shell_fully_transparent
+                && candidate.dmabuf.num_planes() > 0
+                && candidate.source_size == candidate.destination_size
+            {
+                if let Ok(framebuffer) =
+                    kms_state::framebuffer_from_prime_dmabuf(drm.device_fd(), &candidate.dmabuf)
+                {
+                    let state = direct_plane_state(scanout, framebuffer.handle());
+                    if scanout.surface.test_state([state.clone()], false).is_ok()
+                        && scanout.surface.page_flip([state], true).is_ok()
+                    {
+                        events.pending.insert(scanout.output.crtc);
+                        events.direct_replacement = Some(direct_scanout::DirectPromotion {
+                            framebuffer,
+                            dmabuf: candidate.dmabuf,
+                            buffer_guard: candidate.buffer_guard,
+                            output: output.0,
+                            surface: candidate.root_surface_id,
+                            revision: candidate.buffer_revision,
+                            certificate_epoch: candidate.certificate.certificate_epoch,
+                            confirmed: false,
+                            fallback_pending: false,
+                        });
+                        info!(event = "test_only_passed", output = ?output, revision = candidate.buffer_revision, "Direct Scanout replacement submitted");
+                        return Ok(());
+                    }
+                }
+            }
+        }
+
         let output = OutputId(active.output);
         if let Some(scanout) = scanouts.iter().find(|scanout| scanout.output.id == output) {
             let atlas_index = scheduler
@@ -4638,6 +4678,52 @@ fn handle_direct_page_flip(
     scanouts: &[Scanout],
     events: &mut RuntimeState,
 ) -> Result<(), Box<dyn Error>> {
+    if let Some(replacement) = events.direct_replacement.take() {
+        let output = OutputId(replacement.output);
+        let Some(scanout) = scanouts.iter().find(|scanout| scanout.output.id == output) else {
+            events.direct_replacement = Some(replacement);
+            return Ok(());
+        };
+        let Some(position) = events
+            .completed_page_flips
+            .iter()
+            .position(|completion| completion.crtc == scanout.output.crtc)
+        else {
+            events.direct_replacement = Some(replacement);
+            return Ok(());
+        };
+        let completion = events
+            .completed_page_flips
+            .remove(position)
+            .expect("located Direct Scanout replacement completion");
+        events.pending.remove(&completion.crtc);
+        if let Some(old) = events
+            .direct_promotion
+            .replace(direct_scanout::DirectPromotion {
+                confirmed: true,
+                ..replacement
+            })
+        {
+            drop(old);
+        }
+        if let Some(frontend) = events.wayland.as_mut() {
+            frontend.set_promoted_surface(Some(
+                events
+                    .direct_promotion
+                    .as_ref()
+                    .expect("replacement installed")
+                    .surface,
+            ));
+            frontend.outputs_presented(&[PresentedOutput {
+                id: output,
+                observed_at: completion.observed_at,
+                presented_at: completion.presented_at,
+                sequence: completion.sequence,
+            }])?;
+        }
+        info!(event = "promoted", output = ?output, revision = events.direct_promotion.as_ref().expect("replacement installed").revision, "Direct Scanout replacement reached page flip");
+        return Ok(());
+    }
     let Some(active) = events.direct_promotion.as_mut() else {
         return Ok(());
     };
