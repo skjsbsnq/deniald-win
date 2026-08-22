@@ -8,6 +8,9 @@ mod authentication;
 mod clipboard;
 #[path = "deniald/cpu_scheduling.rs"]
 mod cpu_scheduling;
+#[cfg(feature = "flutter")]
+#[path = "deniald/direct_scanout.rs"]
+mod direct_scanout;
 #[path = "deniald/egl_context.rs"]
 mod egl_context;
 #[cfg(feature = "flutter")]
@@ -314,6 +317,17 @@ fn run(options: Options) -> Result<(), Box<dyn Error>> {
     }
 
     let runtime_limit = options.runtime_limit();
+    if options.experimental_primary_promotion {
+        info!(
+            event = "feature_enabled",
+            "P8-07 primary promotion experiment enabled; only exact fullscreen DMA-BUF candidates may be promoted"
+        );
+    } else {
+        info!(
+            event = "feature_disabled",
+            "P8-07 primary promotion experiment disabled; using atlas composition"
+        );
+    }
     let output_configuration = RuntimeOutputConfiguration::from_options(&options);
     let mut settings = options
         .wayland
@@ -906,6 +920,7 @@ fn run(options: Options) -> Result<(), Box<dyn Error>> {
                     flutter_launcher
                         .as_mut()
                         .ok_or("Flutter launcher was not initialized")?,
+                    options.experimental_primary_promotion,
                     duration,
                     frame_event_loop
                         .as_mut()
@@ -1373,6 +1388,8 @@ struct RuntimeState {
     pending_ui_development: VecDeque<PendingUiDevelopment>,
     #[cfg(feature = "flutter")]
     idle_dpms: idle_policy::IdleDpmsPolicy,
+    #[cfg(feature = "flutter")]
+    direct_scanout: direct_scanout::PromotionController,
 }
 
 #[cfg(feature = "flutter")]
@@ -2087,6 +2104,10 @@ fn run_frame_loop(
         ..RuntimeState::default()
     };
     #[cfg(feature = "flutter")]
+    {
+        events.direct_scanout = direct_scanout::PromotionController::new(false);
+    }
+    #[cfg(feature = "flutter")]
     events.synchronize_flutter_pointer_position();
     let mut active_configuration = initial_configuration.clone();
 
@@ -2642,6 +2663,7 @@ fn run_flutter_event_loop(
     wayland: Option<wayland_frontend::WaylandFrontend>,
     flutter: flutter_runtime::FlutterRuntime,
     flutter_launcher: &mut FlutterLauncher,
+    experimental_primary_promotion: bool,
     duration: Option<Duration>,
     event_loop: &mut EventLoop<'_, RuntimeState>,
 ) -> Result<framebuffer::Handle, Box<dyn Error>> {
@@ -2739,6 +2761,13 @@ fn run_flutter_event_loop(
         native_plugin_default_size: (swapchain.size.width, swapchain.size.height),
         ..RuntimeState::default()
     };
+    events.direct_scanout =
+        direct_scanout::PromotionController::new(experimental_primary_promotion);
+    info!(
+        enabled = events.direct_scanout.enabled(),
+        state = ?events.direct_scanout.state(),
+        "P8-07 primary promotion controller initialized"
+    );
     event_loop.handle().insert_source(
         native_release_source,
         |event, _, state: &mut RuntimeState| {

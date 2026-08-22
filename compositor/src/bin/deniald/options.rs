@@ -124,6 +124,9 @@ pub(super) struct Options {
     #[cfg(feature = "flutter")]
     pub(super) flutter_renderer: RendererBackend,
     pub(super) flutter_offscreen_blit: bool,
+    /// P8-07 primary-plane promotion experiment.  It is deliberately opt-in;
+    /// normal sessions retain atlas composition exactly as before.
+    pub(super) experimental_primary_promotion: bool,
     pub(super) flutter_debug_bundle: Option<PathBuf>,
     pub(super) flutter_ui_workspace: Option<PathBuf>,
     pub(super) start_locked: bool,
@@ -163,6 +166,7 @@ impl Options {
             #[cfg(feature = "flutter")]
             flutter_renderer: RendererBackend::default(),
             flutter_offscreen_blit: false,
+            experimental_primary_promotion: false,
             flutter_debug_bundle: None,
             flutter_ui_workspace: None,
             start_locked: false,
@@ -197,6 +201,7 @@ impl Options {
         #[cfg(feature = "flutter")]
         let mut flutter_renderer = None;
         let mut flutter_offscreen_blit = false;
+        let mut experimental_primary_promotion = false;
         let mut flutter_debug_bundle = None;
         let mut flutter_ui_workspace = None;
         let mut start_locked = false;
@@ -294,6 +299,7 @@ impl Options {
                     );
                 }
                 "--flutter-offscreen-blit" => flutter_offscreen_blit = true,
+                "--experimental-primary-promotion" => experimental_primary_promotion = true,
                 "--flutter-debug-bundle" => {
                     flutter_debug_bundle = Some(PathBuf::from(
                         args.next().ok_or("--flutter-debug-bundle needs a path")?,
@@ -334,6 +340,7 @@ impl Options {
                          [--flutter-bundle PATH] \
                          [--flutter-renderer skia|impeller] \
                          [--flutter-offscreen-blit] \
+                         [--experimental-primary-promotion] \
                          [--flutter-debug-bundle PATH] \
                          [--flutter-ui-workspace PATH] \
                          [--start-locked] \
@@ -441,6 +448,9 @@ impl Options {
         if flutter_offscreen_blit && flutter_bundle.is_none() {
             return Err("--flutter-offscreen-blit requires --flutter-bundle".into());
         }
+        if experimental_primary_promotion && flutter_bundle.is_none() {
+            return Err("--experimental-primary-promotion requires --flutter-bundle".into());
+        }
         if (flutter_debug_bundle.is_some() || flutter_ui_workspace.is_some())
             && flutter_bundle.is_none()
         {
@@ -476,6 +486,7 @@ impl Options {
             #[cfg(feature = "flutter")]
             flutter_renderer: flutter_renderer.unwrap_or_default(),
             flutter_offscreen_blit,
+            experimental_primary_promotion,
             flutter_debug_bundle,
             flutter_ui_workspace,
             start_locked,
@@ -1510,6 +1521,29 @@ mod tests {
         assert_eq!(
             error.to_string(),
             "--flutter-offscreen-blit requires --flutter-bundle"
+        );
+    }
+
+    #[test]
+    fn primary_promotion_is_opt_in_and_requires_flutter() {
+        let disabled = options(&["--wayland", "--flutter-bundle", "/tmp/denial-bundle"]);
+        let enabled = options(&[
+            "--wayland",
+            "--flutter-bundle",
+            "/tmp/denial-bundle",
+            "--experimental-primary-promotion",
+        ]);
+        assert!(!disabled.experimental_primary_promotion);
+        assert!(enabled.experimental_primary_promotion);
+        let error = Options::parse_from(
+            ["--experimental-primary-promotion"]
+                .into_iter()
+                .map(str::to_owned),
+        )
+        .unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "--experimental-primary-promotion requires --flutter-bundle"
         );
     }
 
