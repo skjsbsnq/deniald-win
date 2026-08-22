@@ -347,6 +347,38 @@ pub(super) struct PlaneCapabilities {
     pub(super) possible_crtcs: Vec<crtc::Handle>,
     pub(super) formats: Vec<u32>,
     pub(super) properties: Vec<PlanePropertyCapability>,
+    pub(super) plane_type: Option<PlaneType>,
+}
+
+#[cfg(feature = "flutter")]
+pub(super) fn cursor_plane_candidates(
+    capabilities: &[PlaneCapabilities],
+    max_size: PixelSize,
+) -> Vec<super::hardware_cursor::CursorPlaneCandidate> {
+    capabilities
+        .iter()
+        .filter_map(|capability| {
+            let destination = ["CRTC_X", "CRTC_Y", "CRTC_W", "CRTC_H"].iter().all(|name| {
+                capability
+                    .properties
+                    .iter()
+                    .any(|property| property.name == *name)
+            });
+            let is_cursor = capability.plane_type == Some(PlaneType::Cursor)
+                && capability.formats.contains(&(DrmFourcc::Argb8888 as u32));
+            (is_cursor && destination).then(|| super::hardware_cursor::CursorPlaneCandidate {
+                plane: u32::from(capability.plane),
+                possible_crtcs: capability
+                    .possible_crtcs
+                    .iter()
+                    .map(|crtc| u32::from(*crtc))
+                    .collect(),
+                formats: capability.formats.clone(),
+                has_destination: destination,
+                max_size,
+            })
+        })
+        .collect()
 }
 
 fn discover_plane_capabilities(drm: &DrmDevice) -> Result<Vec<PlaneCapabilities>, Box<dyn Error>> {
@@ -355,8 +387,17 @@ fn discover_plane_capabilities(drm: &DrmDevice) -> Result<Vec<PlaneCapabilities>
         .into_iter()
         .map(|plane| {
             let info = drm.get_plane(plane)?;
-            let properties = drm
-                .get_properties(plane)?
+            let raw_properties = drm.get_properties(plane)?;
+            let plane_type = raw_properties.iter().find_map(|(handle, value)| {
+                let property = drm.get_property(*handle).ok()?;
+                (property.name().to_str().ok()? == "type").then_some(match *value as u32 {
+                    value if value == PlaneType::Primary as u32 => Some(PlaneType::Primary),
+                    value if value == PlaneType::Cursor as u32 => Some(PlaneType::Cursor),
+                    value if value == PlaneType::Overlay as u32 => Some(PlaneType::Overlay),
+                    _ => None,
+                })?
+            });
+            let properties = raw_properties
                 .into_iter()
                 .filter_map(|(handle, _)| {
                     let property = drm.get_property(handle).ok()?;
@@ -390,6 +431,7 @@ fn discover_plane_capabilities(drm: &DrmDevice) -> Result<Vec<PlaneCapabilities>
                 possible_crtcs: resources.filter_crtcs(info.possible_crtcs()),
                 formats: info.formats().to_vec(),
                 properties,
+                plane_type,
             })
         })
         .collect()
@@ -1244,6 +1286,15 @@ impl KmsContext {
                 "discovered KMS plane capabilities"
             );
         }
+        #[cfg(feature = "flutter")]
+        debug!(
+            candidates = cursor_plane_candidates(
+                &plane_capabilities,
+                PixelSize::new(drm.cursor_size().w as u32, drm.cursor_size().h as u32),
+            )
+            .len(),
+            "cursor-plane candidates are dynamically discoverable"
+        );
         Self {
             drm,
             scanouts: Vec::new(),

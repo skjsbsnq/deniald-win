@@ -16,6 +16,9 @@ mod flutter_runtime;
 #[cfg(feature = "flutter")]
 #[path = "deniald/frame_scheduler.rs"]
 mod frame_scheduler;
+#[cfg(feature = "flutter")]
+#[path = "deniald/hardware_cursor.rs"]
+mod hardware_cursor;
 #[path = "deniald/hotplug_transaction.rs"]
 mod hotplug_transaction;
 #[cfg(feature = "flutter")]
