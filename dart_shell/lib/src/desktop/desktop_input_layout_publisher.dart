@@ -335,7 +335,15 @@ class _DesktopInputLayoutPublisherState
     final output = outputLayout?.outputs.length == 1
         ? outputLayout!.outputs.single
         : null;
-    final candidate = placements.length == 1 ? placements.single : null;
+    DesktopWindowPlacement? candidate;
+    if (output != null) {
+      for (final placement in placements.reversed) {
+        if (placement.monitorId == output.monitorId && placement.fullscreen) {
+          candidate = placement;
+          break;
+        }
+      }
+    }
     DenialWindow? window;
     if (candidate != null) {
       for (final item in windows) {
