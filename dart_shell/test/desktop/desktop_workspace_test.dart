@@ -164,6 +164,95 @@ void main() {
     expect(placement.contentRect, nativeGeometry);
   });
 
+  test('resize hot regions cover four edges but not corners or buttons', () {
+    const placement = DesktopWindowPlacement(
+      objectId: 1,
+      frame: Rect.fromLTWH(100, 100, 800, 600),
+      z: 1,
+      monitorId: 1,
+      serverSideDecorated: true,
+    );
+    final regions = desktopWindowResizeHotRegions(placement);
+
+    expect(regions.map((region) => region.edge), <DesktopWindowResizeEdge>[
+      DesktopWindowResizeEdge.top,
+      DesktopWindowResizeEdge.left,
+      DesktopWindowResizeEdge.right,
+      DesktopWindowResizeEdge.bottom,
+    ]);
+    expect(regions[0].rect.contains(const Offset(110, 101)), isTrue);
+    expect(regions[0].rect.contains(const Offset(880, 101)), isFalse);
+    expect(regions[1].rect.contains(const Offset(101, 150)), isTrue);
+    expect(regions[2].rect.contains(const Offset(899, 150)), isTrue);
+    expect(regions[3].rect.contains(const Offset(500, 699)), isTrue);
+    expect(
+      regions.every((region) => !region.rect.contains(const Offset(101, 101))),
+      isTrue,
+    );
+  });
+
+  test(
+    'resize hot regions are disabled for fullscreen, undecorated, maximized, and overview',
+    () {
+      const base = DesktopWindowPlacement(
+        objectId: 1,
+        frame: Rect.fromLTWH(100, 100, 800, 600),
+        z: 1,
+        monitorId: 1,
+      );
+      expect(
+        desktopWindowResizeHotRegions(base.copyWith(fullscreen: true)),
+        isEmpty,
+      );
+      expect(
+        desktopWindowResizeHotRegions(
+          base.copyWith(serverSideDecorated: false),
+        ),
+        isEmpty,
+      );
+      expect(
+        desktopWindowResizeHotRegions(base.copyWith(maximized: true)),
+        isEmpty,
+      );
+      expect(
+        desktopWindowResizeHotRegions(base, overviewActive: true),
+        isEmpty,
+      );
+    },
+  );
+
+  test(
+    'resizing the right edge changes client width and settles as shell dragging',
+    () {
+      final container = ProviderContainer.test();
+      final controller = container.read(desktopWorkspaceProvider.notifier);
+      controller.syncWindows(
+        <DenialWindow>[
+          _window(
+            objectId: 1,
+            windowId: 11,
+            monitorId: 1,
+            geometry: const Rect.fromLTWH(300, 200, 640, 400),
+          ),
+        ],
+        viewSize,
+        1,
+        snapshotSequence: 1,
+      );
+
+      controller.beginResize(1, DesktopWindowResizeEdge.right);
+      controller.resizeBy(1, const Offset(120, 0));
+      final during = container.read(desktopWorkspaceProvider).placements[1]!;
+      expect(during.dragging, isTrue);
+      expect(during.contentRect.width, 760);
+
+      controller.endResize(1);
+      final settled = container.read(desktopWorkspaceProvider).placements[1]!;
+      expect(settled.dragging, isFalse);
+      expect(settled.contentRect, const Rect.fromLTWH(300, 200, 760, 400));
+    },
+  );
+
   test('decoration changes preserve the client content rectangle', () {
     final container = ProviderContainer.test();
     final controller = container.read(desktopWorkspaceProvider.notifier);

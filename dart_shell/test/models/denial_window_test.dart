@@ -54,6 +54,33 @@ void main() {
       expect(popup.isUserApp, isFalse);
     },
   );
+
+  test(
+    'transient popup classification excludes only native undecorated popups',
+    () {
+      expect(
+        _window(title: 'Menu', serverSideDecorated: false).isTransientPopup,
+        isTrue,
+      );
+      expect(
+        _window(
+          title: 'Local',
+          serverSideDecorated: false,
+          contentKind: DenialWindowContentKind.localFlutter,
+        ).isTransientPopup,
+        isFalse,
+      );
+      expect(
+        _window(
+          title: 'Input method',
+          appId: 'denia-systemui-input-method',
+          serverSideDecorated: false,
+        ).isTransientPopup,
+        isFalse,
+      );
+      expect(_window(title: 'Normal').isTransientPopup, isFalse);
+    },
+  );
 }
 
 DenialWindow _window({
@@ -63,6 +90,8 @@ DenialWindow _window({
   bool suppressAnimations = false,
   bool restoredAcrossFlutterRestart = false,
   String appId = 'kitty',
+  bool serverSideDecorated = true,
+  DenialWindowContentKind contentKind = DenialWindowContentKind.surfaceTree,
 }) {
   return DenialWindow(
     objectId: 1,
@@ -92,5 +121,7 @@ DenialWindow _window({
     pinned: pinned,
     suppressAnimations: suppressAnimations,
     restoredAcrossFlutterRestart: restoredAcrossFlutterRestart,
+    serverSideDecorated: serverSideDecorated,
+    contentKind: contentKind,
   );
 }
