@@ -365,7 +365,7 @@ class _DesktopInputLayoutPublisherState
         window.surfaceLayers.length == 1 &&
         window.isOpaque &&
         window.transform == 0 &&
-        candidate.contentRect == output.logicalRect &&
+        _coversOutput(candidate.contentRect, output.logicalRect) &&
         window.contentCoordinateRect.width > 0.0 &&
         window.contentCoordinateRect.height > 0.0;
     final certificateKey = <Object?>[
@@ -411,6 +411,14 @@ class _DesktopInputLayoutPublisherState
       engineGeneration: 1,
     );
     bridge.publishCompositionCertificate(certificate);
+  }
+
+  bool _coversOutput(Rect candidate, Rect output) {
+    const epsilon = 1.0;
+    return (candidate.left - output.left).abs() <= epsilon &&
+        (candidate.top - output.top).abs() <= epsilon &&
+        (candidate.right - output.right).abs() <= epsilon &&
+        (candidate.bottom - output.bottom).abs() <= epsilon;
   }
 
   void _configureWindowGeometry(

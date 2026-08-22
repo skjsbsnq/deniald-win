@@ -3731,8 +3731,37 @@ impl WaylandFrontend {
             .as_ref()
             .is_some_and(|previous| certificate.certificate_epoch < previous.certificate_epoch)
         {
+            scanout_audit::record_certificate(
+                certificate.output_id,
+                certificate.certificate_epoch,
+                certificate.layout_epoch,
+                certificate.sole_root_surface_id,
+                certificate.requires_client_sampling,
+                false,
+                "stale_epoch",
+            );
             return;
         }
+        let reason = if certificate.requires_client_sampling {
+            "requires_client_sampling"
+        } else if !certificate.known_opaque {
+            "unknown_opacity"
+        } else if !certificate.shell_fully_transparent {
+            "shell_visible"
+        } else {
+            "candidate"
+        };
+        scanout_audit::record_certificate(
+            certificate.output_id,
+            certificate.certificate_epoch,
+            certificate.layout_epoch,
+            certificate.sole_root_surface_id,
+            certificate.requires_client_sampling,
+            !certificate.requires_client_sampling
+                && certificate.known_opaque
+                && certificate.shell_fully_transparent,
+            reason,
+        );
         self.composition_certificate = Some(certificate);
     }
 

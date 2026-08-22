@@ -410,6 +410,32 @@ pub(super) fn record_eligibility(context: EligibilityContext<'_>, report: &Eligi
     });
 }
 
+pub(super) fn record_certificate(
+    output_id: i64,
+    certificate_epoch: u64,
+    layout_epoch: u64,
+    root_surface_id: u64,
+    requires_sampling: bool,
+    accepted: bool,
+    reason: &'static str,
+) {
+    with_audit(|audit| {
+        sample(
+            audit,
+            format!(
+                "certificate output={} epoch={} layout_epoch={} root={} requires_sampling={} accepted={} reason={}",
+                output_id,
+                certificate_epoch,
+                layout_epoch,
+                root_surface_id,
+                requires_sampling,
+                accepted,
+                reason,
+            ),
+        );
+    });
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
