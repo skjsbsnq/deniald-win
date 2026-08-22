@@ -228,6 +228,79 @@ abstract final class DesktopMetrics {
 
 enum DesktopResizeEdge { top, bottom, left, right }
 
+// Compatibility view for the resize API used by the older workspace tests
+// and downstream shell integrations. The compositor-facing implementation
+// remains [desktopResizeHotZones] and [DesktopResizeEdge].
+typedef DesktopWindowResizeEdge = DesktopResizeEdge;
+
+@immutable
+class DesktopWindowResizeHotRegion {
+  const DesktopWindowResizeHotRegion({required this.edge, required this.rect});
+
+  final DesktopWindowResizeEdge edge;
+  final Rect rect;
+}
+
+List<DesktopWindowResizeHotRegion> desktopWindowResizeHotRegions(
+  DesktopWindowPlacement placement, {
+  double hitSlop = DesktopMetrics.resizeHitSlop,
+  bool overviewActive = false,
+}) {
+  if (overviewActive || placement.maximized) {
+    return const <DesktopWindowResizeHotRegion>[];
+  }
+  final frame = placement.frame;
+  final slop = math.max(0.0, hitSlop);
+  if (!placement.decorated ||
+      placement.minimized ||
+      (placement.dragging && !placement.resizing) ||
+      frame.width <= slop * 2.0 ||
+      frame.height <= slop * 2.0) {
+    return const <DesktopWindowResizeHotRegion>[];
+  }
+  return <DesktopWindowResizeHotRegion>[
+    DesktopWindowResizeHotRegion(
+      edge: DesktopResizeEdge.top,
+      rect: Rect.fromLTRB(
+        frame.left + slop,
+        frame.top,
+        math.max(
+          frame.left + slop,
+          frame.right - DesktopTitlebarMetrics.buttonWidth * 3.0,
+        ),
+        math.min(frame.bottom, frame.top + slop),
+      ),
+    ),
+    DesktopWindowResizeHotRegion(
+      edge: DesktopResizeEdge.left,
+      rect: Rect.fromLTRB(
+        frame.left,
+        frame.top + slop,
+        math.min(frame.right, frame.left + slop),
+        frame.bottom - slop,
+      ),
+    ),
+    DesktopWindowResizeHotRegion(
+      edge: DesktopResizeEdge.right,
+      rect: Rect.fromLTRB(
+        math.max(frame.left, frame.right - slop),
+        frame.top + slop,
+        frame.right,
+        frame.bottom - slop,
+      ),
+    ),
+    DesktopWindowResizeHotRegion(
+      edge: DesktopResizeEdge.bottom,
+      rect: Rect.fromLTRB(
+        frame.left + slop,
+        math.max(frame.top, frame.bottom - slop),
+        frame.right - slop,
+        frame.bottom,
+      ),
+    ),
+  ];
+}
+
 /// Returns the four one-axis resize bands inside a decorated window frame.
 /// Corners are intentionally left out: diagonal resize is a separate feature.
 List<Rect> desktopResizeHotZones(
