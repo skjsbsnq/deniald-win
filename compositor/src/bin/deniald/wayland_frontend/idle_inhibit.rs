@@ -81,6 +81,7 @@ impl WaylandFrontend {
                         self.input_visibility_known,
                         &self.visible_window_ids,
                         window_id,
+                        self.promoted_surface_id,
                     )
                 })
             })

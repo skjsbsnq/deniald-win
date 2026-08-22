@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::error::Error;
 use std::os::fd::{AsFd, OwnedFd};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -592,6 +592,7 @@ pub(super) struct OutputScheduler {
     parked: Option<OutputPlaneScene>,
     latest_index: usize,
     presented_frames: u64,
+    direct_outputs: HashSet<OutputId>,
 }
 
 impl OutputScheduler {
@@ -677,6 +678,25 @@ impl OutputScheduler {
             )),
             latest_index: initial_index,
             presented_frames: 0,
+            direct_outputs: HashSet::new(),
+        })
+    }
+
+    pub(super) fn set_direct_output(&mut self, output: OutputId, direct: bool) {
+        if direct {
+            self.direct_outputs.insert(output);
+        } else {
+            self.direct_outputs.remove(&output);
+        }
+    }
+
+    pub(super) fn can_switch_to_direct(&self, output: OutputId, scanouts: &[Scanout]) -> bool {
+        self.pipelines.iter().any(|pipeline| {
+            scanouts[pipeline.scanout_index].output.id == output
+                && !pipeline.powering_off
+                && pipeline.ready.is_none()
+                && pipeline.submitted.is_empty()
+                && pipeline.lookahead_pending.is_none()
         })
     }
 
@@ -713,6 +733,12 @@ impl OutputScheduler {
                     .enumerate()
                     .filter_map(|(pipeline_index, pipeline)| {
                         if pipeline.powering_off {
+                            return None;
+                        }
+                        if self
+                            .direct_outputs
+                            .contains(&scanouts[pipeline.scanout_index].output.id)
+                        {
                             return None;
                         }
                         let rect = scanouts[pipeline.scanout_index].source_rect;
@@ -891,6 +917,9 @@ impl OutputScheduler {
                 continue;
             }
             let scanout = &scanouts[pipeline.scanout_index];
+            if self.direct_outputs.contains(&scanout.output.id) {
+                continue;
+            }
             let frame = pipeline.ready.as_ref().expect("checked ready output frame");
             let frame_index = frame.index();
             let volition_lookahead = !pipeline.submitted.is_empty();

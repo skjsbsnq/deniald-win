@@ -460,10 +460,16 @@ impl AtlasFramebuffer {
 /// file descriptors. Display-only DRM nodes do not necessarily have a GBM
 /// backend capable of re-importing every modifier their planes can scan out;
 /// PRIME plus ADDFB2 is the kernel ABI for that split-device case.
-struct PrimeFramebuffer {
+pub(super) struct PrimeFramebuffer {
     handle: framebuffer::Handle,
     drm: DrmDeviceFd,
     imported_handles: Vec<BufferHandle>,
+}
+
+impl PrimeFramebuffer {
+    pub(super) fn handle(&self) -> framebuffer::Handle {
+        self.handle
+    }
 }
 
 impl Drop for PrimeFramebuffer {
@@ -600,7 +606,7 @@ impl AtlasBuffer {
     }
 }
 
-fn framebuffer_from_prime_dmabuf(
+pub(super) fn framebuffer_from_prime_dmabuf(
     drm: &DrmDeviceFd,
     dmabuf: &Dmabuf,
 ) -> Result<PrimeFramebuffer, Box<dyn Error>> {

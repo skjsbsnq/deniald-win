@@ -6,7 +6,10 @@
 //! opaque DMA-BUF roots, every new arrangement is tested before commit, and a
 //! failed probe can only return to composition.
 
+use super::kms_state::PrimeFramebuffer;
 use super::wire::CompositionCertificate;
+use smithay::backend::allocator::dmabuf::Dmabuf;
+use smithay::backend::renderer::utils::Buffer as RendererBufferGuard;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) enum PromotionState {
@@ -65,13 +68,13 @@ pub(super) struct CandidateGeometry {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub(super) struct CandidateMetadata {
+pub(super) struct CandidateMetadata<'a> {
     pub(super) single_output: bool,
     pub(super) dma_buf: bool,
     pub(super) sync_proven: bool,
     pub(super) certificate_epoch: u64,
     pub(super) visibility_epoch: u64,
-    pub(super) certificate: Option<&'static CompositionCertificate>,
+    pub(super) certificate: Option<&'a CompositionCertificate>,
     pub(super) geometry: CandidateGeometry,
 }
 
@@ -87,6 +90,18 @@ pub(super) struct PromotionController {
     state: PromotionState,
     last_certificate_epoch: u64,
     last_surface_revision: u64,
+}
+
+pub(super) struct DirectPromotion {
+    pub(super) framebuffer: PrimeFramebuffer,
+    pub(super) dmabuf: Dmabuf,
+    pub(super) buffer_guard: RendererBufferGuard,
+    pub(super) output: u64,
+    pub(super) surface: u64,
+    pub(super) revision: u64,
+    pub(super) certificate_epoch: u64,
+    pub(super) confirmed: bool,
+    pub(super) fallback_pending: bool,
 }
 
 impl Default for PromotionController {
@@ -115,7 +130,7 @@ impl PromotionController {
 
     pub(super) fn eligibility(
         &self,
-        candidate: CandidateMetadata,
+        candidate: CandidateMetadata<'_>,
         surface_revision: u64,
     ) -> PromotionDecision {
         if !self.enabled {

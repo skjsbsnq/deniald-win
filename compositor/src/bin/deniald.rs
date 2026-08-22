@@ -1390,6 +1390,8 @@ struct RuntimeState {
     idle_dpms: idle_policy::IdleDpmsPolicy,
     #[cfg(feature = "flutter")]
     direct_scanout: direct_scanout::PromotionController,
+    #[cfg(feature = "flutter")]
+    direct_promotion: Option<direct_scanout::DirectPromotion>,
 }
 
 #[cfg(feature = "flutter")]
@@ -2942,6 +2944,7 @@ fn run_flutter_event_loop(
             let runtime = flutter
                 .as_mut()
                 .ok_or("Flutter runtime disappeared during page-flip completion")?;
+            handle_direct_page_flip(&mut scheduler, scanouts, &mut events)?;
             scheduler.handle_completions(runtime, swapchain, scanouts, &mut events)?;
             if drm.is_active()
                 && let Some(stall) = scheduler.presentation_stall(Instant::now())
@@ -3776,6 +3779,7 @@ fn run_flutter_event_loop(
         synchronize_flutter_input_layout(runtime, &mut events)?;
         synchronize_flutter_composition_certificate(runtime, &mut events);
         synchronize_wayland_cursor(runtime, &mut events)?;
+        service_direct_scanout(drm, swapchain, scanouts, &mut scheduler, &mut events)?;
         if background_started.elapsed() >= COMPOSITOR_BACKGROUND_SLICE {
             event_loop.dispatch(Duration::ZERO, &mut events)?;
             continue;
@@ -4412,6 +4416,232 @@ fn synchronize_flutter_composition_certificate(
     if let Some(frontend) = events.wayland.as_mut() {
         frontend.install_composition_certificate(certificate);
     }
+}
+
+#[cfg(feature = "flutter")]
+fn direct_plane_state(scanout: &Scanout, framebuffer: framebuffer::Handle) -> PlaneState<'static> {
+    let (width, height) = scanout.output.mode.size();
+    PlaneState {
+        handle: scanout.surface.plane(),
+        config: Some(PlaneConfig {
+            src: Rectangle::<f64, Buffer>::new(
+                (0.0, 0.0).into(),
+                (f64::from(width), f64::from(height)).into(),
+            ),
+            dst: Rectangle::<i32, Physical>::from_size(
+                (i32::from(width), i32::from(height)).into(),
+            ),
+            transform: Transform::Normal,
+            alpha: scanout.plane_properties.smithay_opaque_alpha,
+            damage_clips: None,
+            fb: framebuffer,
+            fence: None,
+        }),
+    }
+}
+
+#[cfg(feature = "flutter")]
+fn service_direct_scanout(
+    drm: &DrmDevice,
+    swapchain: &AtlasSwapchain,
+    scanouts: &[Scanout],
+    scheduler: &mut output_scheduler::OutputScheduler,
+    events: &mut RuntimeState,
+) -> Result<(), Box<dyn Error>> {
+    if let Some(active) = events.direct_promotion.as_ref() {
+        if !active.confirmed {
+            return Ok(());
+        }
+        let still_current = events.wayland.as_ref().and_then(|frontend| {
+            frontend
+                .primary_scanout_candidate(OutputId(active.output))
+                .filter(|candidate| {
+                    candidate.buffer_revision == active.revision
+                        && candidate.certificate.certificate_epoch == active.certificate_epoch
+                })
+        });
+        if still_current.is_some() {
+            return Ok(());
+        }
+
+        let output = OutputId(active.output);
+        if let Some(scanout) = scanouts.iter().find(|scanout| scanout.output.id == output) {
+            if active.fallback_pending {
+                return Ok(());
+            }
+            let atlas_index = scheduler
+                .scanning_framebuffer_index(output, scanouts)
+                .unwrap_or(swapchain.current);
+            let atlas = swapchain.buffers[atlas_index].framebuffer();
+            let state = direct_plane_state(scanout, atlas);
+            scanout.surface.test_state([state.clone()], false)?;
+            scanout.surface.page_flip([state], true)?;
+            events.pending.insert(scanout.output.crtc);
+            if let Some(frontend) = events.wayland.as_mut() {
+                frontend.outputs_submitted(&[(output, scanout.output.vrr_enabled)])?;
+            }
+            events
+                .direct_promotion
+                .as_mut()
+                .expect("active Direct Scanout promotion")
+                .fallback_pending = true;
+            events.direct_scanout.fallback();
+            info!(event = "fallback_armed", output = ?output, "Direct Scanout atlas fallback submitted");
+        }
+        return Ok(());
+    }
+
+    if !events.direct_scanout.enabled() {
+        return Ok(());
+    }
+    let powered = scanouts
+        .iter()
+        .filter(|scanout| scanout.powered)
+        .collect::<Vec<_>>();
+    if powered.len() != 1 {
+        return Ok(());
+    }
+    let scanout = powered[0];
+    if scanout.output.transform != OutputTransform::Normal {
+        return Ok(());
+    }
+    let Some(candidate) = events
+        .wayland
+        .as_ref()
+        .and_then(|frontend| frontend.primary_scanout_candidate(scanout.output.id))
+    else {
+        return Ok(());
+    };
+    let (width, height) = scanout.output.mode.size();
+    let metadata = direct_scanout::CandidateMetadata {
+        single_output: true,
+        dma_buf: candidate.dmabuf.num_planes() > 0,
+        sync_proven: true,
+        certificate_epoch: candidate.certificate.certificate_epoch,
+        visibility_epoch: candidate.visibility_epoch,
+        certificate: Some(&candidate.certificate),
+        geometry: direct_scanout::CandidateGeometry {
+            output_width: u32::from(width),
+            output_height: u32::from(height),
+            source_width: candidate.source_size.0,
+            source_height: candidate.source_size.1,
+            destination_width: candidate.destination_size.0,
+            destination_height: candidate.destination_size.1,
+            transform: candidate.transform,
+        },
+    };
+    let decision = events
+        .direct_scanout
+        .eligibility(metadata, candidate.buffer_revision);
+    if let Some(reason) = decision.reason {
+        debug!(event = "rejected_reason", reason = reason.code(), output = ?scanout.output.id, "Direct Scanout candidate rejected");
+        return Ok(());
+    }
+    if decision.state != direct_scanout::PromotionState::Armed
+        || !scheduler.can_switch_to_direct(scanout.output.id, scanouts)
+    {
+        return Ok(());
+    }
+    let framebuffer = match kms_state::framebuffer_from_prime_dmabuf(
+        drm.device_fd(),
+        &candidate.dmabuf,
+    ) {
+        Ok(framebuffer) => framebuffer,
+        Err(error) => {
+            debug!(event = "rejected_reason", reason = "prime_import", %error, "Direct Scanout PRIME import rejected");
+            return Ok(());
+        }
+    };
+    let state = direct_plane_state(scanout, framebuffer.handle());
+    if let Err(error) = scanout.surface.test_state([state.clone()], false) {
+        debug!(event = "rejected_reason", reason = "test_only_failed", %error, "Direct Scanout TEST_ONLY rejected");
+        return Ok(());
+    }
+    events.direct_scanout.test_only_result(true);
+    if let Err(error) = scanout.surface.page_flip([state], true) {
+        debug!(event = "fallback", reason = "real_commit_failed", %error, "Direct Scanout page flip rejected");
+        return Ok(());
+    }
+    scheduler.set_direct_output(scanout.output.id, true);
+    if let Some(frontend) = events.wayland.as_mut() {
+        frontend.outputs_submitted(&[(scanout.output.id, scanout.output.vrr_enabled)])?;
+    }
+    events.pending.insert(scanout.output.crtc);
+    events.direct_promotion = Some(direct_scanout::DirectPromotion {
+        framebuffer,
+        dmabuf: candidate.dmabuf,
+        buffer_guard: candidate.buffer_guard,
+        output: scanout.output.id.0,
+        surface: candidate.root_surface_id,
+        revision: candidate.buffer_revision,
+        certificate_epoch: candidate.certificate.certificate_epoch,
+        confirmed: false,
+        fallback_pending: false,
+    });
+    info!(event = "test_only_passed", output = ?scanout.output.id, surface = candidate.root_surface_id, revision = candidate.buffer_revision, "Direct Scanout primary promotion submitted");
+    Ok(())
+}
+
+#[cfg(feature = "flutter")]
+fn handle_direct_page_flip(
+    _scheduler: &mut output_scheduler::OutputScheduler,
+    scanouts: &[Scanout],
+    events: &mut RuntimeState,
+) -> Result<(), Box<dyn Error>> {
+    let Some(active) = events.direct_promotion.as_mut() else {
+        return Ok(());
+    };
+    if active.confirmed && !active.fallback_pending {
+        return Ok(());
+    }
+    let output = OutputId(active.output);
+    let Some(scanout) = scanouts.iter().find(|scanout| scanout.output.id == output) else {
+        return Ok(());
+    };
+    let Some(position) = events
+        .completed_page_flips
+        .iter()
+        .position(|completion| completion.crtc == scanout.output.crtc)
+    else {
+        return Ok(());
+    };
+    let completion = events
+        .completed_page_flips
+        .remove(position)
+        .expect("located Direct Scanout completion");
+    events.pending.remove(&completion.crtc);
+    let fallback = active.fallback_pending;
+    let surface = active.surface;
+    let revision = active.revision;
+    let certificate_epoch = active.certificate_epoch;
+    let framebuffer = active.framebuffer.handle();
+    if let Some(frontend) = events.wayland.as_mut() {
+        frontend.set_promoted_surface((!fallback).then_some(surface));
+        frontend.outputs_presented(&[PresentedOutput {
+            id: output,
+            observed_at: completion.observed_at,
+            presented_at: completion.presented_at,
+            sequence: completion.sequence,
+        }])?;
+    }
+    if fallback {
+        _scheduler.set_direct_output(output, false);
+        events.direct_promotion = None;
+        events.direct_scanout.compose();
+        info!(
+            event = "fallback",
+            ?output,
+            "Direct Scanout returned to atlas composition at page flip"
+        );
+    } else {
+        active.confirmed = true;
+        events
+            .direct_scanout
+            .real_commit_result(true, certificate_epoch, revision);
+        info!(event = "promoted", ?output, surface, revision, framebuffer = ?framebuffer, "Direct Scanout primary promotion reached page flip");
+    }
+    events.scene_sync.mark_dirty();
+    Ok(())
 }
 
 #[cfg(feature = "flutter")]

@@ -20,7 +20,7 @@ use smithay::backend::renderer::gles::GlesRenderer;
 use smithay::backend::renderer::utils::on_commit_buffer_handler;
 #[cfg(feature = "flutter")]
 use smithay::backend::renderer::utils::{
-    RendererSurfaceStateUserData, with_renderer_surface_state,
+    Buffer as RendererBufferGuard, RendererSurfaceStateUserData, with_renderer_surface_state,
 };
 use smithay::backend::renderer::{Color32F, Frame, ImportDma, Renderer};
 use smithay::backend::session::libseat::LibSeatSession;
@@ -394,6 +394,8 @@ pub(super) struct WaylandFrontend {
     #[cfg(feature = "flutter")]
     composition_certificate: Option<CompositionCertificate>,
     #[cfg(feature = "flutter")]
+    promoted_surface_id: Option<u64>,
+    #[cfg(feature = "flutter")]
     shell_fullscreen_locks: HashSet<ObjectId>,
     #[cfg(feature = "flutter")]
     visible_window_ids: HashSet<u64>,
@@ -682,6 +684,20 @@ struct PublishedSurfaceCommits {
 }
 
 #[cfg(feature = "flutter")]
+pub(super) struct PrimaryScanoutCandidate {
+    pub(super) output_id: OutputId,
+    pub(super) root_surface_id: u64,
+    pub(super) buffer_revision: u64,
+    pub(super) dmabuf: Dmabuf,
+    pub(super) buffer_guard: RendererBufferGuard,
+    pub(super) certificate: CompositionCertificate,
+    pub(super) visibility_epoch: u64,
+    pub(super) source_size: (u32, u32),
+    pub(super) destination_size: (u32, u32),
+    pub(super) transform: u32,
+}
+
+#[cfg(feature = "flutter")]
 fn input_routing_changed(
     current: Option<&InputLayoutSnapshot>,
     next: &InputLayoutSnapshot,
@@ -707,8 +723,10 @@ fn window_expects_sample(
     input_visibility_known: bool,
     visible_window_ids: &HashSet<u64>,
     window_id: u64,
+    promoted_surface_id: Option<u64>,
 ) -> bool {
-    !input_visibility_known || visible_window_ids.contains(&window_id)
+    promoted_surface_id != Some(window_id)
+        && (!input_visibility_known || visible_window_ids.contains(&window_id))
 }
 
 #[cfg(feature = "flutter")]
@@ -1172,6 +1190,8 @@ impl WaylandFrontend {
             input_layout: None,
             #[cfg(feature = "flutter")]
             composition_certificate: None,
+            #[cfg(feature = "flutter")]
+            promoted_surface_id: None,
             #[cfg(feature = "flutter")]
             shell_fullscreen_locks: HashSet::new(),
             #[cfg(feature = "flutter")]
@@ -2964,6 +2984,7 @@ impl WaylandFrontend {
                 self.input_visibility_known,
                 &self.visible_window_ids,
                 window_id,
+                self.promoted_surface_id,
             );
             let Some(frame) = self.external_texture_frame(surface_id, expects_sample) else {
                 self.scene_textures_scratch = textures;
@@ -3172,6 +3193,7 @@ impl WaylandFrontend {
                 self.input_visibility_known,
                 &self.visible_window_ids,
                 stable_id,
+                self.promoted_surface_id,
             );
             self.append_surface_tree(
                 &surface,
@@ -3532,6 +3554,7 @@ impl WaylandFrontend {
                     self.input_visibility_known,
                     &self.visible_window_ids,
                     stable_id,
+                    self.promoted_surface_id,
                 );
                 let mut composition_order = 0;
                 self.append_surface_tree(
@@ -3763,6 +3786,68 @@ impl WaylandFrontend {
             reason,
         );
         self.composition_certificate = Some(certificate);
+    }
+
+    #[cfg(feature = "flutter")]
+    pub(super) fn set_promoted_surface(&mut self, surface_id: Option<u64>) {
+        self.promoted_surface_id = surface_id;
+    }
+
+    #[cfg(feature = "flutter")]
+    pub(super) fn primary_scanout_candidate(
+        &self,
+        output_id: OutputId,
+    ) -> Option<PrimaryScanoutCandidate> {
+        let certificate = self.composition_certificate.as_ref()?.clone();
+        if certificate.output_id != i64::try_from(output_id.0).ok()?
+            || certificate.sole_root_surface_id == 0
+            || certificate.requires_client_sampling
+            || !certificate.known_opaque
+            || !certificate.shell_fully_transparent
+            || certificate.has_popup
+            || certificate.has_subsurface
+            || certificate.has_drag_icon
+            || certificate.has_ime
+            || certificate.has_preview
+            || certificate.has_capture
+            || certificate.has_effect
+        {
+            return None;
+        }
+        let visibility_epoch = self.input_layout.as_ref()?.epoch;
+        if certificate.layout_epoch != visibility_epoch {
+            return None;
+        }
+        let surface = self.surfaces_by_id.get(&certificate.sole_root_surface_id)?;
+        let (view, buffer, transform) = with_renderer_surface_state(surface, |state| {
+            (
+                state.view(),
+                state.buffer().cloned(),
+                state.buffer_transform(),
+            )
+        })?;
+        let view = view?;
+        let renderer_buffer = buffer?;
+        let dmabuf = get_dmabuf(&renderer_buffer).ok()?.clone();
+        let revision = self.surface_buffer_revisions.get(&surface.id()).copied()?;
+        if revision == 0 || revision != certificate.buffer_revision {
+            return None;
+        }
+        Some(PrimaryScanoutCandidate {
+            output_id,
+            root_surface_id: certificate.sole_root_surface_id,
+            buffer_revision: revision,
+            source_size: (dmabuf.width(), dmabuf.height()),
+            destination_size: (
+                u32::try_from(view.dst.w).ok()?,
+                u32::try_from(view.dst.h).ok()?,
+            ),
+            dmabuf,
+            buffer_guard: renderer_buffer,
+            certificate,
+            visibility_epoch,
+            transform: transform_to_wire(transform),
+        })
     }
 
     #[cfg(feature = "flutter")]
@@ -4480,9 +4565,10 @@ mod tests {
     fn only_visible_windows_wait_for_flutter_texture_samples() {
         let visible = HashSet::from([42]);
 
-        assert!(window_expects_sample(false, &visible, 7));
-        assert!(window_expects_sample(true, &visible, 42));
-        assert!(!window_expects_sample(true, &visible, 7));
+        assert!(window_expects_sample(false, &visible, 7, None));
+        assert!(window_expects_sample(true, &visible, 42, None));
+        assert!(!window_expects_sample(true, &visible, 7, None));
+        assert!(!window_expects_sample(true, &visible, 42, Some(42)));
     }
 
     #[cfg(feature = "flutter")]
