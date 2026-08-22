@@ -30,7 +30,9 @@ use smithay::reexports::drm::control::{
 
 use crate::topology::PixelRect;
 
-const MAX_ATOMIC_PLANE_PROPERTIES: usize = 7;
+const MAX_ATOMIC_PLANES: usize = 4;
+const MAX_ATOMIC_PLANE_PROPERTIES: usize = 16;
+const MAX_ATOMIC_PROPERTIES: usize = MAX_ATOMIC_PLANES * MAX_ATOMIC_PLANE_PROPERTIES;
 const LOOKAHEAD_RETRY_INTERVAL: Duration = Duration::from_micros(100);
 const LOOKAHEAD_MAX_WAIT: Duration = Duration::from_millis(100);
 static NEXT_INSTANCE: AtomicU64 = AtomicU64::new(1);
@@ -50,6 +52,10 @@ fn next_instance() -> u64 {
     }
 }
 
+fn signed_integer(value: i32) -> u64 {
+    u64::from(u32::from_ne_bytes(value.to_ne_bytes()))
+}
+
 /// Atomic properties required to move one primary plane to a framebuffer.
 #[derive(Clone, Copy, Debug)]
 pub struct PlaneProperties {
@@ -60,6 +66,34 @@ pub struct PlaneProperties {
     pub source_height: property::Handle,
     pub rotation: Option<(property::Handle, u64)>,
     pub in_fence_fd: Option<property::Handle>,
+    pub crtc_id: Option<(property::Handle, u64)>,
+    pub destination: Option<(DestinationProperties, DestinationRect)>,
+    pub alpha: Option<(property::Handle, u64)>,
+    pub blend_mode: Option<(property::Handle, u64)>,
+    pub zpos: Option<(property::Handle, u64)>,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct DestinationRect {
+    pub x: i32,
+    pub y: i32,
+    pub width: u32,
+    pub height: u32,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct DestinationProperties {
+    pub x: property::Handle,
+    pub y: property::Handle,
+    pub width: property::Handle,
+    pub height: property::Handle,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct PlaneObject {
+    pub plane: plane::Handle,
+    pub properties: PlaneProperties,
+    pub source: PixelRect,
 }
 
 /// Reusable atomic state for one output plane.
@@ -68,44 +102,195 @@ pub struct PlaneProperties {
 /// be retained by Denial and cloned into a Volition lookahead job.
 #[derive(Clone, Debug)]
 pub struct PlaneCommit {
-    objects: [u32; 1],
-    property_counts: [u32; 1],
-    properties: [u32; MAX_ATOMIC_PLANE_PROPERTIES],
-    values: [u64; MAX_ATOMIC_PLANE_PROPERTIES],
+    objects: [u32; MAX_ATOMIC_PLANES],
+    property_counts: [u32; MAX_ATOMIC_PLANES],
+    properties: [u32; MAX_ATOMIC_PROPERTIES],
+    values: [u64; MAX_ATOMIC_PROPERTIES],
+    object_count: usize,
     property_count: usize,
-    fence_index: Option<usize>,
+    fence_indices: [Option<usize>; MAX_ATOMIC_PLANES],
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct AtomicRequestStats {
+    pub object_count: usize,
+    pub property_count: usize,
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct FramebufferSet {
+    handles: [Option<framebuffer::Handle>; MAX_ATOMIC_PLANES],
+    count: usize,
+}
+
+impl FramebufferSet {
+    pub fn single(framebuffer: framebuffer::Handle) -> Self {
+        let mut handles = [None; MAX_ATOMIC_PLANES];
+        handles[0] = Some(framebuffer);
+        Self { handles, count: 1 }
+    }
+
+    pub fn new(framebuffers: &[framebuffer::Handle]) -> Result<Self, String> {
+        if framebuffers.is_empty() || framebuffers.len() > MAX_ATOMIC_PLANES {
+            return Err("framebuffer set does not fit the atomic plane capacity".into());
+        }
+        let mut handles = [None; MAX_ATOMIC_PLANES];
+        for (slot, framebuffer) in handles.iter_mut().zip(framebuffers) {
+            *slot = Some(*framebuffer);
+        }
+        Ok(Self {
+            handles,
+            count: framebuffers.len(),
+        })
+    }
+
+    fn get(self, index: usize) -> Option<framebuffer::Handle> {
+        (index < self.count).then(|| self.handles[index]).flatten()
+    }
 }
 
 impl PlaneCommit {
     pub fn new(plane: plane::Handle, properties: PlaneProperties, source: PixelRect) -> Self {
-        let plane: RawResourceHandle = plane.into();
+        Self::try_new(plane, properties, source).expect("valid primary plane atomic request")
+    }
+
+    pub fn try_new(
+        plane: plane::Handle,
+        properties: PlaneProperties,
+        source: PixelRect,
+    ) -> Result<Self, String> {
+        Self::from_objects(&[PlaneObject {
+            plane,
+            properties,
+            source,
+        }])
+    }
+
+    pub fn from_objects(objects: &[PlaneObject]) -> Result<Self, String> {
+        if objects.is_empty() {
+            return Err("atomic request must contain at least one plane object".into());
+        }
+        if objects.len() > MAX_ATOMIC_PLANES {
+            return Err("atomic request exceeds the plane object capacity".into());
+        }
         let mut request = Self {
-            objects: [u32::from(plane)],
-            property_counts: [0],
-            properties: [0; MAX_ATOMIC_PLANE_PROPERTIES],
-            values: [0; MAX_ATOMIC_PLANE_PROPERTIES],
+            objects: [0; MAX_ATOMIC_PLANES],
+            property_counts: [0; MAX_ATOMIC_PLANES],
+            properties: [0; MAX_ATOMIC_PROPERTIES],
+            values: [0; MAX_ATOMIC_PROPERTIES],
+            object_count: 0,
             property_count: 0,
-            fence_index: None,
+            fence_indices: [None; MAX_ATOMIC_PLANES],
         };
-        request.push(properties.framebuffer, 0);
-        request.push(properties.source_x, u64::from(source.x) << 16);
-        request.push(properties.source_y, u64::from(source.y) << 16);
-        request.push(properties.source_width, u64::from(source.width) << 16);
-        request.push(properties.source_height, u64::from(source.height) << 16);
+        for object in objects {
+            request.append_object(*object)?;
+        }
+        for left in 0..request.property_count {
+            if request.properties[..left].contains(&request.properties[left]) {
+                return Err(format!(
+                    "atomic request repeats property {}",
+                    request.properties[left]
+                ));
+            }
+        }
+        Ok(request)
+    }
+
+    fn append_object(&mut self, object: PlaneObject) -> Result<(), String> {
+        let object_index = self.add_object(object.plane.into())?;
+        let property_start = self.property_count;
+        let properties = object.properties;
+        let requested_properties = 5
+            + usize::from(properties.crtc_id.is_some())
+            + properties.destination.map_or(0, |_| 4)
+            + usize::from(properties.rotation.is_some())
+            + usize::from(properties.alpha.is_some())
+            + usize::from(properties.blend_mode.is_some())
+            + usize::from(properties.zpos.is_some())
+            + usize::from(properties.in_fence_fd.is_some());
+        if requested_properties > MAX_ATOMIC_PLANE_PROPERTIES {
+            return Err(format!(
+                "plane object {object_index} has {requested_properties} properties; capacity is {MAX_ATOMIC_PLANE_PROPERTIES}"
+            ));
+        }
+        if self.property_count + requested_properties > MAX_ATOMIC_PROPERTIES {
+            return Err("atomic request exceeds its property capacity".into());
+        }
+        self.push(properties.framebuffer, 0);
+        self.push(properties.source_x, u64::from(object.source.x) << 16);
+        self.push(properties.source_y, u64::from(object.source.y) << 16);
+        self.push(
+            properties.source_width,
+            u64::from(object.source.width) << 16,
+        );
+        self.push(
+            properties.source_height,
+            u64::from(object.source.height) << 16,
+        );
+        if let Some((property, value)) = properties.crtc_id {
+            self.push(property, value);
+        }
+        if let Some((destination_properties, destination)) = properties.destination {
+            self.push(destination_properties.x, signed_integer(destination.x));
+            self.push(destination_properties.y, signed_integer(destination.y));
+            self.push(destination_properties.width, u64::from(destination.width));
+            self.push(destination_properties.height, u64::from(destination.height));
+        }
         if let Some((property, value)) = properties.rotation {
-            request.push(property, value);
+            self.push(property, value);
+        }
+        if let Some((property, value)) = properties.alpha {
+            self.push(property, value);
+        }
+        if let Some((property, value)) = properties.blend_mode {
+            self.push(property, value);
+        }
+        if let Some((property, value)) = properties.zpos {
+            self.push(property, value);
         }
         if let Some(property) = properties.in_fence_fd {
-            request.fence_index = Some(request.property_count);
-            request.push(property, u64::MAX);
+            self.fence_indices[object_index] = Some(self.property_count);
+            self.push(property, u64::MAX);
         }
-        request.property_counts[0] =
-            u32::try_from(request.property_count).expect("atomic plane property count fits u32");
-        request
+        for left in property_start..self.property_count {
+            if self.properties[property_start..left].contains(&self.properties[left]) {
+                return Err(format!(
+                    "atomic request repeats property {} on object {}",
+                    self.properties[left], object_index
+                ));
+            }
+        }
+        self.property_counts[object_index] = u32::try_from(
+            self.property_count
+                - self.property_counts[..object_index]
+                    .iter()
+                    .map(|count| *count as usize)
+                    .sum::<usize>(),
+        )
+        .map_err(|_| "atomic plane property count exceeds u32".to_owned())?;
+        Ok(())
+    }
+
+    fn add_object(&mut self, object: RawResourceHandle) -> Result<usize, String> {
+        if self.object_count == MAX_ATOMIC_PLANES {
+            return Err("atomic request exceeds the plane object capacity".into());
+        }
+        let object = u32::from(object);
+        if self.objects[..self.object_count].contains(&object) {
+            return Err(format!("atomic request repeats plane object {object}"));
+        }
+        let index = self.object_count;
+        self.objects[index] = object;
+        self.object_count += 1;
+        Ok(index)
     }
 
     fn push(&mut self, property: property::Handle, value: u64) {
-        debug_assert!(self.property_count < MAX_ATOMIC_PLANE_PROPERTIES);
+        self.push_named(property, value);
+    }
+
+    fn push_named(&mut self, property: property::Handle, value: u64) {
+        debug_assert!(self.property_count < MAX_ATOMIC_PROPERTIES);
         self.properties[self.property_count] = u32::from(property);
         self.values[self.property_count] = value;
         self.property_count += 1;
@@ -114,25 +299,56 @@ impl PlaneCommit {
     fn submit(
         &mut self,
         drm: BorrowedFd<'_>,
-        framebuffer: framebuffer::Handle,
+        framebuffers: FramebufferSet,
         fence: Option<BorrowedFd<'_>>,
         commit_mode: CommitMode,
     ) -> io::Result<()> {
-        self.values[0] = u64::from(u32::from(framebuffer));
-        debug_assert!(fence.is_none() || self.fence_index.is_some());
-        if let Some(index) = self.fence_index {
-            self.values[index] = fence
-                .map(|fence| i64::from(fence.as_raw_fd()) as u64)
-                .unwrap_or(u64::MAX);
+        if framebuffers.count != self.object_count {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "framebuffer count does not match atomic plane objects",
+            ));
+        }
+        let mut property_offset = 0;
+        for object_index in 0..self.object_count {
+            let framebuffer = framebuffers.get(object_index).ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidInput, "missing plane framebuffer")
+            })?;
+            self.values[property_offset] = u64::from(u32::from(framebuffer));
+            if let Some(index) = self.fence_indices[object_index] {
+                self.values[index] = if object_index == 0 {
+                    fence
+                        .map(|fence| i64::from(fence.as_raw_fd()) as u64)
+                        .unwrap_or(u64::MAX)
+                } else {
+                    u64::MAX
+                };
+            }
+            property_offset += self.property_counts[object_index] as usize;
         }
         drm_mode::atomic_commit(
             drm,
             commit_flags(commit_mode).bits(),
-            &mut self.objects,
-            &mut self.property_counts,
+            &mut self.objects[..self.object_count],
+            &mut self.property_counts[..self.object_count],
             &mut self.properties[..self.property_count],
             &mut self.values[..self.property_count],
         )
+    }
+
+    pub fn object_count(&self) -> usize {
+        self.object_count
+    }
+
+    pub fn property_count(&self) -> usize {
+        self.property_count
+    }
+
+    pub fn stats(&self) -> AtomicRequestStats {
+        AtomicRequestStats {
+            object_count: self.object_count,
+            property_count: self.property_count,
+        }
     }
 }
 
@@ -235,7 +451,7 @@ struct CommitJob {
     instance: u64,
     commit: CommitId,
     request: PlaneCommit,
-    framebuffer: framebuffer::Handle,
+    framebuffers: FramebufferSet,
     not_before: Instant,
 }
 
@@ -464,7 +680,7 @@ fn run_scheduler(
             .get_or_insert(attempted_at + LOOKAHEAD_MAX_WAIT);
         match scheduled.job.request.submit(
             drm.as_fd(),
-            scheduled.job.framebuffer,
+            scheduled.job.framebuffers,
             None,
             CommitMode::Lookahead,
         ) {
@@ -573,7 +789,27 @@ impl Volition {
         framebuffer: framebuffer::Handle,
         fence: Option<BorrowedFd<'_>>,
     ) -> io::Result<()> {
-        request.submit(self.drm.as_fd(), framebuffer, fence, CommitMode::Immediate)
+        request.submit(
+            self.drm.as_fd(),
+            FramebufferSet::single(framebuffer),
+            fence,
+            CommitMode::Immediate,
+        )
+    }
+
+    /// Submits one retained multi-plane scene immediately.
+    pub fn submit_scene_immediate(
+        &self,
+        request: &mut PlaneCommit,
+        framebuffers: FramebufferSet,
+        primary_fence: Option<BorrowedFd<'_>>,
+    ) -> io::Result<()> {
+        request.submit(
+            self.drm.as_fd(),
+            framebuffers,
+            primary_fence,
+            CommitMode::Immediate,
+        )
     }
 
     /// Queues a render-complete generation behind the current hardware commit.
@@ -596,7 +832,30 @@ impl Volition {
             instance: self.instance,
             commit,
             request: request.clone(),
-            framebuffer,
+            framebuffers: FramebufferSet::single(framebuffer),
+            not_before,
+        })
+    }
+
+    /// Queues a complete retained scene after every plane fence has signaled.
+    pub fn submit_scene_lookahead(
+        &mut self,
+        commit: CommitId,
+        request: &PlaneCommit,
+        framebuffers: FramebufferSet,
+        not_before: Instant,
+    ) -> io::Result<Submission> {
+        if framebuffers.count != request.object_count {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "framebuffer count does not match atomic scene",
+            ));
+        }
+        self.scheduler.try_submit(CommitJob {
+            instance: self.instance,
+            commit,
+            request: request.clone(),
+            framebuffers,
             not_before,
         })
     }
@@ -627,10 +886,75 @@ mod tests {
     use std::time::{Duration, Instant};
 
     use super::{
-        CommitMode, LookaheadFailureDisposition, Submission, commit_flags,
-        is_retryable_lookahead_error, lookahead_failure_disposition, schedule_order,
+        CommitMode, DestinationProperties, LookaheadFailureDisposition, PlaneCommit, PlaneObject,
+        PlaneProperties, Submission, commit_flags, is_retryable_lookahead_error,
+        lookahead_failure_disposition, schedule_order,
     };
-    use smithay::reexports::drm::control::AtomicCommitFlags;
+    use crate::topology::PixelRect;
+    use smithay::reexports::drm::control::{AtomicCommitFlags, RawResourceHandle, plane, property};
+
+    fn plane_object(plane_id: u32, property_base: u32) -> PlaneObject {
+        let handle = |value: u32| property::Handle::from(RawResourceHandle::new(value).unwrap());
+        PlaneObject {
+            plane: plane::Handle::from(RawResourceHandle::new(plane_id).unwrap()),
+            properties: PlaneProperties {
+                framebuffer: handle(property_base),
+                source_x: handle(property_base + 1),
+                source_y: handle(property_base + 2),
+                source_width: handle(property_base + 3),
+                source_height: handle(property_base + 4),
+                rotation: None,
+                in_fence_fd: None,
+                crtc_id: None,
+                destination: Some((
+                    DestinationProperties {
+                        x: handle(property_base + 5),
+                        y: handle(property_base + 6),
+                        width: handle(property_base + 7),
+                        height: handle(property_base + 8),
+                    },
+                    super::DestinationRect {
+                        x: 0,
+                        y: 0,
+                        width: 1920,
+                        height: 1080,
+                    },
+                )),
+                alpha: None,
+                blend_mode: None,
+                zpos: None,
+            },
+            source: PixelRect {
+                x: 0,
+                y: 0,
+                width: 1920,
+                height: 1080,
+            },
+        }
+    }
+
+    #[test]
+    fn retained_atomic_scene_encodes_multiple_plane_objects() {
+        let request = PlaneCommit::from_objects(&[
+            plane_object(1, 10),
+            plane_object(2, 30),
+            plane_object(3, 50),
+        ])
+        .unwrap();
+        assert_eq!(request.object_count(), 3);
+        assert_eq!(request.stats().property_count, 27);
+    }
+
+    #[test]
+    fn atomic_scene_rejects_duplicate_plane_and_property_handles() {
+        let duplicate_plane =
+            PlaneCommit::from_objects(&[plane_object(1, 10), plane_object(1, 30)]);
+        assert!(duplicate_plane.is_err());
+        let mut invalid = plane_object(2, 30);
+        invalid.properties.source_x = invalid.properties.framebuffer;
+        let duplicate_property = PlaneCommit::from_objects(&[plane_object(1, 10), invalid]);
+        assert!(duplicate_property.is_err());
+    }
 
     #[test]
     fn every_volition_ioctl_is_nonblocking() {

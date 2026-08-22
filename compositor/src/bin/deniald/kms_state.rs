@@ -331,7 +331,68 @@ fn smithay_opaque_alpha_for_maximum(maximum: u64) -> f32 {
 pub(super) struct KmsContext {
     pub(super) drm: DrmDevice,
     pub(super) scanouts: Vec<Scanout>,
+    plane_capabilities: Vec<PlaneCapabilities>,
     teardown: TeardownGate,
+}
+
+#[derive(Clone, Debug)]
+pub(super) struct PlanePropertyCapability {
+    pub(super) name: String,
+    pub(super) value_type: property::ValueType,
+}
+
+#[derive(Clone, Debug)]
+pub(super) struct PlaneCapabilities {
+    pub(super) plane: plane::Handle,
+    pub(super) possible_crtcs: Vec<crtc::Handle>,
+    pub(super) formats: Vec<u32>,
+    pub(super) properties: Vec<PlanePropertyCapability>,
+}
+
+fn discover_plane_capabilities(drm: &DrmDevice) -> Result<Vec<PlaneCapabilities>, Box<dyn Error>> {
+    let resources = drm.resource_handles()?;
+    drm.plane_handles()?
+        .into_iter()
+        .map(|plane| {
+            let info = drm.get_plane(plane)?;
+            let properties = drm
+                .get_properties(plane)?
+                .into_iter()
+                .filter_map(|(handle, _)| {
+                    let property = drm.get_property(handle).ok()?;
+                    let name = property.name().to_str().ok()?.to_owned();
+                    matches!(
+                        name.as_str(),
+                        "type"
+                            | "IN_FORMATS"
+                            | "zpos"
+                            | "alpha"
+                            | "pixel blend mode"
+                            | "rotation"
+                            | "SRC_X"
+                            | "SRC_Y"
+                            | "SRC_W"
+                            | "SRC_H"
+                            | "CRTC_X"
+                            | "CRTC_Y"
+                            | "CRTC_W"
+                            | "CRTC_H"
+                            | "IN_FENCE_FD"
+                    )
+                    .then(|| PlanePropertyCapability {
+                        name,
+                        value_type: property.value_type(),
+                    })
+                })
+                .collect();
+            Ok(PlaneCapabilities {
+                plane,
+                possible_crtcs: resources.filter_crtcs(info.possible_crtcs()),
+                formats: info.formats().to_vec(),
+                properties,
+            })
+        })
+        .collect()
 }
 
 pub(super) struct RestoreAttempt {
@@ -1162,9 +1223,31 @@ fn validate_atlas_allocation(size: PixelSize, length: usize) -> Result<(), Box<d
 
 impl KmsContext {
     pub(super) fn new(drm: DrmDevice) -> Self {
+        let plane_capabilities = match discover_plane_capabilities(&drm) {
+            Ok(capabilities) => capabilities,
+            Err(error) => {
+                warn!(%error, "could not snapshot read-only KMS plane capabilities");
+                Vec::new()
+            }
+        };
+        for capability in &plane_capabilities {
+            let property_names = capability
+                .properties
+                .iter()
+                .map(|property| format!("{}:{:?}", property.name, property.value_type))
+                .collect::<Vec<_>>();
+            debug!(
+                plane = ?capability.plane,
+                possible_crtcs = capability.possible_crtcs.len(),
+                formats = capability.formats.len(),
+                properties = ?property_names,
+                "discovered KMS plane capabilities"
+            );
+        }
         Self {
             drm,
             scanouts: Vec::new(),
+            plane_capabilities,
             teardown: TeardownGate::default(),
         }
     }
@@ -1173,6 +1256,10 @@ impl KmsContext {
         if self.drm.is_active() {
             self.drm.pause();
         }
+    }
+
+    pub(super) fn plane_capabilities(&self) -> &[PlaneCapabilities] {
+        &self.plane_capabilities
     }
 
     pub(super) fn restore_once(

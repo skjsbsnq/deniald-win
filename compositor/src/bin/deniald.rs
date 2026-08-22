@@ -394,6 +394,10 @@ fn run(options: Options) -> Result<(), Box<dyn Error>> {
         kms_state::release_inherited_planes(&drm);
     }
     let mut kms = KmsContext::new(drm);
+    info!(
+        planes = kms.plane_capabilities().len(),
+        "captured read-only KMS plane capability snapshot"
+    );
     let mut frame_event_loop = if runtime_limit != RuntimeLimit::TestOnly {
         let event_loop = EventLoop::<RuntimeState>::try_new()?;
         event_loop
@@ -1959,7 +1963,13 @@ fn apply_output_power_requests(
         } else {
             for &(output, scanout_index) in &power_on {
                 scanouts[scanout_index].powered = true;
-                scheduler.power_on(runtime, scanout_index, framebuffer_index, scanouts)?;
+                scheduler.power_on(
+                    runtime,
+                    scanout_index,
+                    framebuffer_index,
+                    framebuffer,
+                    scanouts,
+                )?;
                 events.output_control_dirty = true;
                 info!(
                     output = scanouts[scanout_index].output.name,
@@ -2772,7 +2782,7 @@ fn run_flutter_event_loop(
         drm,
         volition_event_sender.clone(),
         scanouts,
-        swapchain.current,
+        swapchain,
         swapchain.buffers.len(),
         flutter
             .as_mut()
@@ -2951,7 +2961,7 @@ fn run_flutter_event_loop(
             if scheduler.can_accept_ready()
                 && let Some(ready) = runtime.take_ready()
             {
-                if let Some(watch) = scheduler.publish_ready(runtime, ready, scanouts)? {
+                if let Some(watch) = scheduler.publish_ready(runtime, ready, swapchain, scanouts)? {
                     install_ready_fence_watch(event_loop, watch)?;
                 }
                 raster_frames = raster_frames.saturating_add(1);
@@ -3416,7 +3426,7 @@ fn run_flutter_event_loop(
                 drm,
                 volition_event_sender.clone(),
                 scanouts,
-                swapchain.current,
+                swapchain,
                 swapchain.buffers.len(),
                 flutter
                     .as_mut()
@@ -3589,7 +3599,7 @@ fn run_flutter_event_loop(
                         drm,
                         volition_event_sender.clone(),
                         scanouts,
-                        swapchain.current,
+                        swapchain,
                         swapchain.buffers.len(),
                         flutter
                             .as_mut()
@@ -3664,7 +3674,7 @@ fn run_flutter_event_loop(
                 drm,
                 volition_event_sender.clone(),
                 scanouts,
-                swapchain.current,
+                swapchain,
                 swapchain.buffers.len(),
                 flutter
                     .as_mut()

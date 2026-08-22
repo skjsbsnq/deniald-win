@@ -5,11 +5,14 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use denial_core::topology::OutputId;
-use denial_core::volition::{self, CommitId, PlaneCommit, PlaneProperties, Submission, Volition};
+use denial_core::volition::{
+    self, CommitId, FramebufferSet, PlaneCommit, PlaneProperties, Submission, Volition,
+};
 use smithay::backend::drm::DrmDevice;
 use smithay::backend::renderer::gles::GlesRenderer;
 use smithay::output::Mode as OutputMode;
 use smithay::reexports::calloop::channel::SyncSender as EventSender;
+use smithay::reexports::drm::control::framebuffer;
 use tracing::info;
 
 use super::flutter_runtime::{FlutterRuntime, ReadyFrame};
@@ -34,11 +37,67 @@ fn next_ready_fence_token() -> u64 {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[allow(dead_code)]
+enum PlaneRole {
+    Primary,
+    ShellOverlay,
+    Cursor,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct PlaneLease {
+    role: PlaneRole,
+    plane: Option<u32>,
+    framebuffer: framebuffer::Handle,
+    atlas_index: Option<usize>,
+    generation: u64,
+    retirement_token: u64,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct OutputPlaneScene {
+    primary: PlaneLease,
+    shell_overlay: Option<PlaneLease>,
+    cursor: Option<PlaneLease>,
+    generation: u64,
+}
+
+impl OutputPlaneScene {
+    fn atlas(index: usize, framebuffer: framebuffer::Handle, generation: u64) -> Self {
+        Self {
+            primary: PlaneLease {
+                role: PlaneRole::Primary,
+                plane: None,
+                framebuffer,
+                atlas_index: Some(index),
+                generation,
+                retirement_token: generation,
+            },
+            shell_overlay: None,
+            cursor: None,
+            generation,
+        }
+    }
+
+    fn atlas_index(self) -> usize {
+        self.primary
+            .atlas_index
+            .expect("atlas primary lease has an atlas slot")
+    }
+}
+
 #[derive(Debug)]
 struct OutputFrame {
-    index: usize,
+    scene: OutputPlaneScene,
     screenshot_request_id: Option<u64>,
     submitted_at: Instant,
+}
+
+impl OutputFrame {
+    fn index(&self) -> usize {
+        self.scene.atlas_index()
+    }
 }
 
 #[derive(Debug)]
@@ -139,10 +198,10 @@ fn discard_ready_frame(
     frame: OutputFrame,
 ) -> Result<(), Box<dyn Error>> {
     let slot = ready_fences
-        .get_mut(frame.index)
+        .get_mut(frame.index())
         .ok_or("discarded Flutter frame exceeds the fence pool")?;
     if slot.signaled {
-        runtime.release_output(frame.index)?;
+        runtime.release_output(frame.index())?;
         slot.release_user()?;
     } else {
         // The output no longer needs this generation, but Flutter must not
@@ -187,6 +246,11 @@ fn plane_commit(scanout: &Scanout) -> Result<PlaneCommit, Box<dyn Error>> {
             source_height: properties.source_height,
             rotation: scanout.rotation_property()?,
             in_fence_fd: properties.in_fence_fd,
+            crtc_id: None,
+            destination: None,
+            alpha: None,
+            blend_mode: None,
+            zpos: None,
         },
         scanout.source_rect,
     ))
@@ -220,7 +284,7 @@ fn measured_interval(
 #[derive(Debug)]
 struct OutputPipeline {
     scanout_index: usize,
-    scanning: usize,
+    scanning: OutputPlaneScene,
     scanning_screenshot_request_id: Option<u64>,
     ready: Option<OutputFrame>,
     submitted: VecDeque<OutputFrame>,
@@ -525,7 +589,7 @@ pub(super) struct OutputScheduler {
     /// Buffer ownership retained while every physical output is DPMS-off.
     /// Flutter's independent-scanout broker requires one initial owner, and
     /// parking it also gives the first waking output a truthful framebuffer.
-    parked: Option<usize>,
+    parked: Option<OutputPlaneScene>,
     latest_index: usize,
     presented_frames: u64,
 }
@@ -535,11 +599,13 @@ impl OutputScheduler {
         drm: &DrmDevice,
         volition_events: EventSender<volition::Event>,
         scanouts: &[Scanout],
-        initial_index: usize,
+        swapchain: &AtlasSwapchain,
         buffer_count: usize,
         runtime: &mut FlutterRuntime,
         events: &mut RuntimeState,
     ) -> Result<Self, Box<dyn Error>> {
+        let initial_index = swapchain.current;
+        let initial_framebuffer = swapchain.current_framebuffer();
         if initial_index >= buffer_count {
             return Err("initial atlas index exceeds the scheduler buffer pool".into());
         }
@@ -565,7 +631,7 @@ impl OutputScheduler {
                 let refresh_interval = refresh_interval(scanout);
                 Ok(OutputPipeline {
                     scanout_index,
-                    scanning: initial_index,
+                    scanning: OutputPlaneScene::atlas(initial_index, initial_framebuffer, 0),
                     scanning_screenshot_request_id: None,
                     ready: None,
                     submitted: VecDeque::with_capacity(volition::MAX_IN_FLIGHT_COMMITS_PER_STREAM),
@@ -604,7 +670,11 @@ impl OutputScheduler {
                 .collect(),
             audit: render_audit_enabled()
                 .then(|| OutputSchedulerAudit::new(buffer_count, powered_outputs)),
-            parked: (powered_outputs == 0).then_some(initial_index),
+            parked: (powered_outputs == 0).then_some(OutputPlaneScene::atlas(
+                initial_index,
+                initial_framebuffer,
+                0,
+            )),
             latest_index: initial_index,
             presented_frames: 0,
         })
@@ -614,6 +684,7 @@ impl OutputScheduler {
         &mut self,
         runtime: &FlutterRuntime,
         ready: ReadyFrame,
+        swapchain: &AtlasSwapchain,
         scanouts: &[Scanout],
     ) -> Result<Option<ReadyFenceWatch>, Box<dyn Error>> {
         let ReadyFrame {
@@ -694,7 +765,11 @@ impl OutputScheduler {
                 discard_ready_frame(runtime, &mut self.ready_fences, replaced)?;
             }
             pipeline.ready = Some(OutputFrame {
-                index,
+                scene: OutputPlaneScene::atlas(
+                    index,
+                    swapchain.buffers[index].framebuffer(),
+                    token,
+                ),
                 screenshot_request_id,
                 // Reset when the frame actually enters KMS.  Initializing it
                 // here keeps the ownership type total while it is Ready.
@@ -793,7 +868,7 @@ impl OutputScheduler {
 
     pub(super) fn submit_ready(
         &mut self,
-        swapchain: &AtlasSwapchain,
+        _swapchain: &AtlasSwapchain,
         scanouts: &[Scanout],
         events: &mut RuntimeState,
     ) -> Result<ReadySubmission, Box<dyn Error>> {
@@ -817,7 +892,7 @@ impl OutputScheduler {
             }
             let scanout = &scanouts[pipeline.scanout_index];
             let frame = pipeline.ready.as_ref().expect("checked ready output frame");
-            let frame_index = frame.index;
+            let frame_index = frame.index();
             let volition_lookahead = !pipeline.submitted.is_empty();
             if (volition_lookahead && !ready_fences[frame_index].signaled)
                 || (!volition_lookahead && !ready_fences[frame_index].can_submit_immediately())
@@ -827,7 +902,7 @@ impl OutputScheduler {
                 // before entering the atomic ioctl without a fence.
                 continue;
             }
-            let framebuffer = swapchain.buffers[frame_index].framebuffer();
+            let framebuffer = frame.scene.primary.framebuffer;
             if volition_lookahead {
                 let commit = CommitId {
                     stream: pipeline_index,
@@ -840,10 +915,10 @@ impl OutputScheduler {
                     .checked_sub(submit_lead.min(VOLITION_SUBMIT_LEAD))
                     .unwrap_or(now)
                     .max(now);
-                let submission = presentation.submit_lookahead(
+                let submission = presentation.submit_scene_lookahead(
                     commit,
                     &pipeline.request,
-                    framebuffer,
+                    FramebufferSet::single(framebuffer),
                     not_before,
                 )?;
                 if submission == Submission::Queued {
@@ -858,9 +933,11 @@ impl OutputScheduler {
             }
 
             let fence = ready_fences[frame_index].fence.as_ref().map(AsFd::as_fd);
-            if let Err(error) =
-                presentation.submit_immediate(&mut pipeline.request, framebuffer, fence)
-            {
+            if let Err(error) = presentation.submit_scene_immediate(
+                &mut pipeline.request,
+                FramebufferSet::single(framebuffer),
+                fence,
+            ) {
                 queue_error = Some(format!(
                     "KMS rejected immediate plane commit for {} (IN_FENCE_FD={}): {error}",
                     scanout.output.name,
@@ -956,7 +1033,7 @@ impl OutputScheduler {
                 events.pending.insert(completion.crtc);
             }
             let previous = pipeline.scanning;
-            pipeline.scanning = presented.index;
+            pipeline.scanning = presented.scene;
             pipeline.scanning_screenshot_request_id = presented.screenshot_request_id;
             if pipeline.variable_refresh
                 && let Some(sequence) = completion.sequence
@@ -975,12 +1052,12 @@ impl OutputScheduler {
                 pipeline.last_presentation = Some((completion.observed_at, sequence));
             }
             pipeline.next_presentation_at = completion.observed_at + pipeline.refresh_interval;
-            if let Err(error) = runtime.release_output(previous) {
+            if let Err(error) = runtime.release_output(previous.atlas_index()) {
                 processing_error = Some(error);
                 break;
             }
-            swapchain.present(presented.index);
-            self.latest_index = presented.index;
+            swapchain.present(presented.index());
+            self.latest_index = presented.index();
 
             let presentation = PresentedOutput {
                 id: scanouts[pipeline.scanout_index].output.id,
@@ -1049,7 +1126,7 @@ impl OutputScheduler {
             .find(|pipeline| {
                 !pipeline.powering_off && scanouts[pipeline.scanout_index].output.id == output
             })
-            .map(|pipeline| pipeline.scanning)
+            .map(|pipeline| pipeline.scanning.atlas_index())
     }
 
     pub(super) fn screenshot_framebuffer_for_output(
@@ -1065,7 +1142,7 @@ impl OutputScheduler {
                     && scanouts[pipeline.scanout_index].output.id == output
                     && pipeline.scanning_screenshot_request_id == Some(request_id)
             })
-            .map(|pipeline| pipeline.scanning)
+            .map(|pipeline| pipeline.scanning.atlas_index())
     }
 
     pub(super) fn has_submitted(&self) -> bool {
@@ -1083,7 +1160,7 @@ impl OutputScheduler {
             let elapsed = presentation_stall_age(frame.submitted_at, now)?;
             Some(PresentationStall {
                 scanout_index: pipeline.scanout_index,
-                framebuffer_index: frame.index,
+                framebuffer_index: frame.index(),
                 pending_frames: pipeline.submitted.len(),
                 elapsed,
             })
@@ -1174,9 +1251,9 @@ impl OutputScheduler {
         if self.pipelines.is_empty() {
             debug_assert!(self.parked.is_none());
             self.parked = Some(pipeline.scanning);
-            self.latest_index = pipeline.scanning;
+            self.latest_index = pipeline.scanning.atlas_index();
         } else {
-            runtime.release_output(pipeline.scanning)?;
+            runtime.release_output(pipeline.scanning.atlas_index())?;
             self.repair_latest_index();
         }
         Ok(())
@@ -1184,7 +1261,12 @@ impl OutputScheduler {
 
     pub(super) fn stable_framebuffer_index(&self) -> usize {
         self.parked
-            .or_else(|| self.pipelines.first().map(|pipeline| pipeline.scanning))
+            .map(OutputPlaneScene::atlas_index)
+            .or_else(|| {
+                self.pipelines
+                    .first()
+                    .map(|pipeline| pipeline.scanning.atlas_index())
+            })
             .unwrap_or(self.latest_index)
     }
 
@@ -1196,7 +1278,7 @@ impl OutputScheduler {
         self.pipelines
             .iter()
             .find(|pipeline| scanouts[pipeline.scanout_index].output.id == output)
-            .map(|pipeline| pipeline.scanning)
+            .map(|pipeline| pipeline.scanning.atlas_index())
     }
 
     pub(super) fn power_on(
@@ -1204,6 +1286,7 @@ impl OutputScheduler {
         runtime: &FlutterRuntime,
         scanout_index: usize,
         framebuffer_index: usize,
+        framebuffer: framebuffer::Handle,
         scanouts: &[Scanout],
     ) -> Result<(), Box<dyn Error>> {
         let output = scanouts
@@ -1218,7 +1301,7 @@ impl OutputScheduler {
         }
 
         if self.pipelines.is_empty() {
-            if self.parked != Some(framebuffer_index) {
+            if self.parked.map(OutputPlaneScene::atlas_index) != Some(framebuffer_index) {
                 return Err("DPMS wake disagrees with the parked Flutter buffer".into());
             }
             self.parked = None;
@@ -1228,7 +1311,7 @@ impl OutputScheduler {
         let refresh_interval = refresh_interval(output);
         self.pipelines.push(OutputPipeline {
             scanout_index,
-            scanning: framebuffer_index,
+            scanning: OutputPlaneScene::atlas(framebuffer_index, framebuffer, 0),
             scanning_screenshot_request_id: None,
             ready: None,
             submitted: VecDeque::with_capacity(volition::MAX_IN_FLIGHT_COMMITS_PER_STREAM),
@@ -1245,26 +1328,28 @@ impl OutputScheduler {
     }
 
     fn repair_latest_index(&mut self) {
-        let still_owned = self.parked == Some(self.latest_index)
+        let still_owned = self.parked.map(OutputPlaneScene::atlas_index) == Some(self.latest_index)
             || self.pipelines.iter().any(|pipeline| {
-                pipeline.scanning == self.latest_index
+                pipeline.scanning.atlas_index() == self.latest_index
                     || pipeline
                         .ready
                         .as_ref()
-                        .is_some_and(|frame| frame.index == self.latest_index)
+                        .is_some_and(|frame| frame.index() == self.latest_index)
                     || pipeline
                         .submitted
                         .iter()
-                        .any(|frame| frame.index == self.latest_index)
+                        .any(|frame| frame.index() == self.latest_index)
                     || pipeline
                         .lookahead_pending
                         .as_ref()
-                        .is_some_and(|pending| pending.frame.index == self.latest_index)
+                        .is_some_and(|pending| pending.frame.index() == self.latest_index)
             });
         if !still_owned
-            && let Some(scanning) = self
-                .parked
-                .or_else(|| self.pipelines.first().map(|pipeline| pipeline.scanning))
+            && let Some(scanning) = self.parked.map(OutputPlaneScene::atlas_index).or_else(|| {
+                self.pipelines
+                    .first()
+                    .map(|pipeline| pipeline.scanning.atlas_index())
+            })
         {
             self.latest_index = scanning;
         }
@@ -1294,6 +1379,7 @@ impl OutputScheduler {
             events.completed_page_flips.clear();
             return self
                 .parked
+                .map(OutputPlaneScene::atlas_index)
                 .ok_or_else(|| "powered-off scheduler lost its parked atlas".into());
         }
 
@@ -1309,10 +1395,10 @@ impl OutputScheduler {
 
         for pipeline in &mut self.pipelines {
             if let Some(ready) = pipeline.ready.take() {
-                runtime.release_output(ready.index)?;
+                runtime.release_output(ready.index())?;
             }
-            runtime.release_output(pipeline.scanning)?;
-            pipeline.scanning = converged;
+            runtime.release_output(pipeline.scanning.atlas_index())?;
+            pipeline.scanning = OutputPlaneScene::atlas(converged, framebuffer, 0);
         }
         self.ready_fences.fill_with(ReadyFenceSlot::default);
         swapchain.present(converged);
