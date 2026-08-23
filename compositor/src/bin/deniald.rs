@@ -4452,6 +4452,12 @@ fn service_direct_scanout(
     scheduler: &mut output_scheduler::OutputScheduler,
     events: &mut RuntimeState,
 ) -> Result<(), Box<dyn Error>> {
+    // A direct replacement owns an in-flight CRTC page flip. Do not inspect
+    // the older active lease or arm another replacement/fallback until that
+    // flip has retired; KMS reports the second request as busy.
+    if events.direct_replacement.is_some() {
+        return Ok(());
+    }
     if let Some(active) = events.direct_promotion.as_ref() {
         if !active.confirmed {
             return Ok(());
@@ -4516,8 +4522,14 @@ fn service_direct_scanout(
                 .unwrap_or(swapchain.current);
             let atlas = swapchain.buffers[atlas_index].framebuffer();
             let state = direct_plane_state(scanout, atlas);
-            scanout.surface.test_state([state.clone()], false)?;
-            scanout.surface.page_flip([state], true)?;
+            if let Err(error) = scanout.surface.test_state([state.clone()], false) {
+                debug!(event = "rejected_reason", reason = "fallback_test_only_failed", %error, "Direct Scanout fallback TEST_ONLY rejected");
+                return Ok(());
+            }
+            if let Err(error) = scanout.surface.page_flip([state], true) {
+                debug!(event = "rejected_reason", reason = "fallback_page_flip_busy", %error, "Direct Scanout fallback page flip deferred");
+                return Ok(());
+            }
             events.pending.insert(scanout.output.crtc);
             if let Some(frontend) = events.wayland.as_mut() {
                 frontend.outputs_submitted(&[(output, scanout.output.vrr_enabled)])?;
