@@ -320,12 +320,12 @@ fn run(options: Options) -> Result<(), Box<dyn Error>> {
     if options.experimental_primary_promotion {
         info!(
             event = "feature_enabled",
-            "P8-07 primary promotion experiment enabled; only exact fullscreen DMA-BUF candidates may be promoted"
+            "primary promotion experiment enabled; only exact fullscreen DMA-BUF candidates may be promoted"
         );
     } else {
         info!(
             event = "feature_disabled",
-            "P8-07 primary promotion experiment disabled; using atlas composition"
+            "primary promotion experiment disabled; using atlas composition"
         );
     }
     let output_configuration = RuntimeOutputConfiguration::from_options(&options);
@@ -4755,31 +4755,32 @@ fn service_direct_scanout(
     Ok(())
 }
 
-/// Rate-limited state line for the Direct Scanout audit log.
+/// Transition log for the Direct Scanout audit.
 ///
 /// The audit records the state, its sub-step, the live deadline and the last
 /// rejection reason together, so a report says why an output is not promoted
-/// instead of only that it is not.
+/// instead of only that it is not. Only changes are logged: this runs on every
+/// render iteration, so restating an idle machine would drown the transitions
+/// and cost more than the work being audited.
 #[cfg(feature = "flutter")]
-fn audit_direct_scanout(events: &RuntimeState, now: Instant) {
-    for output in events.direct_scanout.outputs() {
-        let state = events.direct_scanout.state(output);
-        let machine = events.direct_scanout.observe(output);
+fn audit_direct_scanout(events: &mut RuntimeState, now: Instant) {
+    for (output, machine) in events.direct_scanout.machines_mut() {
+        let deadline_ms = machine
+            .step_deadline()
+            .map(|deadline| deadline.saturating_duration_since(now).as_millis());
+        let Some(summary) = machine.take_audit_change() else {
+            continue;
+        };
         debug!(
             event = "state",
             output,
-            state = state.code(),
-            step = state.step_code(),
-            holds_client_scanout = state.holds_client_scanout(),
-            deadline_ms = machine
-                .and_then(direct_scanout::OutputMachine::step_deadline)
-                .map(|deadline| deadline.saturating_duration_since(now).as_millis()),
-            reject = machine
-                .and_then(direct_scanout::OutputMachine::last_reject)
-                .map(direct_scanout::RejectReason::code),
-            promotion_disabled =
-                machine.is_some_and(direct_scanout::OutputMachine::promotion_disabled),
-            "Direct Scanout output state"
+            state = summary.state,
+            step = summary.step,
+            holds_client_scanout = summary.holds_client_scanout,
+            deadline_ms,
+            reject = summary.reject,
+            promotion_disabled = summary.promotion_disabled,
+            "Direct Scanout output state changed"
         );
     }
 }

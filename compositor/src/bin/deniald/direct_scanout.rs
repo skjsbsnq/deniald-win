@@ -574,6 +574,16 @@ enum Capability {
 
 /// One output's promotion state machine.  Instances are independent: a KMS
 /// error, fallback or capability loss on one output cannot alter another.
+/// One line of the audit log: what the machine is doing and why.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) struct AuditSummary {
+    pub(super) state: &'static str,
+    pub(super) step: &'static str,
+    pub(super) reject: Option<&'static str>,
+    pub(super) holds_client_scanout: bool,
+    pub(super) promotion_disabled: bool,
+}
+
 #[derive(Clone, Copy, Debug)]
 pub(super) struct OutputMachine {
     state: PromotionState,
@@ -583,6 +593,7 @@ pub(super) struct OutputMachine {
     fallback_attempts: u32,
     fallback_target_revision: u64,
     last_reject: Option<RejectReason>,
+    last_audit: Option<AuditSummary>,
 }
 
 impl Default for OutputMachine {
@@ -595,6 +606,7 @@ impl Default for OutputMachine {
             fallback_attempts: 0,
             fallback_target_revision: 0,
             last_reject: None,
+            last_audit: None,
         }
     }
 }
@@ -604,7 +616,10 @@ impl OutputMachine {
         self.state
     }
 
-    pub(super) const fn last_reject(&self) -> Option<RejectReason> {
+    /// The reason the last observation was refused. The runtime reads this
+    /// through `take_audit_change`; tests assert on the typed reason.
+    #[cfg(test)]
+    const fn last_reject(&self) -> Option<RejectReason> {
         self.last_reject
     }
 
@@ -620,6 +635,26 @@ impl OutputMachine {
     /// The client revision the prepared fallback atlas frame must carry.
     pub(super) const fn fallback_target_revision(&self) -> u64 {
         self.fallback_target_revision
+    }
+
+    /// The audit summary, but only when it differs from the one last returned.
+    ///
+    /// The runtime calls this once per render iteration, which is hundreds of
+    /// times a second. Reporting an unchanged machine every time would bury
+    /// the transitions the audit exists to show, and the logging itself would
+    /// cost more than the work being measured.
+    pub(super) fn take_audit_change(&mut self) -> Option<AuditSummary> {
+        let summary = AuditSummary {
+            state: self.state.code(),
+            step: self.state.step_code(),
+            reject: self.last_reject.map(RejectReason::code),
+            holds_client_scanout: self.state.holds_client_scanout(),
+            promotion_disabled: self.promotion_disabled(),
+        };
+        (self.last_audit != Some(summary)).then(|| {
+            self.last_audit = Some(summary);
+            summary
+        })
     }
 
     fn enter_arm(&mut self, mut progress: ArmProgress, step: ArmStep, now: Instant) -> ActionList {
@@ -1386,14 +1421,11 @@ impl PromotionRegistry {
         self.machines.remove(&output);
     }
 
-    /// Outputs that currently have a machine, for the audit log.
-    pub(super) fn outputs(&self) -> impl Iterator<Item = u64> + '_ {
-        self.machines.keys().copied()
-    }
-
-    /// Read-only view of one output's machine.
-    pub(super) fn observe(&self, output: u64) -> Option<&OutputMachine> {
-        self.machines.get(&output)
+    /// Every machine, for the audit sweep.
+    pub(super) fn machines_mut(&mut self) -> impl Iterator<Item = (u64, &mut OutputMachine)> {
+        self.machines
+            .iter_mut()
+            .map(|(output, machine)| (*output, machine))
     }
 
     /// Outputs waiting for a page flip this module committed itself. Only
