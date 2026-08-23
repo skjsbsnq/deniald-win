@@ -2236,6 +2236,33 @@ fn process_flutter_input_event(
                     if button.state() == ButtonState::Pressed
                         && let InputTarget::Client(route) = &target
                     {
+                        let position = state
+                            .wayland
+                            .as_ref()
+                            .expect("missing Wayland frontend")
+                            .pointer_location;
+                        let desired_focus = route.focus_at(position).0;
+                        let focus_route = route.clone();
+                        if client_button_route_needs_focus_sync(
+                            pointer_grabbed,
+                            button.state(),
+                            pointer.current_focus().as_ref() == Some(&desired_focus),
+                        ) {
+                            // A popup can appear underneath a stationary
+                            // pointer between physical motion samples. The
+                            // Flutter layout then names the new surface, but
+                            // Smithay still holds wl_pointer focus on its
+                            // parent. Synchronize protocol focus before the
+                            // press so Xwayland delivers Steam menus and
+                            // avatar popups to the surface that was hit.
+                            route_pointer_motion(
+                                state,
+                                position,
+                                PointerMotionTarget::client(&focus_route, position),
+                                button.time_msec(),
+                                None,
+                            );
+                        }
                         let frontend = state.wayland.as_mut().expect("missing Wayland frontend");
                         frontend.remember_client_pointer_press(route, serial, button_code);
                         if !pointer_grabbed {
@@ -2902,6 +2929,15 @@ fn route_pointer_axis<E: PointerAxisEvent<LibinputInputBackend>>(
         .expect("seat has no pointer");
     pointer.axis(state, frame);
     pointer.frame(state);
+}
+
+#[cfg(feature = "flutter")]
+fn client_button_route_needs_focus_sync(
+    pointer_grabbed: bool,
+    button_state: ButtonState,
+    focus_matches: bool,
+) -> bool {
+    !pointer_grabbed && button_state == ButtonState::Pressed && !focus_matches
 }
 
 #[cfg(feature = "flutter")]
@@ -3827,6 +3863,30 @@ mod compositor_pointer_binding_tests {
     fn override_redirect_popup_routes_preserve_parent_activation() {
         assert!(!x11_route_may_activate(true));
         assert!(x11_route_may_activate(false));
+    }
+
+    #[test]
+    fn stationary_popup_focus_is_synchronized_before_its_press() {
+        assert!(client_button_route_needs_focus_sync(
+            false,
+            ButtonState::Pressed,
+            false,
+        ));
+        assert!(!client_button_route_needs_focus_sync(
+            true,
+            ButtonState::Pressed,
+            false,
+        ));
+        assert!(!client_button_route_needs_focus_sync(
+            false,
+            ButtonState::Released,
+            false,
+        ));
+        assert!(!client_button_route_needs_focus_sync(
+            false,
+            ButtonState::Pressed,
+            true,
+        ));
     }
 
     #[test]
