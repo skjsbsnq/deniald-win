@@ -599,6 +599,8 @@ fn run(options: Options) -> Result<(), Box<dyn Error>> {
             .find(|planned| planned.id == output.id)
             .ok_or("output missing from atlas plan")?
             .source_rect;
+        let (color_compatible, color_epoch) =
+            kms_state::direct_color_state(&kms.drm, output.connector)?;
 
         kms.scanouts.push(Scanout {
             output,
@@ -608,6 +610,8 @@ fn run(options: Options) -> Result<(), Box<dyn Error>> {
             source_rect,
             original_mode,
             powered: true,
+            color_compatible,
+            color_epoch,
         });
     }
 
@@ -1370,6 +1374,8 @@ struct RuntimeState {
     pending_shortcut_launches: VecDeque<native_shortcut::ShortcutTarget>,
     #[cfg(feature = "flutter")]
     pending_screenshot_selection: Option<OutputId>,
+    #[cfg(feature = "flutter")]
+    capture_consumers: HashSet<OutputId>,
     #[cfg(feature = "flutter")]
     published_window_ids: HashSet<u64>,
     #[cfg(feature = "flutter")]
@@ -2891,6 +2897,7 @@ fn run_flutter_event_loop(
             None
         }
     };
+    let mut pending_live_screenshot = None;
     let mut ready_output_apply: Option<(PendingOutputApply, Vec<ConnectedConnector>)> = None;
     let mut pending_output_success: Option<PendingOutputApply> = None;
     let mut pending_output_confirmation_success: VecDeque<PendingOutputConfirmation> =
@@ -3008,6 +3015,7 @@ fn run_flutter_event_loop(
             cancel_active_screenshot(
                 &mut screenshot_manager,
                 runtime,
+                &mut events,
                 true,
                 "scanout state changed",
             )?;
@@ -3673,6 +3681,7 @@ fn run_flutter_event_loop(
                         flutter
                             .as_mut()
                             .ok_or("Flutter runtime disappeared before topology change")?,
+                        &mut events,
                         true,
                         "display topology changed",
                     )?;
@@ -3778,6 +3787,7 @@ fn run_flutter_event_loop(
                 flutter
                     .as_mut()
                     .ok_or("Flutter runtime disappeared before bundle refresh")?,
+                &mut events,
                 true,
                 "Flutter runtime is refreshing",
             )?;
@@ -3880,6 +3890,7 @@ fn run_flutter_event_loop(
             cancel_active_screenshot(
                 &mut screenshot_manager,
                 runtime,
+                &mut events,
                 true,
                 "screenshot canvas is no longer valid",
             )?;
@@ -3919,6 +3930,40 @@ fn run_flutter_event_loop(
             event_loop.dispatch(Duration::ZERO, &mut events)?;
             continue;
         }
+        if let Some(request) = pending_live_screenshot
+            && events.capture_consumers.iter().all(|output| {
+                matches!(
+                    events.direct_scanout.state(output.0),
+                    direct_scanout::PromotionState::Composed
+                )
+            })
+        {
+            if let Some(manager) = screenshot_manager.as_ref()
+                && let Some(atlas) = AtlasPlan::for_snapshot(&topology.snapshot())
+            {
+                let buffer_index = scheduler.stable_framebuffer_index();
+                if let Err(error) = manager.capture_live(
+                    renderer,
+                    &mut swapchain.buffers[buffer_index].dmabuf,
+                    &atlas,
+                    request,
+                ) {
+                    warn!(%error, "prepared-composition screenshot capture failed");
+                }
+            }
+            pending_live_screenshot = None;
+            events.capture_consumers.clear();
+            if let Some(target) = screenshot_manager
+                .as_ref()
+                .and_then(screenshot::ScreenshotManager::target_output)
+            {
+                events.capture_consumers.insert(target);
+            }
+            info!(
+                capture_path = "prepared_composition",
+                "completed screenshot capture"
+            );
+        }
         let screenshot_prepared = runtime.take_screenshot_prepared();
         let screenshot_cancelled = runtime.take_screenshot_cancelled();
         let screenshot_request = runtime.take_screenshot_requested();
@@ -3947,6 +3992,7 @@ fn run_flutter_event_loop(
                 let modifier = swapchain.buffers[buffer_index].format().modifier;
                 match manager.begin_selection(allocator, target_output, atlas, modifier) {
                     Ok(Some(request_id)) => {
+                        events.capture_consumers.insert(target_output);
                         if let Err(error) = runtime.send_screenshot_action(
                             wire::ShellAction::ScreenshotRegion,
                             request_id,
@@ -3977,6 +4023,7 @@ fn run_flutter_event_loop(
             {
                 let finished = manager.cancel_selection(runtime, Some(request_id.get()))?;
                 if let Some(request_id) = finished {
+                    events.capture_consumers.remove(&target_output);
                     runtime.send_screenshot_action(
                         wire::ShellAction::ScreenshotDone,
                         request_id,
@@ -3997,32 +4044,53 @@ fn run_flutter_event_loop(
 
         if let Some(request_id) = screenshot_cancelled
             && let Some(manager) = screenshot_manager.as_mut()
+            && let Some(request_id) = manager.cancel_selection(runtime, Some(request_id.get()))?
         {
-            if let Some(request_id) = manager.cancel_selection(runtime, Some(request_id.get()))? {
-                runtime.send_screenshot_action(
-                    wire::ShellAction::ScreenshotDone,
-                    request_id,
-                    None,
-                )?;
+            events.capture_consumers.clear();
+            if pending_live_screenshot.is_some() {
+                events.capture_consumers.extend(
+                    events
+                        .direct_scanout
+                        .outputs_holding_client_scanout()
+                        .map(OutputId),
+                );
             }
+            runtime.send_screenshot_action(wire::ShellAction::ScreenshotDone, request_id, None)?;
         }
 
         if let Some(request) = screenshot_request {
             if let Some(manager) = screenshot_manager.as_ref() {
                 if request.request_id.is_none() {
-                    let snapshot = topology.snapshot();
-                    if let Some(atlas) = AtlasPlan::for_snapshot(&snapshot) {
-                        let buffer_index = scheduler.stable_framebuffer_index();
-                        if let Err(error) = manager.capture_live(
-                            renderer,
-                            &mut swapchain.buffers[buffer_index].dmabuf,
-                            &atlas,
-                            request,
-                        ) {
-                            warn!(%error, "screenshot capture failed");
+                    let holding = events
+                        .direct_scanout
+                        .outputs_holding_client_scanout()
+                        .map(OutputId)
+                        .collect::<Vec<_>>();
+                    if direct_scanout::capture_path(!holding.is_empty())
+                        == direct_scanout::CapturePath::CurrentAtlas
+                    {
+                        let snapshot = topology.snapshot();
+                        if let Some(atlas) = AtlasPlan::for_snapshot(&snapshot) {
+                            let buffer_index = scheduler.stable_framebuffer_index();
+                            if let Err(error) = manager.capture_live(
+                                renderer,
+                                &mut swapchain.buffers[buffer_index].dmabuf,
+                                &atlas,
+                                request,
+                            ) {
+                                warn!(%error, "screenshot capture failed");
+                            }
+                        } else {
+                            warn!("screenshot capture skipped because the atlas is unavailable");
                         }
                     } else {
-                        warn!("screenshot capture skipped because the atlas is unavailable");
+                        pending_live_screenshot = Some(request);
+                        events.capture_consumers.extend(holding);
+                        events.scene_sync.mark_dirty();
+                        info!(
+                            capture_path = "prepared_composition",
+                            "deferring screenshot until direct outputs fall back"
+                        );
                     }
                 }
             } else {
@@ -4039,6 +4107,15 @@ fn run_flutter_event_loop(
                 warn!(%error, request_id, "frozen screenshot capture failed");
             }
             runtime.send_screenshot_action(wire::ShellAction::ScreenshotDone, request_id, None)?;
+            events.capture_consumers.clear();
+            if pending_live_screenshot.is_some() {
+                events.capture_consumers.extend(
+                    events
+                        .direct_scanout
+                        .outputs_holding_client_scanout()
+                        .map(OutputId),
+                );
+            }
         }
 
         let now = Instant::now();
@@ -4071,6 +4148,7 @@ fn run_flutter_event_loop(
         flutter
             .as_mut()
             .ok_or("Flutter runtime disappeared before screenshot teardown")?,
+        &mut events,
         false,
         "compositor is shutting down",
     )?;
@@ -4118,9 +4196,11 @@ fn run_flutter_event_loop(
 fn cancel_active_screenshot(
     manager: &mut Option<screenshot::ScreenshotManager>,
     runtime: &mut flutter_runtime::FlutterRuntime,
+    events: &mut RuntimeState,
     notify_flutter: bool,
     reason: &'static str,
 ) -> Result<(), Box<dyn Error>> {
+    events.capture_consumers.clear();
     let Some(manager) = manager.as_mut() else {
         return Ok(());
     };
@@ -4545,62 +4625,55 @@ fn synchronize_flutter_composition_certificate(
     runtime: &mut flutter_runtime::FlutterRuntime,
     events: &mut RuntimeState,
 ) {
-    let Some(certificate) = runtime.take_composition_certificate() else {
-        return;
-    };
-    let output = OutputId(certificate.output_id as u64);
-    let work_output = (certificate.shell_damage.width > 0.0
-        && certificate.shell_damage.height > 0.0)
-        .then_some(output);
-    let report = ShellOverlayReport {
-        certificate_epoch: certificate.certificate_epoch,
-        shell_revision: certificate.shell_revision,
-        scale: certificate.scale,
-        output_pixel_size: certificate.output_pixel_size,
-        visible_bounds: certificate.shell_visible_bounds,
-        compatible: certificate.overlay_compatible,
-        rendering: certificate.overlay_rendering,
-        requires_client_sampling: certificate.requires_client_sampling,
-    };
-    let replace_report = events
-        .shell_overlay_reports
-        .get(&output)
-        .is_none_or(|previous| {
-            (report.certificate_epoch, report.shell_revision)
-                >= (previous.certificate_epoch, previous.shell_revision)
-        });
-    if replace_report {
-        events.shell_overlay_reports.insert(output, report);
-    }
-    if let Some(frontend) = events.wayland.as_mut() {
-        frontend.install_composition_certificate(certificate);
+    let mut work_output = None;
+    while let Some(certificate) = runtime.take_composition_certificate() {
+        let output = OutputId(certificate.output_id as u64);
+        if work_output.is_none()
+            && certificate.shell_damage.width > 0.0
+            && certificate.shell_damage.height > 0.0
+        {
+            work_output = Some(output);
+        }
+        let report = ShellOverlayReport {
+            certificate_epoch: certificate.certificate_epoch,
+            shell_revision: certificate.shell_revision,
+            scale: certificate.scale,
+            output_pixel_size: certificate.output_pixel_size,
+            visible_bounds: certificate.shell_visible_bounds,
+            compatible: certificate.overlay_compatible,
+            rendering: certificate.overlay_rendering,
+            requires_client_sampling: certificate.requires_client_sampling,
+        };
+        let replace_report = events
+            .shell_overlay_reports
+            .get(&output)
+            .is_none_or(|previous| {
+                (report.certificate_epoch, report.shell_revision)
+                    >= (previous.certificate_epoch, previous.shell_revision)
+            });
+        if replace_report {
+            events.shell_overlay_reports.insert(output, report);
+        }
+        if let Some(frontend) = events.wayland.as_mut() {
+            frontend.install_composition_certificate(certificate);
+        }
     }
     events.flutter_work_output = work_output;
-}
-
-#[cfg(feature = "flutter")]
-fn direct_plane_state(scanout: &Scanout, framebuffer: framebuffer::Handle) -> PlaneState<'static> {
-    direct_plane_state_with_fence(scanout, framebuffer, None)
 }
 
 #[cfg(feature = "flutter")]
 fn direct_plane_state_with_fence<'a>(
     scanout: &Scanout,
     framebuffer: framebuffer::Handle,
+    geometry: direct_scanout::DirectPlaneGeometry,
     fence: Option<std::os::fd::BorrowedFd<'a>>,
 ) -> PlaneState<'a> {
-    let (width, height) = scanout.output.mode.size();
     PlaneState {
         handle: scanout.surface.plane(),
         config: Some(PlaneConfig {
-            src: Rectangle::<f64, Buffer>::new(
-                (0.0, 0.0).into(),
-                (f64::from(width), f64::from(height)).into(),
-            ),
-            dst: Rectangle::<i32, Physical>::from_size(
-                (i32::from(width), i32::from(height)).into(),
-            ),
-            transform: Transform::Normal,
+            src: geometry.source,
+            dst: geometry.destination,
+            transform: geometry.transform,
             alpha: scanout.plane_properties.smithay_opaque_alpha,
             damage_clips: None,
             fb: framebuffer,
@@ -4791,11 +4864,11 @@ fn submit_direct_overlay_ready(
         if active_key.certificate_epoch != report.certificate_epoch {
             continue;
         }
-        let Some(client_framebuffer) = events
+        let Some((client_framebuffer, client_geometry)) = events
             .direct_leases
             .get(&output)
             .and_then(|leases| leases.active.as_ref())
-            .map(|lease| lease.framebuffer.handle())
+            .map(|lease| (lease.framebuffer.handle(), lease.geometry))
         else {
             continue;
         };
@@ -4841,7 +4914,12 @@ fn submit_direct_overlay_ready(
             .then(|| frame.fence.as_ref().map(AsFd::as_fd))
             .flatten();
         let states = vec![
-            direct_plane_state_with_fence(scanout, client_framebuffer, primary_fence),
+            direct_plane_state_with_fence(
+                scanout,
+                client_framebuffer,
+                client_geometry,
+                primary_fence,
+            ),
             overlay_state,
         ];
         if let Err(error) = scanout.surface.test_state(states.clone(), false) {
@@ -4984,6 +5062,7 @@ fn output_arrangement_epoch(scanout: &Scanout) -> u64 {
     const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
     let (width, height) = scanout.output.mode.size();
     let mut hash = FNV_OFFSET;
+    let color_epoch = scanout.color_epoch;
     for value in [
         u64::from(u32::from(scanout.output.connector)),
         u64::from(u32::from(scanout.output.crtc)),
@@ -4993,6 +5072,7 @@ fn output_arrangement_epoch(scanout: &Scanout) -> u64 {
         scanout.output.transform as u64,
         u64::from(scanout.output.vrr_enabled),
         u64::from(scanout.powered),
+        color_epoch,
     ] {
         for byte in value.to_le_bytes() {
             hash ^= u64::from(byte);
@@ -5007,6 +5087,7 @@ fn output_arrangement_epoch(scanout: &Scanout) -> u64 {
 struct DirectSnapshot {
     key: direct_scanout::CandidateKey,
     candidate: wayland_frontend::PrimaryScanoutCandidate,
+    geometry: direct_scanout::DirectPlaneGeometry,
 }
 
 /// Re-read the scene and decide whether this output may hold a client primary
@@ -5015,7 +5096,6 @@ struct DirectSnapshot {
 #[cfg(feature = "flutter")]
 fn observe_direct_candidate(
     scanout: &Scanout,
-    powered_outputs: usize,
     events: &RuntimeState,
 ) -> Result<DirectSnapshot, direct_scanout::RejectReason> {
     use direct_scanout::RejectReason;
@@ -5023,18 +5103,17 @@ fn observe_direct_candidate(
     if !scanout.powered {
         return Err(RejectReason::OutputUnpowered);
     }
-    if powered_outputs != 1 {
-        // The first promotion stage owns a single output only (C1 §K8).
-        return Err(RejectReason::MultipleOutputs);
-    }
-    if scanout.output.transform != OutputTransform::Normal {
-        return Err(RejectReason::UnsupportedTransform);
+    if !scanout.color_compatible {
+        return Err(RejectReason::ColorIncompatible);
     }
     let frontend = events
         .wayland
         .as_ref()
         .ok_or(RejectReason::MissingCertificate)?;
     if frontend.has_pending_screencopy_for_output(scanout.output.id) {
+        return Err(RejectReason::CaptureActive);
+    }
+    if events.capture_consumers.contains(&scanout.output.id) {
         return Err(RejectReason::CaptureActive);
     }
     if frontend.shell_cursor_visible() {
@@ -5048,14 +5127,21 @@ fn observe_direct_candidate(
     if !candidate.opaque {
         return Err(RejectReason::NotOpaque);
     }
-    if candidate.certificate.output_pixel_size != (f64::from(width), f64::from(height))
-        || candidate.source_rect.0 != 0.0
-        || candidate.source_rect.1 != 0.0
-        || candidate.source_rect.2 != f64::from(candidate.source_size.0)
-        || candidate.source_rect.3 != f64::from(candidate.source_size.1)
+    if candidate.certificate.output_pixel_size
+        != (
+            f64::from(candidate.destination_size.0),
+            f64::from(candidate.destination_size.1),
+        )
+        || candidate.transform != 0
     {
         return Err(RejectReason::SizeMismatch);
     }
+    let geometry = direct_scanout::plane_geometry(
+        candidate.source_rect,
+        candidate.source_size,
+        (u32::from(width), u32::from(height)),
+        output_transform_wire(scanout.output.transform),
+    )?;
 
     let metadata = direct_scanout::CandidateMetadata {
         single_output: true,
@@ -5077,7 +5163,7 @@ fn observe_direct_candidate(
             source_height: candidate.source_size.1,
             destination_width: candidate.destination_size.0,
             destination_height: candidate.destination_size.1,
-            transform: candidate.transform,
+            transform: output_transform_wire(scanout.output.transform),
         },
     };
     if let Some(reason) = direct_scanout::evaluate_candidate(metadata, candidate.buffer_revision) {
@@ -5089,10 +5175,34 @@ fn observe_direct_candidate(
         surface: candidate.root_surface_id,
         revision: candidate.buffer_revision,
         certificate_epoch: candidate.certificate.certificate_epoch,
-        output_epoch: output_arrangement_epoch(scanout),
-        buffer_epoch: kms_state::dmabuf_arrangement_fingerprint(&candidate.dmabuf),
+        output_epoch: output_arrangement_epoch(scanout)
+            ^ candidate
+                .certificate
+                .output_configuration_epoch
+                .rotate_left(11)
+            ^ candidate.certificate.scale.to_bits().rotate_left(29),
+        buffer_epoch: kms_state::dmabuf_arrangement_fingerprint(&candidate.dmabuf)
+            ^ direct_scanout::geometry_fingerprint(geometry).rotate_left(17),
     };
-    Ok(DirectSnapshot { key, candidate })
+    Ok(DirectSnapshot {
+        key,
+        candidate,
+        geometry,
+    })
+}
+
+#[cfg(feature = "flutter")]
+const fn output_transform_wire(transform: OutputTransform) -> u32 {
+    match transform {
+        OutputTransform::Normal => 0,
+        OutputTransform::Rotate90 => 1,
+        OutputTransform::Rotate180 => 2,
+        OutputTransform::Rotate270 => 3,
+        OutputTransform::Flipped => 4,
+        OutputTransform::Flipped90 => 5,
+        OutputTransform::Flipped180 => 6,
+        OutputTransform::Flipped270 => 7,
+    }
 }
 
 /// Drive every output's promotion state machine for one iteration.
@@ -5127,7 +5237,6 @@ fn service_direct_scanout(
     }
     events.direct_arm_watch.retain(|output, _| live(output));
 
-    let powered_outputs = scanouts.iter().filter(|scanout| scanout.powered).count();
     let promotion_enabled = events.direct_scanout.enabled();
 
     // Fallback gate: a prepared atlas frame must carry the client content
@@ -5182,6 +5291,9 @@ fn service_direct_scanout(
 
     for scanout in scanouts {
         let output = scanout.output.id;
+        if let Some(frontend) = events.wayland.as_mut() {
+            frontend.invalidate_scanout_feedback(output, output_arrangement_epoch(scanout));
+        }
         let idle = matches!(
             events.direct_scanout.state(output.0),
             direct_scanout::PromotionState::Composed
@@ -5200,7 +5312,7 @@ fn service_direct_scanout(
             .advance(direct_scanout::PromotionEvent::Tick, now);
         apply_direct_actions(drm, scanouts, scheduler, events, output, actions)?;
 
-        let observation = observe_direct_candidate(scanout, powered_outputs, events);
+        let observation = observe_direct_candidate(scanout, events);
         let (event, snapshot) = match observation {
             Ok(snapshot) => {
                 let settled = direct_candidate_settled(events, scheduler, output, snapshot.key);
@@ -5240,11 +5352,13 @@ fn service_direct_scanout(
     // must stop sampling. Reconciling once per iteration means a missed
     // action cannot leave the frontend suppressing a surface that is no
     // longer promoted.
-    let suppressed = events.direct_scanout.suppressed_surface();
+    let suppressed = events
+        .direct_scanout
+        .suppressed_surfaces()
+        .collect::<Vec<_>>();
     if let Some(frontend) = events.wayland.as_mut()
-        && frontend.promoted_surface() != suppressed
+        && frontend.reconcile_promoted_surfaces(suppressed)
     {
-        frontend.set_promoted_surface(suppressed);
         events.scene_sync.mark_dirty();
     }
     reconcile_shell_render_modes(runtime, scanouts, swapchain, events);
@@ -5445,6 +5559,7 @@ fn apply_direct_actions_with_candidate(
                                     dmabuf: snapshot.candidate.dmabuf,
                                     buffer_guard: snapshot.candidate.buffer_guard,
                                     key,
+                                    geometry: snapshot.geometry,
                                 });
                             PromotionEvent::ImportSucceeded
                         }
@@ -5471,7 +5586,6 @@ fn apply_direct_actions_with_candidate(
             PromotionAction::VerifyCandidate(key) => {
                 // The final read before the plane changes.  Anything but an
                 // identical candidate must abandon the prepared arrangement.
-                let powered_outputs = scanouts.iter().filter(|scanout| scanout.powered).count();
                 let event = scanouts
                     .iter()
                     .find(|scanout| scanout.output.id == output)
@@ -5479,7 +5593,7 @@ fn apply_direct_actions_with_candidate(
                         PromotionEvent::CandidateRejected(
                             direct_scanout::RejectReason::OutputUnpowered,
                         ),
-                        |scanout| match observe_direct_candidate(scanout, powered_outputs, events) {
+                        |scanout| match observe_direct_candidate(scanout, events) {
                             Ok(snapshot) => PromotionEvent::CandidateEligible {
                                 candidate: snapshot.key,
                                 atlas_settled: true,
@@ -5537,13 +5651,13 @@ fn apply_direct_actions_with_candidate(
             }
             PromotionAction::SuppressClientSampling(surface) => {
                 if let Some(frontend) = events.wayland.as_mut() {
-                    frontend.set_promoted_surface(Some(surface));
+                    frontend.set_promoted_surface(surface, true);
                 }
                 events.scene_sync.mark_dirty();
             }
             PromotionAction::RestoreClientSampling(surface) => {
                 if let Some(frontend) = events.wayland.as_mut() {
-                    frontend.set_promoted_surface(None);
+                    frontend.set_promoted_surface(surface, false);
                 }
                 debug!(
                     event = "sampling_restored",
@@ -5593,7 +5707,7 @@ fn apply_direct_actions_with_candidate(
 #[cfg(feature = "flutter")]
 fn direct_test_only(
     scanouts: &[Scanout],
-    events: &RuntimeState,
+    events: &mut RuntimeState,
     output: OutputId,
     key: direct_scanout::CandidateKey,
 ) -> direct_scanout::PromotionEvent {
@@ -5613,9 +5727,22 @@ fn direct_test_only(
     // The fence step already proved this buffer readable. Re-probing here
     // would only hide a regression in that gate, so the probe has one owner.
     debug_assert!(kms_state::dmabuf_acquire_fence_signalled(&lease.dmabuf));
-    let state = direct_plane_state(scanout, lease.framebuffer.handle());
+    let state =
+        direct_plane_state_with_fence(scanout, lease.framebuffer.handle(), lease.geometry, None);
     match scanout.surface.test_state([state], false) {
-        Ok(()) => PromotionEvent::TestOnlyPassed,
+        Ok(()) => {
+            if let Some(frontend) = events.wayland.as_mut()
+                && let Ok(target_device) = scanout.surface.device_fd().dev_id()
+            {
+                let _ = frontend.record_tested_scanout_format(
+                    output,
+                    output_arrangement_epoch(scanout),
+                    target_device,
+                    lease.dmabuf.format(),
+                );
+            }
+            PromotionEvent::TestOnlyPassed
+        }
         Err(error) => {
             debug!(
                 event = "rejected_reason",
@@ -5658,7 +5785,8 @@ fn direct_commit(
     else {
         return Ok(PromotionEvent::CommitInvalid);
     };
-    let state = direct_plane_state(scanout, lease.framebuffer.handle());
+    let state =
+        direct_plane_state_with_fence(scanout, lease.framebuffer.handle(), lease.geometry, None);
     match scanout.surface.page_flip([state], true) {
         Ok(()) => {
             events.pending.insert(scanout.output.crtc);
@@ -5827,7 +5955,7 @@ fn reset_direct_scanout(
     events.direct_leases.clear();
     events.direct_arm_watch.clear();
     if let Some(frontend) = events.wayland.as_mut() {
-        frontend.set_promoted_surface(None);
+        frontend.clear_promoted_surfaces();
     }
     events.scene_sync.mark_dirty();
     warn!(
@@ -7033,6 +7161,8 @@ fn reconcile_scanouts<'a>(
             stage_output_vrr(&surface, output)?;
             let shell_overlay = select_shell_overlay_plane(drm, &surface)?;
             let plane_properties = AtlasPlaneProperties::load(drm, surface.plane())?;
+            let (color_compatible, color_epoch) =
+                kms_state::direct_color_state(drm, output.connector)?;
             created.insert(
                 desired_index,
                 Scanout {
@@ -7046,6 +7176,8 @@ fn reconcile_scanouts<'a>(
                         .iter()
                         .find(|scanout| scanout.output.id == output.id)
                         .is_none_or(|scanout| scanout.powered),
+                    color_compatible,
+                    color_epoch,
                 },
             );
         }
@@ -7106,6 +7238,13 @@ fn reconcile_scanouts<'a>(
         }
     }
 
+    let color_states = outputs
+        .iter()
+        .map(|output| {
+            kms_state::direct_color_state(drm, output.connector).map(|state| (output.id, state))
+        })
+        .collect::<Result<BTreeMap<_, _>, _>>()?;
+
     // Every fallible operation is complete. Transfer ownership into the
     // journal without dropping the old-only surfaces.
     let mut retired = std::mem::take(scanouts)
@@ -7141,6 +7280,9 @@ fn reconcile_scanouts<'a>(
                 };
                 scanout.output = output;
                 scanout.source_rect = source_rect;
+                let (color_compatible, color_epoch) = color_states[&scanout.output.id];
+                scanout.color_compatible = color_compatible;
+                scanout.color_epoch = color_epoch;
                 candidate.push(scanout);
                 origins.push(ReconciledScanoutOrigin::Reused(Box::new(previous)));
             }

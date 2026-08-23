@@ -584,7 +584,7 @@ pub struct WireBridge {
     // former finished_data().to_vec() copy.
     outbound_builder: FlatBufferBuilder<'static>,
     pending_input_layout: Option<InputLayoutSnapshot>,
-    pending_composition_certificate: Option<CompositionCertificate>,
+    pending_composition_certificates: VecDeque<CompositionCertificate>,
     input_layout_scratch: InputLayoutSnapshot,
     input_layout_identities_scratch: HashSet<u64>,
     pending_window_commands: VecDeque<WindowCommand>,
@@ -610,7 +610,7 @@ impl WireBridge {
             restored_window_ids: Vec::new(),
             outbound_builder: FlatBufferBuilder::with_capacity(1024),
             pending_input_layout: None,
-            pending_composition_certificate: None,
+            pending_composition_certificates: VecDeque::new(),
             input_layout_scratch: InputLayoutSnapshot::default(),
             input_layout_identities_scratch: HashSet::new(),
             pending_window_commands: VecDeque::new(),
@@ -675,7 +675,7 @@ impl WireBridge {
     }
 
     pub fn take_composition_certificate(&mut self) -> Option<CompositionCertificate> {
-        self.pending_composition_certificate.take()
+        self.pending_composition_certificates.pop_front()
     }
 
     pub fn drain_window_commands(&mut self) -> impl Iterator<Item = WindowCommand> + '_ {
@@ -1115,12 +1115,19 @@ impl WireBridge {
                     .payload_as_composition_certificate()
                     .ok_or(WireError::Payload)?;
                 let decoded = decode_composition_certificate(certificate)?;
-                if let Some(previous) = &self.pending_composition_certificate
+                if let Some(previous) = self
+                    .pending_composition_certificates
+                    .iter()
+                    .rev()
+                    .find(|previous| previous.output_id == decoded.output_id)
                     && decoded.certificate_epoch < previous.certificate_epoch
                 {
                     return Err(WireError::Sequence);
                 }
-                self.pending_composition_certificate = Some(decoded);
+                if self.pending_composition_certificates.len() >= 64 {
+                    return Err(WireError::Count);
+                }
+                self.pending_composition_certificates.push_back(decoded);
                 Ok(None)
             }
             fb::Payload::KeyboardCommand => {
@@ -4772,6 +4779,61 @@ mod tests {
         let bytes = builder.finished_data().to_vec();
         let mut bridge = bridge();
         assert!(bridge.handle(&bytes).is_err());
+        assert!(bridge.take_composition_certificate().is_none());
+    }
+
+    #[test]
+    fn queues_per_output_composition_certificates_without_overwrite() {
+        fn message(sequence: u64, output_id: i64) -> Vec<u8> {
+            let mut builder = flatbuffers::FlatBufferBuilder::new();
+            let source = fb::WireRect::new(0.0, 0.0, 1280.0, 720.0);
+            let destination = fb::WireRect::new(
+                if output_id == 1 { 0.0 } else { 1280.0 },
+                0.0,
+                1280.0,
+                720.0,
+            );
+            let pixels = fb::WireSize::new(1280.0, 720.0);
+            let certificate = fb::CompositionCertificate::create(
+                &mut builder,
+                &fb::CompositionCertificateArgs {
+                    protocol_version: PROTOCOL_VERSION,
+                    certificate_epoch: sequence,
+                    layout_epoch: 1,
+                    output_id,
+                    output_configuration_epoch: 1,
+                    sole_root_surface_id: output_id as u64,
+                    surface_tree_revision: 1,
+                    buffer_revision: 1,
+                    source_rect: Some(&source),
+                    destination_rect: Some(&destination),
+                    output_pixel_size: Some(&pixels),
+                    scale: 1.0,
+                    known_opaque: true,
+                    shell_fully_transparent: true,
+                    engine_generation: 1,
+                    ..Default::default()
+                },
+            );
+            let envelope = fb::Envelope::create(
+                &mut builder,
+                &fb::EnvelopeArgs {
+                    protocol_version: PROTOCOL_VERSION,
+                    sequence,
+                    payload_type: fb::Payload::CompositionCertificate,
+                    payload: Some(certificate.as_union_value()),
+                    ..Default::default()
+                },
+            );
+            fb::finish_envelope_buffer(&mut builder, envelope);
+            builder.finished_data().to_vec()
+        }
+
+        let mut bridge = bridge();
+        bridge.handle(&message(1, 1)).unwrap();
+        bridge.handle(&message(2, 2)).unwrap();
+        assert_eq!(bridge.take_composition_certificate().unwrap().output_id, 1);
+        assert_eq!(bridge.take_composition_certificate().unwrap().output_id, 2);
         assert!(bridge.take_composition_certificate().is_none());
     }
 

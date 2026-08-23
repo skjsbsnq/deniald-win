@@ -908,6 +908,17 @@ impl DmabufHandler for RuntimeState {
             .expect("missing Wayland frontend")
             .queue_dmabuf_import(dmabuf, notifier);
     }
+
+    fn new_surface_feedback(
+        &mut self,
+        surface: &WlSurface,
+        _global: &DmabufGlobal,
+    ) -> Option<DmabufFeedback> {
+        self.wayland
+            .as_ref()
+            .and_then(|frontend| frontend.feedback_for_surface(surface))
+            .cloned()
+    }
 }
 
 impl OutputHandler for RuntimeState {}

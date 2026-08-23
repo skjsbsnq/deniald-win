@@ -46,6 +46,8 @@ pub(super) struct Scanout {
     /// Whether this logical output currently owns an active KMS pipeline.
     /// DPMS-off outputs deliberately remain in the topology and scanout list.
     pub(super) powered: bool,
+    pub(super) color_compatible: bool,
+    pub(super) color_epoch: u64,
 }
 
 #[derive(Clone, Debug)]
@@ -855,6 +857,30 @@ pub(super) fn dmabuf_arrangement_fingerprint(dmabuf: &Dmabuf) -> u64 {
         }
     }
     hash
+}
+
+/// Snapshot the connector color contract Direct Scanout must preserve. A
+/// non-default colorspace or active HDR metadata is conservatively rejected
+/// until Denial owns an explicit per-plane color pipeline for it.
+pub(super) fn direct_color_state(
+    drm: &DrmDevice,
+    connector: connector::Handle,
+) -> Result<(bool, u64), Box<dyn Error>> {
+    let value = |name: &str| -> Result<u64, Box<dyn Error>> {
+        let Some(property) = optional_named_property(drm, connector, name)? else {
+            return Ok(0);
+        };
+        drm.get_properties(connector)?
+            .into_iter()
+            .find_map(|(candidate, value)| (candidate == property).then_some(value))
+            .ok_or_else(|| format!("connector property {name} has no current value").into())
+    };
+    let colorspace = value("Colorspace")?;
+    let hdr_metadata = value("HDR_OUTPUT_METADATA")?;
+    Ok((
+        colorspace == 0 && hdr_metadata == 0,
+        colorspace ^ hdr_metadata.rotate_left(23),
+    ))
 }
 
 pub(super) struct AtlasSwapchain {

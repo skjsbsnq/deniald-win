@@ -150,6 +150,9 @@ impl WaylandFrontend {
         // A queued request identifies pixels in the old atlas. Never let it
         // read from a replacement allocation after a hotplug transaction.
         self.fail_all_screencopies();
+        self.dmabuf_scanout_feedback.clear();
+        self.composition_certificates
+            .retain(|output, _| snapshot.outputs.iter().any(|spec| spec.id == *output));
         let old_output_geometries = self
             .outputs
             .iter()
@@ -397,6 +400,7 @@ impl WaylandFrontend {
         }
         self.pointer_location = self.clamp_pointer(self.pointer_location);
         self.rebuild_window_output_membership();
+        self.refresh_surface_dmabuf_feedback();
         if xwayland_scale_changed {
             self.reconfigure_x11_for_scale()?;
         }

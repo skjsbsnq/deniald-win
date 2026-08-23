@@ -11,6 +11,8 @@ use denial_core::topology::{AtlasPlan, OutputId, TopologySnapshot};
 #[cfg(feature = "flutter")]
 use smithay::backend::allocator::Buffer as AllocatorBuffer;
 use smithay::backend::allocator::dmabuf::Dmabuf;
+use smithay::backend::allocator::format::FormatSet;
+use smithay::backend::allocator::Format;
 use smithay::backend::drm::{DrmDeviceFd, DrmNode};
 use smithay::backend::egl::EGLDevice;
 use smithay::backend::renderer::Bind;
@@ -65,7 +67,8 @@ use smithay::wayland::cursor_shape::CursorShapeManagerState;
 use smithay::wayland::compositor::{TraversalAction, with_surface_tree_upward};
 use smithay::wayland::dmabuf::get_dmabuf;
 use smithay::wayland::dmabuf::{
-    DmabufFeedbackBuilder, DmabufGlobal, DmabufHandler, DmabufState, ImportNotifier,
+    DmabufFeedback, DmabufFeedbackBuilder, DmabufGlobal, DmabufHandler, DmabufState,
+    ImportNotifier,
 };
 use smithay::wayland::drm_syncobj::{
     DrmSyncobjCachedState, DrmSyncobjHandler, DrmSyncobjState, supports_syncobj_eventfd,
@@ -94,7 +97,7 @@ use smithay::wayland::xwayland_shell::XWaylandShellState;
 use smithay::wayland::xwayland_keyboard_grab::XWaylandKeyboardGrabState;
 use smithay::wayland::xdg_activation::XdgActivationState;
 use smithay::xwayland::{X11Wm, XWayland, XWaylandClientData, XWaylandEvent};
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
 #[cfg(feature = "flutter")]
 use super::PendingWindowEvent;
@@ -332,6 +335,9 @@ pub(super) struct WaylandFrontend {
     drm_syncobj_state: Option<DrmSyncobjState>,
     dmabuf_global: Option<DmabufGlobal>,
     dmabuf_render_node: Option<DrmNode>,
+    dmabuf_renderer_formats: FormatSet,
+    dmabuf_renderer_feedback: Option<DmabufFeedback>,
+    dmabuf_scanout_feedback: HashMap<OutputId, ScanoutFeedback>,
     pending_dmabuf_imports: Vec<(Dmabuf, ImportNotifier)>,
     dmabuf_import_queue_saturated: bool,
     surface_buffers: HashMap<ObjectId, wl_buffer::WlBuffer>,
@@ -392,9 +398,9 @@ pub(super) struct WaylandFrontend {
     #[cfg(feature = "flutter")]
     input_layout: Option<InputLayoutSnapshot>,
     #[cfg(feature = "flutter")]
-    composition_certificate: Option<CompositionCertificate>,
+    composition_certificates: HashMap<OutputId, CompositionCertificate>,
     #[cfg(feature = "flutter")]
-    promoted_surface_id: Option<u64>,
+    promoted_surface_ids: HashSet<u64>,
     #[cfg(feature = "flutter")]
     shell_fullscreen_locks: HashSet<ObjectId>,
     #[cfg(feature = "flutter")]
@@ -554,6 +560,37 @@ struct WaylandOutput {
     submitted_this_batch: bool,
 }
 
+#[derive(Debug)]
+struct ScanoutFeedback {
+    capability_epoch: u64,
+    target_device: libc::dev_t,
+    tested_formats: FormatSet,
+    feedback: DmabufFeedback,
+}
+
+fn next_tested_scanout_formats(
+    renderer_formats: &FormatSet,
+    current: Option<(u64, libc::dev_t, &FormatSet)>,
+    capability_epoch: u64,
+    target_device: libc::dev_t,
+    format: Format,
+) -> Option<FormatSet> {
+    if !renderer_formats.contains(&format) {
+        return None;
+    }
+    let previous = current
+        .filter(|(epoch, device, _)| *epoch == capability_epoch && *device == target_device)
+        .map(|(_, _, formats)| formats);
+    Some(
+        previous
+            .into_iter()
+            .flat_map(FormatSet::iter)
+            .copied()
+            .chain(std::iter::once(format))
+            .collect(),
+    )
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum InitialXdgPlacementPolicy {
     SkipSaved,
@@ -685,13 +722,11 @@ struct PublishedSurfaceCommits {
 
 #[cfg(feature = "flutter")]
 pub(super) struct PrimaryScanoutCandidate {
-    pub(super) output_id: OutputId,
     pub(super) root_surface_id: u64,
     pub(super) buffer_revision: u64,
     pub(super) dmabuf: Dmabuf,
     pub(super) buffer_guard: RendererBufferGuard,
     pub(super) certificate: CompositionCertificate,
-    pub(super) visibility_epoch: u64,
     pub(super) source_size: (u32, u32),
     pub(super) destination_size: (u32, u32),
     pub(super) transform: u32,
@@ -725,9 +760,9 @@ fn window_expects_sample(
     input_visibility_known: bool,
     visible_window_ids: &HashSet<u64>,
     window_id: u64,
-    promoted_surface_id: Option<u64>,
+    promoted_surface_ids: &HashSet<u64>,
 ) -> bool {
-    promoted_surface_id != Some(window_id)
+    !promoted_surface_ids.contains(&window_id)
         && (!input_visibility_known || visible_window_ids.contains(&window_id))
 }
 
@@ -1131,6 +1166,9 @@ impl WaylandFrontend {
             drm_syncobj_state,
             dmabuf_global: None,
             dmabuf_render_node: None,
+            dmabuf_renderer_formats: FormatSet::default(),
+            dmabuf_renderer_feedback: None,
+            dmabuf_scanout_feedback: HashMap::new(),
             pending_dmabuf_imports: Vec::new(),
             dmabuf_import_queue_saturated: false,
             surface_buffers: HashMap::new(),
@@ -1191,9 +1229,9 @@ impl WaylandFrontend {
             #[cfg(feature = "flutter")]
             input_layout: None,
             #[cfg(feature = "flutter")]
-            composition_certificate: None,
+            composition_certificates: HashMap::new(),
             #[cfg(feature = "flutter")]
-            promoted_surface_id: None,
+            promoted_surface_ids: HashSet::new(),
             #[cfg(feature = "flutter")]
             shell_fullscreen_locks: HashSet::new(),
             #[cfg(feature = "flutter")]
@@ -2710,9 +2748,11 @@ impl WaylandFrontend {
             <GlesRenderer as Bind<Dmabuf>>::supported_formats(renderer).unwrap_or_default();
         self.set_screencopy_dmabuf_formats(render_formats);
         let formats = renderer.dmabuf_formats();
+        self.dmabuf_renderer_formats = formats.clone();
         let global = if let Some(node) = render_node {
-            let feedback = DmabufFeedbackBuilder::new(node.dev_id(), formats).build()?;
+            let feedback = DmabufFeedbackBuilder::new(node.dev_id(), formats.clone()).build()?;
             self.dmabuf_render_node = Some(node);
+            self.dmabuf_renderer_feedback = Some(feedback.clone());
             info!(?node, "advertising linux-dmabuf v4 with renderer feedback");
             self.dmabuf_state
                 .create_global_with_default_feedback::<RuntimeState>(
@@ -2726,6 +2766,106 @@ impl WaylandFrontend {
         };
         self.dmabuf_global = Some(global);
         Ok(())
+    }
+
+    /// Publish only arrangements which a real per-output TEST_ONLY has
+    /// accepted. The renderer tranche always remains in the feedback, so a
+    /// client ignoring the scanout hint can still allocate for composition.
+    pub(super) fn record_tested_scanout_format(
+        &mut self,
+        output: OutputId,
+        capability_epoch: u64,
+        target_device: libc::dev_t,
+        format: Format,
+    ) -> Result<(), Box<dyn Error>> {
+        let Some(render_node) = self.dmabuf_render_node else {
+            return Ok(());
+        };
+        let current = self.dmabuf_scanout_feedback.get(&output).map(|state| {
+            (
+                state.capability_epoch,
+                state.target_device,
+                &state.tested_formats,
+            )
+        });
+        let Some(tested_formats) = next_tested_scanout_formats(
+            &self.dmabuf_renderer_formats,
+            current,
+            capability_epoch,
+            target_device,
+            format,
+        ) else {
+            return Ok(());
+        };
+        let feedback = DmabufFeedbackBuilder::new(
+            render_node.dev_id(),
+            self.dmabuf_renderer_formats.clone(),
+        )
+        .add_preference_tranche(
+            target_device,
+            Some(
+                smithay::reexports::wayland_protocols::wp::linux_dmabuf::zv1::server::zwp_linux_dmabuf_feedback_v1::TrancheFlags::Scanout,
+            ),
+            tested_formats.clone(),
+        )
+        .build()?;
+        self.dmabuf_scanout_feedback.insert(
+            output,
+            ScanoutFeedback {
+                capability_epoch,
+                target_device,
+                tested_formats,
+                feedback,
+            },
+        );
+        self.refresh_surface_dmabuf_feedback();
+        info!(
+            ?output,
+            capability_epoch,
+            fourcc = format!("{:#010x}", format.code as u32),
+            modifier = format!("{:#018x}", u64::from(format.modifier)),
+            "published tested linux-dmabuf scanout tranche"
+        );
+        Ok(())
+    }
+
+    pub(super) fn invalidate_scanout_feedback(&mut self, output: OutputId, epoch: u64) {
+        let stale = self
+            .dmabuf_scanout_feedback
+            .get(&output)
+            .is_some_and(|state| state.capability_epoch != epoch);
+        if stale {
+            self.dmabuf_scanout_feedback.remove(&output);
+            self.refresh_surface_dmabuf_feedback();
+            debug!(
+                ?output,
+                epoch, "withdrew stale linux-dmabuf scanout tranche"
+            );
+        }
+    }
+
+    fn feedback_for_surface(&self, surface: &WlSurface) -> Option<&DmabufFeedback> {
+        let root = self.toplevel_candidate_surface(surface);
+        let window = self.window_for_root_surface(&root)?;
+        let output = self.output_for_geometry(self.window_geometry_target(&window))?;
+        self.dmabuf_scanout_feedback
+            .get(&output.id)
+            .map(|state| &state.feedback)
+            .or(self.dmabuf_renderer_feedback.as_ref())
+    }
+
+    fn refresh_surface_dmabuf_feedback(&self) {
+        use smithay::wayland::dmabuf::SurfaceDmabufFeedbackState;
+        for surface in self.surfaces_by_id.values() {
+            let Some(feedback) = self.feedback_for_surface(surface) else {
+                continue;
+            };
+            with_states(surface, |states| {
+                if let Some(state) = SurfaceDmabufFeedbackState::from_states(states) {
+                    state.set_feedback(feedback);
+                }
+            });
+        }
     }
 
     pub fn process_pending_dmabufs(
@@ -2986,7 +3126,7 @@ impl WaylandFrontend {
                 self.input_visibility_known,
                 &self.visible_window_ids,
                 window_id,
-                self.promoted_surface_id,
+                &self.promoted_surface_ids,
             );
             let Some(frame) = self.external_texture_frame(surface_id, expects_sample) else {
                 self.scene_textures_scratch = textures;
@@ -3195,7 +3335,7 @@ impl WaylandFrontend {
                 self.input_visibility_known,
                 &self.visible_window_ids,
                 stable_id,
-                self.promoted_surface_id,
+                &self.promoted_surface_ids,
             );
             self.append_surface_tree(
                 &surface,
@@ -3345,11 +3485,13 @@ impl WaylandFrontend {
                     .unwrap_or_else(|| "unknown".to_owned());
                 let report_texture_id = texture_id;
                 let visibility_epoch = self.input_layout.as_ref().map(|layout| layout.epoch);
-                let certificate = self.composition_certificate.as_ref().filter(|certificate| {
-                    certificate.output_id == monitor_id
-                        && certificate.sole_root_surface_id == stable_id
-                        && certificate.layout_epoch == visibility_epoch.unwrap_or_default()
-                });
+                let certificate = u64::try_from(monitor_id)
+                    .ok()
+                    .and_then(|output| self.composition_certificates.get(&OutputId(output)))
+                    .filter(|certificate| {
+                        certificate.sole_root_surface_id == stable_id
+                            && certificate.layout_epoch == visibility_epoch.unwrap_or_default()
+                    });
                 let report_single_root = layers.len() == 1
                     && layers
                         .first()
@@ -3556,7 +3698,7 @@ impl WaylandFrontend {
                     self.input_visibility_known,
                     &self.visible_window_ids,
                     stable_id,
-                    self.promoted_surface_id,
+                    &self.promoted_surface_ids,
                 );
                 let mut composition_order = 0;
                 self.append_surface_tree(
@@ -3751,9 +3893,12 @@ impl WaylandFrontend {
 
     #[cfg(feature = "flutter")]
     pub fn install_composition_certificate(&mut self, certificate: CompositionCertificate) {
+        let Some(output_id) = u64::try_from(certificate.output_id).ok().map(OutputId) else {
+            return;
+        };
         if self
-            .composition_certificate
-            .as_ref()
+            .composition_certificates
+            .get(&output_id)
             .is_some_and(|previous| certificate.certificate_epoch < previous.certificate_epoch)
         {
             scanout_audit::record_certificate(
@@ -3787,17 +3932,34 @@ impl WaylandFrontend {
                 && certificate.shell_fully_transparent,
             reason,
         );
-        self.composition_certificate = Some(certificate);
+        self.composition_certificates.insert(output_id, certificate);
     }
 
     #[cfg(feature = "flutter")]
-    pub(super) fn set_promoted_surface(&mut self, surface_id: Option<u64>) {
-        self.promoted_surface_id = surface_id;
+    pub(super) fn set_promoted_surface(&mut self, surface_id: u64, promoted: bool) {
+        if promoted {
+            self.promoted_surface_ids.insert(surface_id);
+        } else {
+            self.promoted_surface_ids.remove(&surface_id);
+        }
     }
 
     #[cfg(feature = "flutter")]
-    pub(super) const fn promoted_surface(&self) -> Option<u64> {
-        self.promoted_surface_id
+    pub(super) fn clear_promoted_surfaces(&mut self) {
+        self.promoted_surface_ids.clear();
+    }
+
+    #[cfg(feature = "flutter")]
+    pub(super) fn reconcile_promoted_surfaces(
+        &mut self,
+        surfaces: impl IntoIterator<Item = u64>,
+    ) -> bool {
+        let next = surfaces.into_iter().collect::<HashSet<_>>();
+        if next == self.promoted_surface_ids {
+            return false;
+        }
+        self.promoted_surface_ids = next;
+        true
     }
 
     /// Whether a cursor is currently drawn by the shell.
@@ -3824,7 +3986,8 @@ impl WaylandFrontend {
         &self,
         output_id: OutputId,
     ) -> Option<PrimaryScanoutCandidate> {
-        let mut certificate = self.composition_certificate.as_ref()?.clone();
+        let mut certificate = self.composition_certificates.get(&output_id)?.clone();
+        let output = self.outputs.iter().find(|output| output.id == output_id)?;
         if certificate.output_id != i64::try_from(output_id.0).ok()?
             || certificate.sole_root_surface_id == 0
             || certificate.requires_client_sampling
@@ -3842,7 +4005,20 @@ impl WaylandFrontend {
         {
             return None;
         }
-        let visibility_epoch = self.input_layout.as_ref()?.epoch;
+        let destination = certificate.destination_rect;
+        let logical = output.logical_geometry;
+        let covers_output = (destination.x - f64::from(logical.loc.x)).abs() <= 0.01
+            && (destination.y - f64::from(logical.loc.y)).abs() <= 0.01
+            && (destination.width - f64::from(logical.size.w)).abs() <= 0.01
+            && (destination.height - f64::from(logical.size.h)).abs() <= 0.01;
+        let pixel_size_matches =
+            (certificate.output_pixel_size.0 - f64::from(output.capture_size.w)).abs() <= 0.01
+                && (certificate.output_pixel_size.1 - f64::from(output.capture_size.h)).abs()
+                    <= 0.01;
+        if !covers_output || !pixel_size_matches {
+            return None;
+        }
+        self.input_layout.as_ref()?;
         if self.input_visibility_known
             && !self
                 .visible_window_ids
@@ -3885,15 +4061,16 @@ impl WaylandFrontend {
         // changes the candidate key and must pass the atlas-first arm again.
         certificate.buffer_revision = revision;
         Some(PrimaryScanoutCandidate {
-            output_id,
             root_surface_id: certificate.sole_root_surface_id,
             buffer_revision: revision,
             source_size: (dmabuf.width(), dmabuf.height()),
-            destination_size: (dmabuf.width(), dmabuf.height()),
+            destination_size: (
+                u32::try_from(output.capture_size.w).ok()?,
+                u32::try_from(output.capture_size.h).ok()?,
+            ),
             dmabuf,
             buffer_guard: renderer_buffer,
             certificate,
-            visibility_epoch,
             transform: transform_to_wire(transform),
             opaque,
             source_rect: (source.loc.x, source.loc.y, source.size.w, source.size.h),
@@ -4339,6 +4516,8 @@ mod tests {
         input_visibility_changed, shell_fullscreen_transition, software_cursor_shape,
         window_expects_sample,
     };
+    #[cfg(feature = "flutter")]
+    use super::{Format, FormatSet, next_tested_scanout_formats};
     use super::{
         InitialXdgPlacementPolicy, MAX_PENDING_DMABUF_IMPORTS, dmabuf_import_queue_has_capacity,
         initial_xdg_placement_policy,
@@ -4614,11 +4793,34 @@ mod tests {
     #[test]
     fn only_visible_windows_wait_for_flutter_texture_samples() {
         let visible = HashSet::from([42]);
+        let promoted = HashSet::new();
 
-        assert!(window_expects_sample(false, &visible, 7, None));
-        assert!(window_expects_sample(true, &visible, 42, None));
-        assert!(!window_expects_sample(true, &visible, 7, None));
-        assert!(!window_expects_sample(true, &visible, 42, Some(42)));
+        assert!(window_expects_sample(false, &visible, 7, &promoted));
+        assert!(window_expects_sample(true, &visible, 42, &promoted));
+        assert!(!window_expects_sample(true, &visible, 7, &promoted));
+        let promoted = HashSet::from([42]);
+        assert!(!window_expects_sample(true, &visible, 42, &promoted));
+    }
+
+    #[test]
+    fn scanout_feedback_accepts_only_renderer_formats_and_resets_on_epoch_change() {
+        let linear = Format {
+            code: smithay::backend::allocator::Fourcc::Xrgb8888,
+            modifier: smithay::backend::allocator::Modifier::Linear,
+        };
+        let unsupported = Format {
+            code: smithay::backend::allocator::Fourcc::Nv12,
+            modifier: smithay::backend::allocator::Modifier::Linear,
+        };
+        let renderer = std::iter::once(linear).collect::<FormatSet>();
+        assert!(
+            next_tested_scanout_formats(&renderer, None, 1, 7, unsupported).is_none(),
+            "the reverse probe must reject an unsupported modifier/format"
+        );
+        let first = next_tested_scanout_formats(&renderer, None, 1, 7, linear).unwrap();
+        let reset =
+            next_tested_scanout_formats(&renderer, Some((1, 7, &first)), 2, 7, linear).unwrap();
+        assert_eq!(reset.iter().copied().collect::<Vec<_>>(), vec![linear]);
     }
 
     #[cfg(feature = "flutter")]

@@ -26,6 +26,7 @@ use super::kms_state::PrimeFramebuffer;
 use super::wire::CompositionCertificate;
 use smithay::backend::allocator::dmabuf::Dmabuf;
 use smithay::backend::renderer::utils::Buffer as RendererBufferGuard;
+use smithay::utils::{Buffer, Physical, Rectangle, Transform};
 
 /// Bounded step deadlines.  Every asynchronous step owns one so a stuck
 /// import, fence, probe, commit, flip or fallback render cannot park an output
@@ -86,6 +87,12 @@ pub(super) enum RejectReason {
     CursorVisible,
     /// The output has no active KMS pipeline, for example while DPMS-off.
     OutputUnpowered,
+    /// A source rectangle cannot be represented by the DRM 16.16 fields or
+    /// falls outside the imported client buffer.
+    InvalidPlaneGeometry,
+    /// Connector colorspace or HDR metadata cannot be preserved by the
+    /// current per-plane color contract.
+    ColorIncompatible,
 }
 
 impl RejectReason {
@@ -112,6 +119,8 @@ impl RejectReason {
             Self::CaptureActive => "capture_active",
             Self::CursorVisible => "cursor_visible",
             Self::OutputUnpowered => "output_unpowered",
+            Self::InvalidPlaneGeometry => "invalid_plane_geometry",
+            Self::ColorIncompatible => "color_incompatible",
         }
     }
 }
@@ -1422,12 +1431,12 @@ impl PromotionRegistry {
             .map(|(output, _)| *output)
     }
 
-    /// The surface whose Flutter sampling is suppressed, across all outputs.
-    /// Promotion is single-output in this stage, so at most one exists.
-    pub(super) fn suppressed_surface(&self) -> Option<u64> {
+    /// All surfaces whose Flutter sampling is suppressed, one per promoted
+    /// output. A set keeps multi-output promotion isolated.
+    pub(super) fn suppressed_surfaces(&self) -> impl Iterator<Item = u64> + '_ {
         self.machines
             .values()
-            .find_map(|machine| machine.state().promoted_surface())
+            .filter_map(|machine| machine.state().promoted_surface())
     }
 
     pub(super) fn forget_output(&mut self, output: u64) {
@@ -1553,6 +1562,107 @@ pub(super) struct CandidateGeometry {
     pub(super) transform: u32,
 }
 
+/// The exact source/destination arrangement which passed static validation
+/// and will be repeated by both TEST_ONLY and the real atomic commit. Keeping
+/// this beside the lease prevents a later re-derivation from accidentally
+/// testing one arrangement and committing another (C1 §K3).
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) struct DirectPlaneGeometry {
+    pub(super) source: Rectangle<f64, Buffer>,
+    pub(super) destination: Rectangle<i32, Physical>,
+    pub(super) transform: Transform,
+}
+
+pub(super) fn plane_geometry(
+    source_rect: (f64, f64, f64, f64),
+    source_size: (u32, u32),
+    output_size: (u32, u32),
+    transform: u32,
+) -> Result<DirectPlaneGeometry, RejectReason> {
+    let (x, y, width, height) = source_rect;
+    let finite_positive = |value: f64| value.is_finite() && value > 0.0;
+    if ![x, y]
+        .iter()
+        .all(|value| value.is_finite() && *value >= 0.0)
+        || ![width, height].iter().copied().all(finite_positive)
+        || x + width > f64::from(source_size.0)
+        || y + height > f64::from(source_size.1)
+        || output_size.0 == 0
+        || output_size.1 == 0
+    {
+        return Err(RejectReason::InvalidPlaneGeometry);
+    }
+    let transform = match transform {
+        0 => Transform::Normal,
+        1 => Transform::_90,
+        2 => Transform::_180,
+        3 => Transform::_270,
+        4 => Transform::Flipped,
+        5 => Transform::Flipped90,
+        6 => Transform::Flipped180,
+        7 => Transform::Flipped270,
+        _ => return Err(RejectReason::UnsupportedTransform),
+    };
+    let fixed16 = |value: f64| {
+        let scaled = value * 65_536.0;
+        (scaled.is_finite() && scaled >= 0.0 && scaled <= u32::MAX as f64)
+            .then_some(())
+            .ok_or(RejectReason::InvalidPlaneGeometry)
+    };
+    fixed16(x)?;
+    fixed16(y)?;
+    fixed16(width)?;
+    fixed16(height)?;
+    Ok(DirectPlaneGeometry {
+        source: Rectangle::new((x, y).into(), (width, height).into()),
+        destination: Rectangle::from_size(
+            (
+                i32::try_from(output_size.0).map_err(|_| RejectReason::InvalidPlaneGeometry)?,
+                i32::try_from(output_size.1).map_err(|_| RejectReason::InvalidPlaneGeometry)?,
+            )
+                .into(),
+        ),
+        transform,
+    })
+}
+
+pub(super) fn geometry_fingerprint(geometry: DirectPlaneGeometry) -> u64 {
+    const FNV_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
+    const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
+    let mut hash = FNV_OFFSET;
+    for value in [
+        geometry.source.loc.x.to_bits(),
+        geometry.source.loc.y.to_bits(),
+        geometry.source.size.w.to_bits(),
+        geometry.source.size.h.to_bits(),
+        geometry.destination.loc.x as i64 as u64,
+        geometry.destination.loc.y as i64 as u64,
+        geometry.destination.size.w as i64 as u64,
+        geometry.destination.size.h as i64 as u64,
+        geometry.transform as u64,
+    ] {
+        for byte in value.to_le_bytes() {
+            hash ^= u64::from(byte);
+            hash = hash.wrapping_mul(FNV_PRIME);
+        }
+    }
+    hash
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) enum CapturePath {
+    CurrentAtlas,
+    PreparedComposition,
+}
+
+pub(super) const fn capture_path(has_direct_plane: bool) -> CapturePath {
+    if has_direct_plane {
+        CapturePath::PreparedComposition
+    } else {
+        CapturePath::CurrentAtlas
+    }
+}
+
 #[derive(Clone, Copy, Debug)]
 pub(super) struct CandidateMetadata<'a> {
     pub(super) single_output: bool,
@@ -1607,13 +1717,15 @@ pub(super) fn evaluate_candidate(
         return Some(RejectReason::PopupOrSubsurface);
     }
     let geometry = candidate.geometry;
-    if geometry.transform != 0 {
+    if geometry.transform > 7 {
         return Some(RejectReason::UnsupportedTransform);
     }
-    if geometry.source_width != geometry.output_width
-        || geometry.source_height != geometry.output_height
-        || geometry.destination_width != geometry.output_width
-        || geometry.destination_height != geometry.output_height
+    if geometry.output_width == 0
+        || geometry.output_height == 0
+        || geometry.source_width == 0
+        || geometry.source_height == 0
+        || geometry.destination_width == 0
+        || geometry.destination_height == 0
     {
         return Some(RejectReason::SizeMismatch);
     }
@@ -1638,6 +1750,7 @@ pub(super) struct DirectLease {
     #[allow(dead_code)]
     pub(super) buffer_guard: RendererBufferGuard,
     pub(super) key: CandidateKey,
+    pub(super) geometry: DirectPlaneGeometry,
 }
 
 /// The leases of one output.  `pending` is an entry or replacement that has not
@@ -2693,7 +2806,10 @@ mod tests {
                 replacement: None
             }
         );
-        assert_eq!(registry.suppressed_surface(), Some(second.surface));
+        assert_eq!(
+            registry.suppressed_surfaces().collect::<Vec<_>>(),
+            vec![second.surface]
+        );
     }
 
     #[test]
@@ -2719,7 +2835,7 @@ mod tests {
             assert!(actions.contains(PromotionAction::RestoreClientSampling(surface)));
             assert!(!actions.contains(PromotionAction::RetireDirectLeases));
         }
-        assert_eq!(registry.suppressed_surface(), None);
+        assert!(registry.suppressed_surfaces().next().is_none());
         assert_eq!(registry.outputs_holding_client_scanout().count(), 2);
     }
 
@@ -2801,11 +2917,11 @@ mod tests {
             (|c| c.dma_buf = false, RejectReason::NotDmaBuf),
             (|c| c.sync_proven = false, RejectReason::SyncUnknown),
             (
-                |c| c.geometry.destination_width = 1919,
+                |c| c.geometry.destination_width = 0,
                 RejectReason::SizeMismatch,
             ),
             (
-                |c| c.geometry.transform = 1,
+                |c| c.geometry.transform = 8,
                 RejectReason::UnsupportedTransform,
             ),
             (|c| c.visibility_epoch = 8, RejectReason::StaleCertificate),
@@ -2840,5 +2956,45 @@ mod tests {
             evaluate_candidate(metadata, 10),
             Some(RejectReason::StaleCertificate)
         );
+    }
+
+    #[test]
+    fn plane_geometry_accepts_fractional_crop_and_maps_transform() {
+        let geometry =
+            plane_geometry((1.25, 2.5, 1278.75, 719.5), (1920, 1080), (1280, 720), 1).unwrap();
+        assert_eq!(geometry.source.loc.x, 1.25);
+        assert_eq!(geometry.source.size.h, 719.5);
+        assert_eq!(geometry.transform, Transform::_90);
+        assert_eq!(geometry.destination.size.w, 1280);
+    }
+
+    #[test]
+    fn plane_geometry_rejects_nan_overflow_and_out_of_bounds_crop() {
+        for source in [
+            (f64::NAN, 0.0, 10.0, 10.0),
+            (0.0, 0.0, f64::INFINITY, 10.0),
+            (0.0, 0.0, 200.0, 10.0),
+            (0.0, 0.0, 1.0e20, 1.0),
+        ] {
+            assert_eq!(
+                plane_geometry(source, (100, 100), (100, 100), 0),
+                Err(RejectReason::InvalidPlaneGeometry)
+            );
+        }
+    }
+
+    #[test]
+    fn plane_geometry_rejects_unknown_transform() {
+        assert_eq!(
+            plane_geometry((0.0, 0.0, 10.0, 10.0), (10, 10), (10, 10), 8),
+            Err(RejectReason::UnsupportedTransform)
+        );
+    }
+
+    #[test]
+    fn capture_never_reads_the_old_atlas_while_a_direct_plane_is_live() {
+        assert_eq!(capture_path(false), CapturePath::CurrentAtlas);
+        assert_eq!(capture_path(true), CapturePath::PreparedComposition);
+        assert_ne!(capture_path(true), CapturePath::CurrentAtlas);
     }
 }

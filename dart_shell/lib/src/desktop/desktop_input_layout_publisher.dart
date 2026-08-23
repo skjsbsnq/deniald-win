@@ -35,10 +35,10 @@ class _DesktopInputLayoutPublisherState
   int _epoch = 0;
   int _certificateEpoch = 0;
   int _shellRevision = 0;
-  String? _lastCertificateKey;
-  String? _lastClientCertificateKey;
-  Rect _lastShellVisibleBounds = Rect.zero;
-  int _lastShellVisualRevision = 0;
+  final Map<int, String> _lastCertificateKeys = <int, String>{};
+  final Map<int, String> _lastClientCertificateKeys = <int, String>{};
+  final Map<int, Rect> _lastShellVisibleBounds = <int, Rect>{};
+  final Map<int, int> _lastShellVisualRevision = <int, int>{};
   InputLayoutSnapshot? _lastSnapshot;
 
   @override
@@ -342,118 +342,144 @@ class _DesktopInputLayoutPublisherState
   }) {
     final bridge = ref.read(denialBridgeProvider);
     final visuals = ref.read(shellVisualRegistryProvider);
-    final output = outputLayout?.outputs.length == 1
-        ? outputLayout!.outputs.single
-        : null;
-    DesktopWindowPlacement? candidate;
-    if (output != null) {
+    final outputs = outputLayout?.outputs ?? const <DisplayOutput>[];
+    final canvas = Offset.zero & viewSize;
+    final visibleRects = visuals.orderedSurfaces
+        .map((surface) => surface.bounds.intersect(canvas))
+        .where((rect) => !rect.isEmpty)
+        .toList(growable: false);
+    final visualRevision = visuals.revision;
+    final activeOutputs = outputs.map((output) => output.monitorId).toSet();
+    _lastCertificateKeys.removeWhere(
+      (output, _) => !activeOutputs.contains(output),
+    );
+    _lastClientCertificateKeys.removeWhere(
+      (output, _) => !activeOutputs.contains(output),
+    );
+    _lastShellVisibleBounds.removeWhere(
+      (output, _) => !activeOutputs.contains(output),
+    );
+    _lastShellVisualRevision.removeWhere(
+      (output, _) => !activeOutputs.contains(output),
+    );
+
+    for (final output in outputs) {
+      DesktopWindowPlacement? candidate;
       for (final placement in placements.reversed) {
         if (placement.monitorId == output.monitorId && placement.fullscreen) {
           candidate = placement;
           break;
         }
       }
-    }
-    DenialWindow? window;
-    if (candidate != null) {
-      for (final item in windows) {
-        if (item.objectId == candidate.objectId) {
-          window = item;
-          break;
+      DenialWindow? window;
+      if (candidate != null) {
+        for (final item in windows) {
+          if (item.objectId == candidate.objectId) {
+            window = item;
+            break;
+          }
         }
       }
-    }
-    final eligibleShape =
-        output != null &&
-        candidate != null &&
-        window != null &&
-        candidate.fullscreen &&
-        !candidate.minimized &&
-        !interactions.capturesFullScene &&
-        !previewActive &&
-        window.isUserApp &&
-        window.popupRoots.isEmpty &&
-        window.surfaceLayers.length == 1 &&
-        window.isOpaque &&
-        window.transform == 0 &&
-        _coversOutput(candidate.contentRect, output.logicalRect) &&
-        window.contentCoordinateRect.width > 0.0 &&
-        window.contentCoordinateRect.height > 0.0;
-    final canvas = Offset.zero & viewSize;
-    final visibleRects = visuals.orderedSurfaces
-        .map((surface) => surface.bounds.intersect(canvas))
-        .where((rect) => !rect.isEmpty)
-        .toList(growable: false);
-    final shellVisibleBounds = _unionRects(visibleRects);
-    final visualRevision = visuals.revision;
-    final shellDamage = visualRevision == _lastShellVisualRevision
-        ? Rect.zero
-        : _unionRects(<Rect>[_lastShellVisibleBounds, shellVisibleBounds]);
-    final overlayCompatible = eligibleShape && !visuals.requiresClientSampling;
-    final overlayRendering =
-        output != null &&
-        ref.read(shellRenderModeProvider).overlayEnabledFor(output.monitorId);
-    final clientCertificateKey = <Object?>[
-      layoutEpoch,
-      output?.monitorId ?? 0,
-      outputLayout?.epoch ?? layoutEpoch,
-      eligibleShape ? window.objectId : 0,
-      eligibleShape,
-      previewActive,
-      interactions.capturesFullScene,
-      candidate?.dragging ?? false,
-      overlayCompatible,
-    ].join(':');
-    if (_lastClientCertificateKey != clientCertificateKey) {
-      _lastClientCertificateKey = clientCertificateKey;
-      _certificateEpoch += 1;
-    }
-    final certificateKey = <Object?>[
-      clientCertificateKey,
-      visualRevision,
-      shellVisibleBounds,
-      overlayRendering,
-    ].join(':');
-    if (_lastCertificateKey == certificateKey) {
-      return;
-    }
-    _lastCertificateKey = certificateKey;
-    _shellRevision += 1;
-    final certificate = wire.DenialCompositionCertificate(
-      certificateEpoch: _certificateEpoch,
-      layoutEpoch: layoutEpoch,
-      outputId: output?.monitorId ?? 0,
-      outputConfigurationEpoch: outputLayout?.epoch ?? layoutEpoch,
-      soleRootSurfaceId: eligibleShape ? window.objectId : 0,
-      surfaceTreeRevision: eligibleShape ? 1 : 0,
-      bufferRevision: eligibleShape ? 1 : 0,
-      sourceRect: eligibleShape ? window.contentCoordinateRect : Rect.zero,
-      destinationRect: eligibleShape ? candidate.contentRect : Rect.zero,
-      outputPixelSize: output?.pixelSize ?? viewSize,
-      scale: output?.scale ?? 1.0,
-      transform: output == null ? 0 : 0,
-      knownOpaque: eligibleShape,
-      shellFullyTransparent: eligibleShape && shellVisibleBounds.isEmpty,
-      requiresClientSampling: !eligibleShape || visuals.requiresClientSampling,
-      hasPopup: window?.popupRoots.isNotEmpty ?? false,
-      hasSubsurface: (window?.surfaceLayers.length ?? 0) > 1,
-      hasDragIcon: candidate?.dragging ?? false,
-      hasIme: false,
-      hasPreview: previewActive,
-      hasCapture: interactions.capturesFullScene,
-      hasEffect: visuals.requiresClientSampling,
-      colorClass: wire.CompositionColorClass.Unknown,
-      reasonFlags: eligibleShape ? 0 : 1,
-      engineGeneration: 1,
-      shellDamage: shellDamage,
-      shellVisibleBounds: shellVisibleBounds,
-      shellRevision: _shellRevision,
-      overlayCompatible: overlayCompatible,
-      overlayRendering: overlayRendering,
-    );
-    if (bridge.publishCompositionCertificate(certificate)) {
-      _lastShellVisibleBounds = shellVisibleBounds;
-      _lastShellVisualRevision = visualRevision;
+      final eligibleShape =
+          candidate != null &&
+          window != null &&
+          candidate.fullscreen &&
+          !candidate.minimized &&
+          !interactions.capturesFullScene &&
+          !previewActive &&
+          window.isUserApp &&
+          window.popupRoots.isEmpty &&
+          window.surfaceLayers.length == 1 &&
+          window.isOpaque &&
+          window.transform == 0 &&
+          _coversOutput(candidate.contentRect, output.logicalRect) &&
+          window.contentCoordinateRect.width > 0.0 &&
+          window.contentCoordinateRect.height > 0.0;
+      final visibleOnOutput = visibleRects
+          .map((rect) => rect.intersect(output.logicalRect))
+          .where((rect) => !rect.isEmpty)
+          .map(
+            (rect) => rect.translate(
+              -output.logicalRect.left,
+              -output.logicalRect.top,
+            ),
+          );
+      final shellVisibleBounds = _unionRects(visibleOnOutput);
+      final previousVisible =
+          _lastShellVisibleBounds[output.monitorId] ?? Rect.zero;
+      final previousRevision = _lastShellVisualRevision[output.monitorId] ?? 0;
+      final shellDamage = visualRevision == previousRevision
+          ? Rect.zero
+          : _unionRects(<Rect>[previousVisible, shellVisibleBounds]);
+      final overlayCompatible =
+          eligibleShape && !visuals.requiresClientSampling;
+      final overlayRendering = ref
+          .read(shellRenderModeProvider)
+          .overlayEnabledFor(output.monitorId);
+      final clientCertificateKey = <Object?>[
+        layoutEpoch,
+        output.monitorId,
+        outputLayout?.epoch ?? layoutEpoch,
+        eligibleShape ? window.objectId : 0,
+        eligibleShape,
+        previewActive,
+        interactions.capturesFullScene,
+        candidate?.dragging ?? false,
+        overlayCompatible,
+      ].join(':');
+      if (_lastClientCertificateKeys[output.monitorId] !=
+          clientCertificateKey) {
+        _lastClientCertificateKeys[output.monitorId] = clientCertificateKey;
+        _certificateEpoch += 1;
+      }
+      final certificateKey = <Object?>[
+        clientCertificateKey,
+        visualRevision,
+        shellVisibleBounds,
+        overlayRendering,
+      ].join(':');
+      if (_lastCertificateKeys[output.monitorId] == certificateKey) {
+        continue;
+      }
+      _lastCertificateKeys[output.monitorId] = certificateKey;
+      _shellRevision += 1;
+      final certificate = wire.DenialCompositionCertificate(
+        certificateEpoch: _certificateEpoch,
+        layoutEpoch: layoutEpoch,
+        outputId: output.monitorId,
+        outputConfigurationEpoch: outputLayout?.epoch ?? layoutEpoch,
+        soleRootSurfaceId: eligibleShape ? window.objectId : 0,
+        surfaceTreeRevision: eligibleShape ? 1 : 0,
+        bufferRevision: eligibleShape ? 1 : 0,
+        sourceRect: eligibleShape ? window.contentCoordinateRect : Rect.zero,
+        destinationRect: eligibleShape ? candidate.contentRect : Rect.zero,
+        outputPixelSize: output.pixelSize,
+        scale: output.scale,
+        transform: 0,
+        knownOpaque: eligibleShape,
+        shellFullyTransparent: eligibleShape && shellVisibleBounds.isEmpty,
+        requiresClientSampling:
+            !eligibleShape || visuals.requiresClientSampling,
+        hasPopup: window?.popupRoots.isNotEmpty ?? false,
+        hasSubsurface: (window?.surfaceLayers.length ?? 0) > 1,
+        hasDragIcon: candidate?.dragging ?? false,
+        hasIme: false,
+        hasPreview: previewActive,
+        hasCapture: interactions.capturesFullScene,
+        hasEffect: visuals.requiresClientSampling,
+        colorClass: wire.CompositionColorClass.Unknown,
+        reasonFlags: eligibleShape ? 0 : 1,
+        engineGeneration: 1,
+        shellDamage: shellDamage,
+        shellVisibleBounds: shellVisibleBounds,
+        shellRevision: _shellRevision,
+        overlayCompatible: overlayCompatible,
+        overlayRendering: overlayRendering,
+      );
+      if (bridge.publishCompositionCertificate(certificate)) {
+        _lastShellVisibleBounds[output.monitorId] = shellVisibleBounds;
+        _lastShellVisualRevision[output.monitorId] = visualRevision;
+      }
     }
   }
 

@@ -6,6 +6,8 @@ import 'package:denial_dart_shell/src/models/denial_window.dart';
 import 'package:denial_dart_shell/src/models/denial_window_event.dart';
 import 'package:denial_dart_shell/src/models/display_layout.dart';
 import 'package:denial_dart_shell/src/platform/denial_bridge.dart';
+import 'package:denial_dart_shell/src/platform/denial_wire.dart'
+    show DenialCompositionCertificate;
 import 'package:denial_dart_shell/src/state/display_layout.dart';
 import 'package:denial_dart_shell/src/state/shell_controller.dart';
 import 'package:denial_dart_shell/src/state/shell_state.dart';
@@ -140,6 +142,17 @@ void main() {
       expect(harness.bridge.configured, isEmpty);
     });
 
+    testWidgets('publishes an independent certificate for every output', (
+      tester,
+    ) async {
+      final harness = await _pumpPublisher(tester, layout: _dualOutputLayout);
+
+      expect(
+        harness.bridge.certificates.map((certificate) => certificate.outputId),
+        containsAll(<int>[1, 2]),
+      );
+    });
+
     testWidgets(
       'minimized window is omitted from visibleSurfaceIds unless previewed',
       (tester) async {
@@ -268,13 +281,13 @@ Future<
     ProviderContainer container,
   })
 >
-_pumpPublisher(WidgetTester tester) async {
+_pumpPublisher(WidgetTester tester, {DisplayLayout? layout}) async {
   final bridge = _ConfigureBridge();
   addTearDown(bridge.dispose);
   final container = ProviderContainer.test(
     overrides: [
       denialBridgeProvider.overrideWithValue(bridge),
-      displayLayoutProvider.overrideWithBuild((ref, controller) => null),
+      displayLayoutProvider.overrideWithBuild((ref, controller) => layout),
       shellControllerProvider.overrideWithBuild(
         (ref, controller) => ShellState.initial().copyWith(
           windows: <DenialWindow>[_publisherWindow],
@@ -343,10 +356,18 @@ final DenialWindow _publisherWindow = DenialWindow(
 class _ConfigureBridge extends DenialBridge {
   final List<Rect> configured = <Rect>[];
   final List<InputLayoutSnapshot> publishedSnapshots = <InputLayoutSnapshot>[];
+  final List<DenialCompositionCertificate> certificates =
+      <DenialCompositionCertificate>[];
 
   @override
   bool publishInputLayout(InputLayoutSnapshot snapshot) {
     publishedSnapshots.add(snapshot);
+    return true;
+  }
+
+  @override
+  bool publishCompositionCertificate(DenialCompositionCertificate certificate) {
+    certificates.add(certificate);
     return true;
   }
 
@@ -359,3 +380,32 @@ class _ConfigureBridge extends DenialBridge {
     configured.add(contentRect);
   }
 }
+
+const DisplayLayout _dualOutputLayout = DisplayLayout(
+  epoch: 9,
+  globalOrigin: Offset.zero,
+  logicalSize: Size(2560, 720),
+  pixelSize: Size(2560, 720),
+  engineScale: 1,
+  tickerMonitorId: 1,
+  systemBarMonitorId: 1,
+  systemBarSide: SystemBarSide.bottom,
+  outputs: <DisplayOutput>[
+    DisplayOutput(
+      monitorId: 1,
+      name: 'A',
+      logicalRect: Rect.fromLTWH(0, 0, 1280, 720),
+      pixelSize: Size(1280, 720),
+      scale: 1,
+      refreshRate: 60,
+    ),
+    DisplayOutput(
+      monitorId: 2,
+      name: 'B',
+      logicalRect: Rect.fromLTWH(1280, 0, 1280, 720),
+      pixelSize: Size(1280, 720),
+      scale: 1,
+      refreshRate: 60,
+    ),
+  ],
+);
