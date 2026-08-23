@@ -199,6 +199,7 @@ pub(super) use window_management::{
 #[cfg(feature = "flutter")]
 use window_management::{
     shell_content_geometry, shell_draws_server_frame, shell_draws_x11_server_frame,
+    x11_window_accepts_activation,
 };
 
 const MAX_PENDING_DMABUF_IMPORTS: usize = 128;
@@ -1650,7 +1651,7 @@ impl WaylandFrontend {
             });
         }
         let x11 = window.x11_surface()?;
-        (!x11.is_override_redirect())
+        x11_window_accepts_activation(x11)
             .then(|| x11.class())
             .and_then(|class| WindowIdentity::x11(&class))
     }

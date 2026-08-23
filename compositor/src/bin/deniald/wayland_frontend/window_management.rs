@@ -80,9 +80,22 @@ pub(super) fn shell_draws_server_frame(window: &Window) -> bool {
 pub(super) fn shell_draws_x11_server_frame(x11: &X11Surface) -> bool {
     // Denial owns the frame for managed X11 toplevels regardless of client
     // decoration hints. Protocol-level popups remain unframed.
-    !x11.is_override_redirect()
+    x11_window_accepts_activation(x11)
+}
+
+#[cfg(feature = "flutter")]
+pub(super) fn x11_window_accepts_activation(x11: &X11Surface) -> bool {
+    x11_window_type_accepts_activation(x11.is_override_redirect(), x11.window_type())
+}
+
+#[cfg(feature = "flutter")]
+pub(super) fn x11_window_type_accepts_activation(
+    override_redirect: bool,
+    window_type: Option<WmWindowType>,
+) -> bool {
+    !override_redirect
         && !matches!(
-            x11.window_type(),
+            window_type,
             Some(
                 WmWindowType::Combo
                     | WmWindowType::Dnd

@@ -2953,7 +2953,7 @@ fn activate_client_route(
     };
     if target_window
         .x11_surface()
-        .is_some_and(|surface| !x11_route_may_activate(surface.is_override_redirect()))
+        .is_some_and(|surface| !super::window_management::x11_window_accepts_activation(surface))
     {
         // X11 override-redirect surfaces are client-owned transient UI such
         // as Steam menus and avatar popups. They still receive the pointer
@@ -3004,11 +3004,6 @@ fn activate_client_route(
             .push(PendingWindowEvent::Activated(route.region.window_id));
     }
     scene_changed
-}
-
-#[cfg(feature = "flutter")]
-fn x11_route_may_activate(override_redirect: bool) -> bool {
-    !override_redirect
 }
 
 #[cfg(feature = "flutter")]
@@ -3861,8 +3856,13 @@ mod compositor_pointer_binding_tests {
 
     #[test]
     fn override_redirect_popup_routes_preserve_parent_activation() {
-        assert!(!x11_route_may_activate(true));
-        assert!(x11_route_may_activate(false));
+        assert!(!super::super::window_management::x11_window_type_accepts_activation(true, None,));
+        assert!(
+            super::super::window_management::x11_window_type_accepts_activation(
+                false,
+                Some(smithay::xwayland::xwm::WmWindowType::Normal),
+            )
+        );
     }
 
     #[test]

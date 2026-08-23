@@ -30,7 +30,7 @@ use super::window_management::activate_window;
 #[cfg(feature = "flutter")]
 use super::window_management::{
     queue_restored_window_state, queue_window_action_for_window,
-    queue_window_placement_for_monitor, release_window_focus,
+    queue_window_placement_for_monitor, release_window_focus, x11_window_accepts_activation,
 };
 use super::{
     KeyboardFocusTarget, MoveSurfaceGrab, ResizeEdges, WindowIdentity, X11ResizeSurfaceGrab,
@@ -256,9 +256,13 @@ fn map_x11_window(state: &mut RuntimeState, surface: X11Surface, override_redire
 
     let geometry = surface.last_configure();
     let window = Window::new_x11_window(surface.clone());
+    #[cfg(feature = "flutter")]
+    let activates = x11_window_accepts_activation(&surface);
+    #[cfg(not(feature = "flutter"))]
+    let activates = !override_redirect;
     let (configured, restored_record) = {
         let frontend = state.wayland.as_mut().expect("missing Wayland frontend");
-        let (configured, restored_record) = if override_redirect {
+        let (configured, restored_record) = if !activates {
             (geometry, None)
         } else {
             let transient_parent = surface.is_transient_for().and_then(|parent_id| {
@@ -325,9 +329,9 @@ fn map_x11_window(state: &mut RuntimeState, surface: X11Surface, override_redire
         };
         frontend
             .space
-            .map_element(window.clone(), configured.loc, true);
+            .map_element(window.clone(), configured.loc, activates);
         frontend.update_window_output_membership(&window);
-        if !override_redirect {
+        if activates {
             for candidate in frontend.space.elements() {
                 let changed = candidate.set_activated(candidate == &window);
                 if changed && let Some(toplevel) = candidate.toplevel() {
@@ -352,10 +356,10 @@ fn map_x11_window(state: &mut RuntimeState, surface: X11Surface, override_redire
         );
     }
 
-    if !override_redirect && let Err(error) = surface.configure(configured) {
+    if activates && let Err(error) = surface.configure(configured) {
         warn!(%error, window = surface.window_id(), "could not configure a new X11 window");
     }
-    if !override_redirect {
+    if activates {
         // Publish the compositor's bounded geometry immediately. The game's
         // first buffer may still have virtual-desktop dimensions until it
         // handles ConfigureNotify; exposing that stale size to Flutter makes
@@ -371,7 +375,7 @@ fn map_x11_window(state: &mut RuntimeState, surface: X11Surface, override_redire
         }
     }
 
-    if !override_redirect {
+    if activates {
         let keyboard = state
             .wayland
             .as_ref()
@@ -437,7 +441,7 @@ fn unmap_x11_window(state: &mut RuntimeState, surface: &X11Surface) {
                 .rfind(|candidate| {
                     candidate
                         .x11_surface()
-                        .is_none_or(|x11| !x11.is_override_redirect())
+                        .is_none_or(x11_window_accepts_activation)
                 })
                 .cloned();
             for candidate in frontend.space.elements() {
