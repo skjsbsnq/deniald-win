@@ -2324,6 +2324,10 @@ struct ExternalTextureSlot {
     current_sampled: bool,
     expects_sample: bool,
     schedule_pending: bool,
+    /// Highest client revision Flutter has actually read into an atlas frame.
+    /// Direct Scanout's fallback waits on this so the prepared frame is known
+    /// to carry the client content before the plane changes hands.
+    last_sampled_generation: u64,
 }
 
 impl ExternalTextureSlot {
@@ -3265,7 +3269,14 @@ impl FlutterGlHandler {
             .is_some_and(|source| source.generation() == generation)
         {
             slot.current_sampled = true;
+            slot.last_sampled_generation = slot.last_sampled_generation.max(generation);
         }
+    }
+
+    fn external_texture_sampled_generation(&self, texture_id: i64) -> Option<u64> {
+        lock(&self.external_texture_sources)
+            .get(&texture_id)
+            .map(|slot| slot.last_sampled_generation)
     }
 
     fn record_sampled_buffer(
@@ -6035,6 +6046,16 @@ impl FlutterRuntime {
 
     pub fn take_screenshot_requested(&mut self) -> Option<system_command::ScreenshotRequest> {
         self.system_commands.take_screenshot_requested()
+    }
+
+    /// Highest client buffer revision Flutter has sampled for this surface.
+    ///
+    /// Direct Scanout's fallback uses it to prove the prepared atlas frame
+    /// carries the client content before the plane is handed back, so the
+    /// handover cannot show the desktop without the client window.
+    pub(super) fn sampled_client_revision(&self, surface_id: u64) -> Option<u64> {
+        let texture_id = i64::try_from(surface_id).ok()?;
+        self.handler.external_texture_sampled_generation(texture_id)
     }
 
     pub fn take_screenshot_prepared(&mut self) -> Option<std::num::NonZeroU64> {

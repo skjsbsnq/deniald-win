@@ -1389,13 +1389,17 @@ struct RuntimeState {
     #[cfg(feature = "flutter")]
     idle_dpms: idle_policy::IdleDpmsPolicy,
     #[cfg(feature = "flutter")]
-    direct_scanout: direct_scanout::PromotionController,
+    direct_scanout: direct_scanout::PromotionRegistry,
+    /// Client buffer leases per output. A lease outlives the page flip that
+    /// replaces it, so only a `RetireDirectLeases` action may drop one.
     #[cfg(feature = "flutter")]
-    direct_promotion: Option<direct_scanout::DirectPromotion>,
+    direct_leases: BTreeMap<OutputId, direct_scanout::OutputLeases>,
+    /// A candidate observed while the atlas was still composing, with the
+    /// presented-frame count at that moment. Entry waits for one further atlas
+    /// frame so a scene that is still settling cannot be promoted on its first
+    /// certificate.
     #[cfg(feature = "flutter")]
-    direct_replacement: Option<direct_scanout::DirectPromotion>,
-    #[cfg(feature = "flutter")]
-    direct_candidate_armed: Option<(OutputId, u64, u64, u64, u64)>,
+    direct_arm_watch: BTreeMap<OutputId, (direct_scanout::CandidateKey, u64)>,
 }
 
 #[cfg(feature = "flutter")]
@@ -2111,7 +2115,7 @@ fn run_frame_loop(
     };
     #[cfg(feature = "flutter")]
     {
-        events.direct_scanout = direct_scanout::PromotionController::new(false);
+        events.direct_scanout = direct_scanout::PromotionRegistry::new(false);
     }
     #[cfg(feature = "flutter")]
     events.synchronize_flutter_pointer_position();
@@ -2767,12 +2771,10 @@ fn run_flutter_event_loop(
         native_plugin_default_size: (swapchain.size.width, swapchain.size.height),
         ..RuntimeState::default()
     };
-    events.direct_scanout =
-        direct_scanout::PromotionController::new(experimental_primary_promotion);
+    events.direct_scanout = direct_scanout::PromotionRegistry::new(experimental_primary_promotion);
     info!(
         enabled = events.direct_scanout.enabled(),
-        state = ?events.direct_scanout.state(),
-        "P8-07 primary promotion controller initialized"
+        "P8-08 per-output primary promotion state machine initialized"
     );
     event_loop.handle().insert_source(
         native_release_source,
@@ -2936,6 +2938,15 @@ fn run_flutter_event_loop(
 
         let scanout_rebased = events.scanout_rebased;
         events.scanout_rebased = false;
+        if scanout_rebased {
+            reset_direct_scanout(
+                drm,
+                &mut scheduler,
+                scanouts,
+                &mut events,
+                direct_scanout::InvalidationCause::SessionSuspended,
+            )?;
+        }
         if scanout_rebased && let Some(runtime) = flutter.as_mut() {
             cancel_active_screenshot(
                 &mut screenshot_manager,
@@ -2948,7 +2959,7 @@ fn run_flutter_event_loop(
             let runtime = flutter
                 .as_mut()
                 .ok_or("Flutter runtime disappeared during page-flip completion")?;
-            handle_direct_page_flip(&mut scheduler, scanouts, &mut events)?;
+            handle_direct_page_flip(drm, &mut scheduler, scanouts, &mut events)?;
             scheduler.handle_completions(runtime, swapchain, scanouts, &mut events)?;
             if drm.is_active()
                 && let Some(stall) = scheduler.presentation_stall(Instant::now())
@@ -2979,6 +2990,20 @@ fn run_flutter_event_loop(
             for presentation in scheduler.presented_outputs().iter().copied() {
                 frame_scheduler.observe_presentation(presentation);
             }
+            // The atlas frame that replaced a client primary has reached the
+            // screen, so the fallback may finally retire its client leases.
+            let presented_outputs = scheduler
+                .presented_outputs()
+                .iter()
+                .map(|presentation| presentation.id)
+                .collect::<Vec<_>>();
+            handle_direct_fallback_presentation(
+                drm,
+                &mut scheduler,
+                scanouts,
+                &presented_outputs,
+                &mut events,
+            )?;
 
             // Deadline-critical lane. Raster completion is published before
             // its callback wakeup, so retire that wakeup without servicing
@@ -3689,6 +3714,13 @@ fn run_flutter_event_loop(
                 continue;
             }
 
+            reset_direct_scanout(
+                drm,
+                &mut scheduler,
+                scanouts,
+                &mut events,
+                direct_scanout::InvalidationCause::FlutterEngineReplaced,
+            )?;
             scheduler.converge_for_topology(
                 flutter
                     .as_ref()
@@ -3783,7 +3815,7 @@ fn run_flutter_event_loop(
         synchronize_flutter_input_layout(runtime, &mut events)?;
         synchronize_flutter_composition_certificate(runtime, &mut events);
         synchronize_wayland_cursor(runtime, &mut events)?;
-        service_direct_scanout(drm, swapchain, scanouts, &mut scheduler, &mut events)?;
+        service_direct_scanout(drm, runtime, scanouts, &mut scheduler, &mut events)?;
         if background_started.elapsed() >= COMPOSITOR_BACKGROUND_SLICE {
             event_loop.dispatch(Duration::ZERO, &mut events)?;
             continue;
@@ -4445,155 +4477,100 @@ fn direct_plane_state(scanout: &Scanout, framebuffer: framebuffer::Handle) -> Pl
 }
 
 #[cfg(feature = "flutter")]
-fn service_direct_scanout(
-    drm: &DrmDevice,
-    swapchain: &AtlasSwapchain,
-    scanouts: &[Scanout],
-    scheduler: &mut output_scheduler::OutputScheduler,
-    events: &mut RuntimeState,
-) -> Result<(), Box<dyn Error>> {
-    // A direct replacement owns an in-flight CRTC page flip. Do not inspect
-    // the older active lease or arm another replacement/fallback until that
-    // flip has retired; KMS reports the second request as busy.
-    if events.direct_replacement.is_some() {
-        return Ok(());
+/// Folds the output properties a promotion is bound to into one epoch.
+///
+/// Mode, refresh, transform, VRR, connector, CRTC and power state all change
+/// what a `TEST_ONLY` result means, so a change in any of them must invalidate
+/// the cached arrangement rather than let it be reused (C1 §K3).
+fn output_arrangement_epoch(scanout: &Scanout) -> u64 {
+    const FNV_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
+    const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
+    let (width, height) = scanout.output.mode.size();
+    let mut hash = FNV_OFFSET;
+    for value in [
+        u64::from(u32::from(scanout.output.connector)),
+        u64::from(u32::from(scanout.output.crtc)),
+        u64::from(width),
+        u64::from(height),
+        u64::from(scanout.output.mode.vrefresh()),
+        scanout.output.transform as u64,
+        u64::from(scanout.output.vrr_enabled),
+        u64::from(scanout.powered),
+    ] {
+        for byte in value.to_le_bytes() {
+            hash ^= u64::from(byte);
+            hash = hash.wrapping_mul(FNV_PRIME);
+        }
     }
-    if let Some(active) = events.direct_promotion.as_ref() {
-        if !active.confirmed {
-            return Ok(());
-        }
-        if active.fallback_pending {
-            return Ok(());
-        }
-        let still_current = events.wayland.as_ref().and_then(|frontend| {
-            frontend
-                .primary_scanout_candidate(OutputId(active.output))
-                .filter(|candidate| {
-                    candidate.buffer_revision == active.revision
-                        && candidate.certificate.certificate_epoch == active.certificate_epoch
-                })
-        });
-        if still_current.is_some() {
-            return Ok(());
-        }
+    hash
+}
 
-        if let Some(candidate) = events
-            .wayland
-            .as_ref()
-            .and_then(|frontend| frontend.primary_scanout_candidate(OutputId(active.output)))
-        {
-            let output = OutputId(active.output);
-            if let Some(scanout) = scanouts.iter().find(|scanout| scanout.output.id == output)
-                && candidate.certificate.known_opaque
-                && candidate.certificate.shell_fully_transparent
-                && candidate.dmabuf.num_planes() > 0
-                && candidate.source_size == candidate.destination_size
-            {
-                if let Ok(framebuffer) =
-                    kms_state::framebuffer_from_prime_dmabuf(drm.device_fd(), &candidate.dmabuf)
-                {
-                    let state = direct_plane_state(scanout, framebuffer.handle());
-                    if scanout.surface.test_state([state.clone()], false).is_ok()
-                        && scanout.surface.page_flip([state], true).is_ok()
-                    {
-                        events.pending.insert(scanout.output.crtc);
-                        events.direct_replacement = Some(direct_scanout::DirectPromotion {
-                            framebuffer,
-                            dmabuf: candidate.dmabuf,
-                            buffer_guard: candidate.buffer_guard,
-                            output: output.0,
-                            surface: candidate.root_surface_id,
-                            revision: candidate.buffer_revision,
-                            certificate_epoch: candidate.certificate.certificate_epoch,
-                            confirmed: false,
-                            fallback_pending: false,
-                        });
-                        info!(event = "test_only_passed", output = ?output, revision = candidate.buffer_revision, "Direct Scanout replacement submitted");
-                        return Ok(());
-                    }
-                }
-            }
-        }
+/// The live scene of one output reduced to the promotion contract.
+#[cfg(feature = "flutter")]
+struct DirectSnapshot {
+    key: direct_scanout::CandidateKey,
+    candidate: wayland_frontend::PrimaryScanoutCandidate,
+}
 
-        let output = OutputId(active.output);
-        if let Some(scanout) = scanouts.iter().find(|scanout| scanout.output.id == output) {
-            let atlas_index = scheduler
-                .scanning_framebuffer_index(output, scanouts)
-                .unwrap_or(swapchain.current);
-            let atlas = swapchain.buffers[atlas_index].framebuffer();
-            let state = direct_plane_state(scanout, atlas);
-            if let Err(error) = scanout.surface.test_state([state.clone()], false) {
-                debug!(event = "rejected_reason", reason = "fallback_test_only_failed", %error, "Direct Scanout fallback TEST_ONLY rejected");
-                return Ok(());
-            }
-            if let Err(error) = scanout.surface.page_flip([state], true) {
-                debug!(event = "rejected_reason", reason = "fallback_page_flip_busy", %error, "Direct Scanout fallback page flip deferred");
-                return Ok(());
-            }
-            events.pending.insert(scanout.output.crtc);
-            if let Some(frontend) = events.wayland.as_mut() {
-                frontend.outputs_submitted(&[(output, scanout.output.vrr_enabled)])?;
-            }
-            events
-                .direct_promotion
-                .as_mut()
-                .expect("active Direct Scanout promotion")
-                .fallback_pending = true;
-            events.direct_scanout.fallback();
-            info!(event = "fallback_armed", output = ?output, "Direct Scanout atlas fallback submitted");
-        }
-        return Ok(());
-    }
+/// Re-read the scene and decide whether this output may hold a client primary
+/// right now.  Pure observation: it performs no KMS work and leaves the state
+/// machine to decide what the answer means for the current state.
+#[cfg(feature = "flutter")]
+fn observe_direct_candidate(
+    scanout: &Scanout,
+    powered_outputs: usize,
+    events: &RuntimeState,
+) -> Result<DirectSnapshot, direct_scanout::RejectReason> {
+    use direct_scanout::RejectReason;
 
-    if !events.direct_scanout.enabled() {
-        events.direct_candidate_armed = None;
-        return Ok(());
+    if !scanout.powered {
+        return Err(RejectReason::OutputUnpowered);
     }
-    let powered = scanouts
-        .iter()
-        .filter(|scanout| scanout.powered)
-        .collect::<Vec<_>>();
-    if powered.len() != 1 {
-        return Ok(());
-    }
-    let scanout = powered[0];
-    if events
-        .wayland
-        .as_ref()
-        .is_some_and(|frontend| frontend.has_pending_screencopy_for_output(scanout.output.id))
-    {
-        return Ok(());
+    if powered_outputs != 1 {
+        // The first promotion stage owns a single output only (C1 §K8).
+        return Err(RejectReason::MultipleOutputs);
     }
     if scanout.output.transform != OutputTransform::Normal {
-        return Ok(());
+        return Err(RejectReason::UnsupportedTransform);
     }
-    let Some(candidate) = events
+    let frontend = events
         .wayland
         .as_ref()
-        .and_then(|frontend| frontend.primary_scanout_candidate(scanout.output.id))
-    else {
-        events.direct_candidate_armed = None;
-        return Ok(());
-    };
+        .ok_or(RejectReason::MissingCertificate)?;
+    if frontend.has_pending_screencopy_for_output(scanout.output.id) {
+        return Err(RejectReason::CaptureActive);
+    }
+    if frontend.shell_cursor_visible() {
+        return Err(RejectReason::CursorVisible);
+    }
+    let candidate = frontend
+        .primary_scanout_candidate(scanout.output.id)
+        .ok_or(RejectReason::MissingCertificate)?;
+
     let (width, height) = scanout.output.mode.size();
-    if !candidate.opaque
-        || candidate.certificate.output_pixel_size != (f64::from(width), f64::from(height))
+    if !candidate.opaque {
+        return Err(RejectReason::NotOpaque);
+    }
+    if candidate.certificate.output_pixel_size != (f64::from(width), f64::from(height))
         || candidate.source_rect.0 != 0.0
         || candidate.source_rect.1 != 0.0
         || candidate.source_rect.2 != f64::from(candidate.source_size.0)
         || candidate.source_rect.3 != f64::from(candidate.source_size.1)
     {
-        return Ok(());
+        return Err(RejectReason::SizeMismatch);
     }
+
     let metadata = direct_scanout::CandidateMetadata {
         single_output: true,
         dma_buf: candidate.dmabuf.num_planes() > 0,
+        // The acquire fence is proven per revision by the state machine's own
+        // fence step rather than asserted here.
         sync_proven: true,
         certificate_epoch: candidate.certificate.certificate_epoch,
-        // Native visibility and the current Wayland buffer revision are
-        // validated independently above. The eligibility token here binds the
-        // candidate to this exact certificate generation; layout_epoch belongs
-        // to Flutter's layout domain and is not the certificate sequence.
+        // Native visibility and the Wayland buffer revision are validated in
+        // `primary_scanout_candidate`. This token binds the candidate to one
+        // certificate generation; `layout_epoch` belongs to Flutter's layout
+        // domain and is not the certificate sequence.
         visibility_epoch: candidate.certificate.certificate_epoch,
         certificate: Some(&candidate.certificate),
         geometry: direct_scanout::CandidateGeometry {
@@ -4606,130 +4583,604 @@ fn service_direct_scanout(
             transform: candidate.transform,
         },
     };
-    let decision = events
-        .direct_scanout
-        .eligibility(metadata, candidate.buffer_revision);
-    if let Some(reason) = decision.reason {
-        events.direct_candidate_armed = None;
-        debug!(event = "rejected_reason", reason = reason.code(), output = ?scanout.output.id, "Direct Scanout candidate rejected");
-        return Ok(());
+    if let Some(reason) = direct_scanout::evaluate_candidate(metadata, candidate.buffer_revision) {
+        return Err(reason);
     }
-    let candidate_key = (
-        scanout.output.id,
-        candidate.root_surface_id,
-        candidate.buffer_revision,
-        candidate.certificate.certificate_epoch,
-    );
-    let presented_frames = scheduler.presented_frames();
-    match events.direct_candidate_armed {
-        Some((output, surface, revision, certificate_epoch, armed_at))
-            if (output, surface, revision, certificate_epoch) == candidate_key
-                && presented_frames > armed_at => {}
-        Some((output, surface, revision, certificate_epoch, _))
-            if (output, surface, revision, certificate_epoch) == candidate_key =>
-        {
-            return Ok(());
-        }
-        _ => {
-            events.direct_candidate_armed = Some((
-                candidate_key.0,
-                candidate_key.1,
-                candidate_key.2,
-                candidate_key.3,
-                presented_frames,
-            ));
-            info!(event = "eligible", output = ?candidate_key.0, surface = candidate_key.1, revision = candidate_key.2, "Direct Scanout candidate armed behind composed atlas");
-            return Ok(());
-        }
-    }
-    if decision.state != direct_scanout::PromotionState::Armed
-        || !scheduler.can_switch_to_direct(scanout.output.id, scanouts)
-    {
-        return Ok(());
-    }
-    let framebuffer = match kms_state::framebuffer_from_prime_dmabuf(
-        drm.device_fd(),
-        &candidate.dmabuf,
-    ) {
-        Ok(framebuffer) => framebuffer,
-        Err(error) => {
-            debug!(event = "rejected_reason", reason = "prime_import", %error, "Direct Scanout PRIME import rejected");
-            return Ok(());
-        }
-    };
-    let state = direct_plane_state(scanout, framebuffer.handle());
-    if let Err(error) = scanout.surface.test_state([state.clone()], false) {
-        debug!(event = "rejected_reason", reason = "test_only_failed", %error, "Direct Scanout TEST_ONLY rejected");
-        return Ok(());
-    }
-    events.direct_scanout.test_only_result(true);
-    if let Err(error) = scanout.surface.page_flip([state], true) {
-        debug!(event = "fallback", reason = "real_commit_failed", %error, "Direct Scanout page flip rejected");
-        return Ok(());
-    }
-    scheduler.set_direct_output(scanout.output.id, true);
-    if let Some(frontend) = events.wayland.as_mut() {
-        frontend.outputs_submitted(&[(scanout.output.id, scanout.output.vrr_enabled)])?;
-    }
-    events.pending.insert(scanout.output.crtc);
-    events.direct_promotion = Some(direct_scanout::DirectPromotion {
-        framebuffer,
-        dmabuf: candidate.dmabuf,
-        buffer_guard: candidate.buffer_guard,
+
+    let key = direct_scanout::CandidateKey {
         output: scanout.output.id.0,
         surface: candidate.root_surface_id,
         revision: candidate.buffer_revision,
         certificate_epoch: candidate.certificate.certificate_epoch,
-        confirmed: false,
-        fallback_pending: false,
-    });
-    events.direct_candidate_armed = None;
-    info!(event = "test_only_passed", output = ?scanout.output.id, surface = candidate.root_surface_id, revision = candidate.buffer_revision, "Direct Scanout primary promotion submitted");
+        output_epoch: output_arrangement_epoch(scanout),
+        buffer_epoch: kms_state::dmabuf_arrangement_fingerprint(&candidate.dmabuf),
+    };
+    Ok(DirectSnapshot { key, candidate })
+}
+
+/// Drive every output's promotion state machine for one iteration.
+///
+/// The loop is deliberately thin: observe the scene, feed the reducer, execute
+/// the actions it returns.  No promotion decision is made here, so the
+/// transition and fault matrix in `direct_scanout` describes the real
+/// behaviour rather than an approximation of it.
+#[cfg(feature = "flutter")]
+fn service_direct_scanout(
+    drm: &DrmDevice,
+    runtime: &flutter_runtime::FlutterRuntime,
+    scanouts: &[Scanout],
+    scheduler: &mut output_scheduler::OutputScheduler,
+    events: &mut RuntimeState,
+) -> Result<(), Box<dyn Error>> {
+    let now = Instant::now();
+
+    // An output that disappeared can no longer flip, so nothing may wait on
+    // it.  Its machine and leases go with it; other outputs are untouched.
+    let live = |output: &OutputId| scanouts.iter().any(|scanout| scanout.output.id == *output);
+    let stale = events
+        .direct_leases
+        .keys()
+        .copied()
+        .filter(|output| !live(output))
+        .collect::<Vec<_>>();
+    for output in stale {
+        events.direct_leases.remove(&output);
+        events.direct_scanout.forget_output(output.0);
+    }
+    events.direct_arm_watch.retain(|output, _| live(output));
+
+    let powered_outputs = scanouts.iter().filter(|scanout| scanout.powered).count();
+    let promotion_enabled = events.direct_scanout.enabled();
+
+    // Fallback gate: a prepared atlas frame must carry the client content
+    // before the plane changes hands.  A destroyed client can never produce
+    // that sample, so its absence also releases the gate.
+    let sample_ready = events
+        .direct_scanout
+        .outputs_awaiting_client_sample()
+        .filter(|(_, surface, revision)| {
+            let sampled = runtime
+                .sampled_client_revision(*surface)
+                .is_some_and(|sampled| sampled >= *revision);
+            let gone = events
+                .wayland
+                .as_ref()
+                .is_none_or(|frontend| !frontend.surface_exists(*surface));
+            sampled || gone
+        })
+        .map(|(output, _, _)| output)
+        .collect::<Vec<_>>();
+    for output in sample_ready {
+        let actions = events
+            .direct_scanout
+            .machine(output)
+            .advance(direct_scanout::PromotionEvent::ClientSampleReady, now);
+        apply_direct_actions(drm, scanouts, scheduler, events, OutputId(output), actions)?;
+    }
+
+    // Acquire-fence gate: a prepared buffer may only be probed and committed
+    // once its producer fence has signalled (C1 §C3). The reducer owns the
+    // bounded deadline for a fence that never does.
+    let fenced = events
+        .direct_scanout
+        .outputs_awaiting_fence()
+        .filter(|(output, key)| {
+            events
+                .direct_leases
+                .get(&OutputId(*output))
+                .and_then(|leases| leases.pending.as_ref())
+                .filter(|lease| lease.key == *key)
+                .is_some_and(|lease| kms_state::dmabuf_acquire_fence_signalled(&lease.dmabuf))
+        })
+        .map(|(output, _)| output)
+        .collect::<Vec<_>>();
+    for output in fenced {
+        let actions = events
+            .direct_scanout
+            .machine(output)
+            .advance(direct_scanout::PromotionEvent::FenceReady, now);
+        apply_direct_actions(drm, scanouts, scheduler, events, OutputId(output), actions)?;
+    }
+
+    for scanout in scanouts {
+        let output = scanout.output.id;
+        let idle = matches!(
+            events.direct_scanout.state(output.0),
+            direct_scanout::PromotionState::Composed
+        );
+        if !promotion_enabled && idle {
+            // The experiment is off and this output owns nothing, so the whole
+            // scene observation is skipped and the disabled path costs nothing.
+            events.direct_arm_watch.remove(&output);
+            continue;
+        }
+
+        // Deadlines first: a stalled step must resolve before new work.
+        let actions = events
+            .direct_scanout
+            .machine(output.0)
+            .advance(direct_scanout::PromotionEvent::Tick, now);
+        apply_direct_actions(drm, scanouts, scheduler, events, output, actions)?;
+
+        let observation = observe_direct_candidate(scanout, powered_outputs, events);
+        let (event, snapshot) = match observation {
+            Ok(snapshot) => {
+                let settled = direct_candidate_settled(events, scheduler, output, snapshot.key);
+                (
+                    direct_scanout::PromotionEvent::CandidateEligible {
+                        candidate: snapshot.key,
+                        atlas_settled: settled,
+                    },
+                    Some(snapshot),
+                )
+            }
+            Err(reason) => {
+                events.direct_arm_watch.remove(&output);
+                (
+                    direct_scanout::PromotionEvent::CandidateRejected(reason),
+                    None,
+                )
+            }
+        };
+        // Never arm a new entry while the experiment is off, but keep driving
+        // an output that is still unwinding a promotion.
+        let event = if promotion_enabled {
+            event
+        } else {
+            direct_scanout::PromotionEvent::CandidateRejected(
+                direct_scanout::RejectReason::FeatureDisabled,
+            )
+        };
+        let snapshot = promotion_enabled.then_some(snapshot).flatten();
+        let actions = events.direct_scanout.machine(output.0).advance(event, now);
+        apply_direct_actions_with_candidate(
+            drm, scanouts, scheduler, events, output, actions, snapshot, now,
+        )?;
+    }
+
+    // The machines are the single source of truth for which surface Flutter
+    // must stop sampling. Reconciling once per iteration means a missed
+    // action cannot leave the frontend suppressing a surface that is no
+    // longer promoted.
+    let suppressed = events.direct_scanout.suppressed_surface();
+    if let Some(frontend) = events.wayland.as_mut()
+        && frontend.promoted_surface() != suppressed
+    {
+        frontend.set_promoted_surface(suppressed);
+        events.scene_sync.mark_dirty();
+    }
+    if render_audit_enabled() {
+        audit_direct_scanout(events, now);
+    }
     Ok(())
 }
 
+/// Rate-limited state line for the Direct Scanout audit log.
+///
+/// The audit records the state, its sub-step, the live deadline and the last
+/// rejection reason together, so a report says why an output is not promoted
+/// instead of only that it is not.
+#[cfg(feature = "flutter")]
+fn audit_direct_scanout(events: &RuntimeState, now: Instant) {
+    for output in events.direct_scanout.outputs() {
+        let state = events.direct_scanout.state(output);
+        let machine = events.direct_scanout.observe(output);
+        debug!(
+            event = "state",
+            output,
+            state = state.code(),
+            step = state.step_code(),
+            holds_client_scanout = state.holds_client_scanout(),
+            deadline_ms = machine
+                .and_then(direct_scanout::OutputMachine::step_deadline)
+                .map(|deadline| deadline.saturating_duration_since(now).as_millis()),
+            reject = machine
+                .and_then(direct_scanout::OutputMachine::last_reject)
+                .map(direct_scanout::RejectReason::code),
+            promotion_disabled =
+                machine.is_some_and(direct_scanout::OutputMachine::promotion_disabled),
+            "Direct Scanout output state"
+        );
+    }
+}
+
+/// True once a composed atlas frame has been presented while this exact
+/// candidate stayed unchanged.  Entry waits for that so a scene which is still
+/// settling cannot be promoted on its very first certificate.
+#[cfg(feature = "flutter")]
+fn direct_candidate_settled(
+    events: &mut RuntimeState,
+    scheduler: &output_scheduler::OutputScheduler,
+    output: OutputId,
+    key: direct_scanout::CandidateKey,
+) -> bool {
+    // A promoted output is already past entry; a replacement of the scanning
+    // buffer must not wait for an atlas frame that will never be composed.
+    if !matches!(
+        events.direct_scanout.state(output.0),
+        direct_scanout::PromotionState::Composed
+    ) {
+        return true;
+    }
+    let presented = scheduler.presented_frames();
+    match events.direct_arm_watch.get(&output) {
+        Some((watched, armed_at)) if *watched == key => presented > *armed_at,
+        _ => {
+            events.direct_arm_watch.insert(output, (key, presented));
+            info!(
+                event = "eligible",
+                ?output,
+                surface = key.surface,
+                revision = key.revision,
+                "Direct Scanout candidate armed behind composed atlas"
+            );
+            false
+        }
+    }
+}
+
+#[cfg(feature = "flutter")]
+fn apply_direct_actions(
+    drm: &DrmDevice,
+    scanouts: &[Scanout],
+    scheduler: &mut output_scheduler::OutputScheduler,
+    events: &mut RuntimeState,
+    output: OutputId,
+    actions: direct_scanout::ActionList,
+) -> Result<(), Box<dyn Error>> {
+    apply_direct_actions_with_candidate(
+        drm,
+        scanouts,
+        scheduler,
+        events,
+        output,
+        actions,
+        None,
+        Instant::now(),
+    )
+}
+
+/// Execute one transition's actions.
+///
+/// Actions that can fail feed their outcome straight back into the reducer, so
+/// a failed import, probe or commit is a state transition rather than an early
+/// return that leaves the machine believing the step is still in flight.
+#[cfg(feature = "flutter")]
+#[allow(clippy::too_many_arguments, clippy::too_many_lines)]
+fn apply_direct_actions_with_candidate(
+    drm: &DrmDevice,
+    scanouts: &[Scanout],
+    scheduler: &mut output_scheduler::OutputScheduler,
+    events: &mut RuntimeState,
+    output: OutputId,
+    actions: direct_scanout::ActionList,
+    candidate: Option<DirectSnapshot>,
+    now: Instant,
+) -> Result<(), Box<dyn Error>> {
+    use direct_scanout::{PromotionAction, PromotionEvent};
+
+    let mut candidate = candidate;
+    for action in actions.iter() {
+        match action {
+            PromotionAction::ArmTimeout { step, deadline } => {
+                debug!(
+                    event = "arm_timeout",
+                    ?output,
+                    step = step.code(),
+                    timeout_ms = deadline.saturating_duration_since(now).as_millis(),
+                    "Direct Scanout step deadline armed"
+                );
+            }
+            PromotionAction::DisablePromotion(reason) => {
+                warn!(
+                    event = "promotion_disabled",
+                    ?output,
+                    reason = reason.code(),
+                    "Direct Scanout promotion disabled for this output; composition continues"
+                );
+            }
+            PromotionAction::ImportCandidate(key) => {
+                let event = match candidate.take().filter(|snapshot| snapshot.key == key) {
+                    // The scene moved between observation and import.
+                    None => PromotionEvent::ImportFailed,
+                    Some(snapshot) => match kms_state::framebuffer_from_prime_dmabuf(
+                        drm.device_fd(),
+                        &snapshot.candidate.dmabuf,
+                    ) {
+                        Ok(framebuffer) => {
+                            events
+                                .direct_leases
+                                .entry(output)
+                                .or_default()
+                                .pending
+                                .replace(direct_scanout::DirectLease {
+                                    framebuffer,
+                                    dmabuf: snapshot.candidate.dmabuf,
+                                    buffer_guard: snapshot.candidate.buffer_guard,
+                                    key,
+                                });
+                            PromotionEvent::ImportSucceeded
+                        }
+                        Err(error) => {
+                            debug!(
+                                event = "rejected_reason",
+                                reason = "import_failed",
+                                ?output,
+                                %error,
+                                "Direct Scanout PRIME import rejected"
+                            );
+                            PromotionEvent::ImportFailed
+                        }
+                    },
+                };
+                let follow_up = events.direct_scanout.machine(output.0).advance(event, now);
+                apply_direct_actions(drm, scanouts, scheduler, events, output, follow_up)?;
+            }
+            PromotionAction::TestDirect(key) => {
+                let event = direct_test_only(scanouts, events, output, key);
+                let follow_up = events.direct_scanout.machine(output.0).advance(event, now);
+                apply_direct_actions(drm, scanouts, scheduler, events, output, follow_up)?;
+            }
+            PromotionAction::VerifyCandidate(key) => {
+                // The final read before the plane changes.  Anything but an
+                // identical candidate must abandon the prepared arrangement.
+                let powered_outputs = scanouts.iter().filter(|scanout| scanout.powered).count();
+                let event = scanouts
+                    .iter()
+                    .find(|scanout| scanout.output.id == output)
+                    .map_or(
+                        PromotionEvent::CandidateRejected(
+                            direct_scanout::RejectReason::OutputUnpowered,
+                        ),
+                        |scanout| match observe_direct_candidate(scanout, powered_outputs, events) {
+                            Ok(snapshot) => PromotionEvent::CandidateEligible {
+                                candidate: snapshot.key,
+                                atlas_settled: true,
+                            },
+                            Err(reason) => PromotionEvent::CandidateRejected(reason),
+                        },
+                    );
+                if let PromotionEvent::CandidateEligible {
+                    candidate: observed,
+                    ..
+                } = event
+                    && observed != key
+                {
+                    debug!(
+                        event = "rejected_reason",
+                        reason = "verify_changed",
+                        ?output,
+                        "Direct Scanout candidate changed between TEST_ONLY and commit"
+                    );
+                }
+                let follow_up = events.direct_scanout.machine(output.0).advance(event, now);
+                apply_direct_actions(drm, scanouts, scheduler, events, output, follow_up)?;
+            }
+            PromotionAction::CommitDirect(key) => {
+                let event = direct_commit(scanouts, scheduler, events, output, key)?;
+                let follow_up = events.direct_scanout.machine(output.0).advance(event, now);
+                apply_direct_actions(drm, scanouts, scheduler, events, output, follow_up)?;
+            }
+            PromotionAction::ReleasePendingLease => {
+                // Nothing uncommitted ever reached the plane, so this is the
+                // only place a lease may be dropped without a page flip.
+                if let Some(leases) = events.direct_leases.get_mut(&output)
+                    && let Some(lease) = leases.pending.take()
+                {
+                    debug!(
+                        event = "lease_released",
+                        ?output,
+                        revision = lease.key.revision,
+                        "Direct Scanout released an uncommitted client lease"
+                    );
+                    drop(lease);
+                }
+            }
+            PromotionAction::RetireDirectLeases => {
+                if let Some(leases) = events.direct_leases.get_mut(&output) {
+                    // The replacing flip has completed, so the superseded
+                    // lease may finally go (C1 §K5).
+                    let retired = leases.active.take();
+                    leases.active = leases.pending.take();
+                    drop(retired);
+                    if leases.is_empty() {
+                        events.direct_leases.remove(&output);
+                    }
+                }
+            }
+            PromotionAction::SuppressClientSampling(surface) => {
+                if let Some(frontend) = events.wayland.as_mut() {
+                    frontend.set_promoted_surface(Some(surface));
+                }
+                events.scene_sync.mark_dirty();
+            }
+            PromotionAction::RestoreClientSampling(surface) => {
+                if let Some(frontend) = events.wayland.as_mut() {
+                    frontend.set_promoted_surface(None);
+                }
+                debug!(
+                    event = "sampling_restored",
+                    ?output,
+                    surface,
+                    "Direct Scanout restored the Flutter texture consumer for fallback"
+                );
+                events.scene_sync.mark_dirty();
+            }
+            PromotionAction::RequestFallbackFrame { surface, revision } => {
+                events.scene_sync.mark_dirty();
+                info!(
+                    event = "fallback_armed",
+                    ?output,
+                    surface,
+                    revision,
+                    "Direct Scanout preparing an atlas frame with the latest client revision"
+                );
+            }
+            PromotionAction::HandBackToAtlas => {
+                // Returning the output to the atlas pipeline is synchronous:
+                // its next ready frame is the single atomic commit that
+                // replaces the client primary (C1 §K4).
+                scheduler.set_direct_output(output, false);
+                events.scene_sync.mark_dirty();
+                let follow_up = events
+                    .direct_scanout
+                    .machine(output.0)
+                    .advance(PromotionEvent::OutputHandedBack, now);
+                apply_direct_actions(drm, scanouts, scheduler, events, output, follow_up)?;
+            }
+            PromotionAction::SendPresentationFeedback { surface, revision } => {
+                debug!(
+                    event = "presentation_feedback",
+                    ?output,
+                    surface,
+                    revision,
+                    "Direct Scanout page flip presented this client revision"
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Run `TEST_ONLY` for the exact arrangement that will be committed.
+#[cfg(feature = "flutter")]
+fn direct_test_only(
+    scanouts: &[Scanout],
+    events: &RuntimeState,
+    output: OutputId,
+    key: direct_scanout::CandidateKey,
+) -> direct_scanout::PromotionEvent {
+    use direct_scanout::PromotionEvent;
+
+    let Some(scanout) = scanouts.iter().find(|scanout| scanout.output.id == output) else {
+        return PromotionEvent::TestOnlyFailed;
+    };
+    let Some(lease) = events
+        .direct_leases
+        .get(&output)
+        .and_then(|leases| leases.pending.as_ref())
+        .filter(|lease| lease.key == key)
+    else {
+        return PromotionEvent::TestOnlyFailed;
+    };
+    // The fence step already proved this buffer readable. Re-probing here
+    // would only hide a regression in that gate, so the probe has one owner.
+    debug_assert!(kms_state::dmabuf_acquire_fence_signalled(&lease.dmabuf));
+    let state = direct_plane_state(scanout, lease.framebuffer.handle());
+    match scanout.surface.test_state([state], false) {
+        Ok(()) => PromotionEvent::TestOnlyPassed,
+        Err(error) => {
+            debug!(
+                event = "rejected_reason",
+                reason = "test_only_failed",
+                ?output,
+                %error,
+                "Direct Scanout TEST_ONLY rejected"
+            );
+            PromotionEvent::TestOnlyFailed
+        }
+    }
+}
+
+/// Issue the real atomic commit for a prepared client primary.
+#[cfg(feature = "flutter")]
+fn direct_commit(
+    scanouts: &[Scanout],
+    scheduler: &mut output_scheduler::OutputScheduler,
+    events: &mut RuntimeState,
+    output: OutputId,
+    key: direct_scanout::CandidateKey,
+) -> Result<direct_scanout::PromotionEvent, Box<dyn Error>> {
+    use direct_scanout::PromotionEvent;
+
+    let Some(scanout) = scanouts.iter().find(|scanout| scanout.output.id == output) else {
+        return Ok(PromotionEvent::CommitInvalid);
+    };
+    // An atlas commit already owns this CRTC.  A second request would be
+    // rejected as busy and could reorder the two flips (C1 §K4).
+    if events.pending.contains(&scanout.output.crtc)
+        || !scheduler.can_switch_to_direct(output, scanouts)
+    {
+        return Ok(PromotionEvent::CommitBusy);
+    }
+    let Some(lease) = events
+        .direct_leases
+        .get(&output)
+        .and_then(|leases| leases.pending.as_ref())
+        .filter(|lease| lease.key == key)
+    else {
+        return Ok(PromotionEvent::CommitInvalid);
+    };
+    let state = direct_plane_state(scanout, lease.framebuffer.handle());
+    match scanout.surface.page_flip([state], true) {
+        Ok(()) => {
+            events.pending.insert(scanout.output.crtc);
+            scheduler.set_direct_output(output, true);
+            if let Some(frontend) = events.wayland.as_mut() {
+                frontend.outputs_submitted(&[(output, scanout.output.vrr_enabled)])?;
+            }
+            info!(
+                event = "test_only_passed",
+                ?output,
+                surface = key.surface,
+                revision = key.revision,
+                "Direct Scanout client primary committed"
+            );
+            Ok(PromotionEvent::CommitAccepted)
+        }
+        Err(error) => {
+            debug!(
+                event = "fallback",
+                reason = "real_commit_failed",
+                ?output,
+                %error,
+                "Direct Scanout page flip rejected"
+            );
+            Ok(PromotionEvent::CommitInvalid)
+        }
+    }
+}
+
+/// Feed a page-flip completion to the output that owns a direct commit.
+///
+/// Only an output whose machine is waiting for a flip this module issued may
+/// consume a completion here.  Every other completion belongs to the atlas
+/// pipeline and stays in the queue for the scheduler, including the fallback
+/// commit, which the pipeline itself submits.
 #[cfg(feature = "flutter")]
 fn handle_direct_page_flip(
-    _scheduler: &mut output_scheduler::OutputScheduler,
+    drm: &DrmDevice,
+    scheduler: &mut output_scheduler::OutputScheduler,
     scanouts: &[Scanout],
     events: &mut RuntimeState,
 ) -> Result<(), Box<dyn Error>> {
-    if let Some(replacement) = events.direct_replacement.take() {
-        let output = OutputId(replacement.output);
+    let now = Instant::now();
+    let awaiting = events
+        .direct_scanout
+        .outputs_awaiting_direct_flip()
+        .collect::<Vec<_>>();
+    for output in awaiting {
+        let output = OutputId(output);
         let Some(scanout) = scanouts.iter().find(|scanout| scanout.output.id == output) else {
-            events.direct_replacement = Some(replacement);
-            return Ok(());
+            continue;
         };
         let Some(position) = events
             .completed_page_flips
             .iter()
             .position(|completion| completion.crtc == scanout.output.crtc)
         else {
-            events.direct_replacement = Some(replacement);
-            return Ok(());
+            continue;
         };
         let completion = events
             .completed_page_flips
             .remove(position)
-            .expect("located Direct Scanout replacement completion");
+            .expect("located Direct Scanout page-flip completion");
         events.pending.remove(&completion.crtc);
-        if let Some(old) = events
-            .direct_promotion
-            .replace(direct_scanout::DirectPromotion {
-                confirmed: true,
-                ..replacement
-            })
-        {
-            drop(old);
-        }
+        let actions = events
+            .direct_scanout
+            .machine(output.0)
+            .advance(direct_scanout::PromotionEvent::PageFlipCompleted, now);
         if let Some(frontend) = events.wayland.as_mut() {
-            frontend.set_promoted_surface(Some(
-                events
-                    .direct_promotion
-                    .as_ref()
-                    .expect("replacement installed")
-                    .surface,
-            ));
             frontend.outputs_presented(&[PresentedOutput {
                 id: output,
                 observed_at: completion.observed_at,
@@ -4737,62 +5188,101 @@ fn handle_direct_page_flip(
                 sequence: completion.sequence,
             }])?;
         }
-        info!(event = "promoted", output = ?output, revision = events.direct_promotion.as_ref().expect("replacement installed").revision, "Direct Scanout replacement reached page flip");
+        apply_direct_actions(drm, scanouts, scheduler, events, output, actions)?;
+        info!(
+            event = "promoted",
+            ?output,
+            state = events.direct_scanout.state(output.0).code(),
+            "Direct Scanout page flip completed"
+        );
+        events.scene_sync.mark_dirty();
+    }
+    Ok(())
+}
+
+/// Complete a fallback once the atlas pipeline has presented the frame that
+/// replaced the client primary.  The client leases are retired only here, so
+/// the buffer stays owned until its replacement is demonstrably on screen
+/// (C1 §K5).
+#[cfg(feature = "flutter")]
+fn handle_direct_fallback_presentation(
+    drm: &DrmDevice,
+    scheduler: &mut output_scheduler::OutputScheduler,
+    scanouts: &[Scanout],
+    presented: &[OutputId],
+    events: &mut RuntimeState,
+) -> Result<(), Box<dyn Error>> {
+    if presented.is_empty() {
         return Ok(());
     }
-    let Some(active) = events.direct_promotion.as_mut() else {
-        return Ok(());
-    };
-    if active.confirmed && !active.fallback_pending {
-        return Ok(());
-    }
-    let output = OutputId(active.output);
-    let Some(scanout) = scanouts.iter().find(|scanout| scanout.output.id == output) else {
-        return Ok(());
-    };
-    let Some(position) = events
-        .completed_page_flips
-        .iter()
-        .position(|completion| completion.crtc == scanout.output.crtc)
-    else {
-        return Ok(());
-    };
-    let completion = events
-        .completed_page_flips
-        .remove(position)
-        .expect("located Direct Scanout completion");
-    events.pending.remove(&completion.crtc);
-    let fallback = active.fallback_pending;
-    let surface = active.surface;
-    let revision = active.revision;
-    let certificate_epoch = active.certificate_epoch;
-    let framebuffer = active.framebuffer.handle();
-    if let Some(frontend) = events.wayland.as_mut() {
-        frontend.set_promoted_surface((!fallback).then_some(surface));
-        frontend.outputs_presented(&[PresentedOutput {
-            id: output,
-            observed_at: completion.observed_at,
-            presented_at: completion.presented_at,
-            sequence: completion.sequence,
-        }])?;
-    }
-    if fallback {
-        _scheduler.set_direct_output(output, false);
-        events.direct_promotion = None;
-        events.direct_scanout.compose();
+    let now = Instant::now();
+    let awaiting = events
+        .direct_scanout
+        .outputs_awaiting_fallback_flip()
+        .filter(|output| presented.iter().any(|presented| presented.0 == *output))
+        .collect::<Vec<_>>();
+    for output in awaiting {
+        let output = OutputId(output);
+        let actions = events
+            .direct_scanout
+            .machine(output.0)
+            .advance(direct_scanout::PromotionEvent::PageFlipCompleted, now);
+        apply_direct_actions(drm, scanouts, scheduler, events, output, actions)?;
         info!(
             event = "fallback",
             ?output,
             "Direct Scanout returned to atlas composition at page flip"
         );
-    } else {
-        active.confirmed = true;
-        events
-            .direct_scanout
-            .real_commit_result(true, certificate_epoch, revision);
-        info!(event = "promoted", ?output, surface, revision, framebuffer = ?framebuffer, "Direct Scanout primary promotion reached page flip");
+        events.scene_sync.mark_dirty();
+    }
+    Ok(())
+}
+
+/// Tear Direct Scanout down before the display pipeline itself is rebuilt.
+///
+/// A Flutter engine replacement and a scanout rebase both re-commit the atlas
+/// to every CRTC synchronously and clear the pending flip queue, so no client
+/// buffer is left scanning out and no page flip will ever arrive to retire a
+/// lease.  The trigger is still delivered to every machine first, so each one
+/// runs its documented transitions and restores client sampling; only then are
+/// the orphaned leases dropped and the machines cleared.  Each output is
+/// handled independently (C1 §K6).
+#[cfg(feature = "flutter")]
+fn reset_direct_scanout(
+    drm: &DrmDevice,
+    scheduler: &mut output_scheduler::OutputScheduler,
+    scanouts: &[Scanout],
+    events: &mut RuntimeState,
+    cause: direct_scanout::InvalidationCause,
+) -> Result<(), Box<dyn Error>> {
+    let holding = events
+        .direct_scanout
+        .outputs_holding_client_scanout()
+        .count();
+    if holding == 0 && events.direct_leases.is_empty() {
+        events.direct_arm_watch.clear();
+        return Ok(());
+    }
+    let now = Instant::now();
+    for (output, actions) in events.direct_scanout.invalidate_all(cause, now) {
+        apply_direct_actions(drm, scanouts, scheduler, events, OutputId(output), actions)?;
+    }
+    for output in events.direct_leases.keys().copied().collect::<Vec<_>>() {
+        scheduler.set_direct_output(output, false);
+        events.direct_scanout.forget_output(output.0);
+    }
+    events.direct_leases.clear();
+    events.direct_arm_watch.clear();
+    if let Some(frontend) = events.wayland.as_mut() {
+        frontend.set_promoted_surface(None);
     }
     events.scene_sync.mark_dirty();
+    warn!(
+        event = "invalidated",
+        cause = cause.code(),
+        outputs = holding,
+        "Direct Scanout torn down because the display pipeline is being rebuilt"
+    );
     Ok(())
 }
 

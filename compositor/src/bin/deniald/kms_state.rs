@@ -681,6 +681,78 @@ fn close_prime_handles(drm: &DrmDeviceFd, handles: &mut Vec<BufferHandle>) {
     }
 }
 
+/// Non-blocking probe for the acquire fence of a client buffer.
+///
+/// Implicit synchronization publishes the producer's exclusive write fence
+/// through the DMA-BUF's own file descriptors, and the explicit
+/// `wp_linux_drm_syncobj_v1` path already delays the surface transaction until
+/// its acquire point signals. Direct Scanout must still confirm readiness
+/// itself: a buffer whose fence has not signalled may not reach a plane
+/// (C1 §C3). A zero timeout keeps this a single non-blocking syscall on the
+/// render path.
+pub(super) fn dmabuf_acquire_fence_signalled(dmabuf: &Dmabuf) -> bool {
+    let mut polls = [libc::pollfd {
+        fd: -1,
+        events: libc::POLLIN,
+        revents: 0,
+    }; 4];
+    let mut count = 0;
+    for fd in dmabuf.handles() {
+        let Some(slot) = polls.get_mut(count) else {
+            // More planes than a KMS framebuffer can describe; the import
+            // itself rejects this buffer.
+            return false;
+        };
+        slot.fd = fd.as_raw_fd();
+        count += 1;
+    }
+    if count == 0 {
+        return false;
+    }
+    // SAFETY: `polls[..count]` is initialized writable storage owned by this
+    // frame, and every descriptor is borrowed from `dmabuf` for the call.
+    let ready = unsafe {
+        libc::poll(
+            polls.as_mut_ptr(),
+            count.try_into().unwrap_or(0),
+            /* timeout_ms */ 0,
+        )
+    };
+    if ready < 0 {
+        return false;
+    }
+    polls
+        .iter()
+        .take(count)
+        .all(|poll| poll.revents & libc::POLLIN != 0)
+}
+
+/// Format, modifier and pixel size of a client buffer folded into one value.
+///
+/// A change in any of them is a different KMS arrangement whose `TEST_ONLY`
+/// result may not be reused (C1 §K3), so the promotion state machine keys its
+/// arrangement identity and failure backoff on this fingerprint rather than on
+/// the buffer revision.
+pub(super) fn dmabuf_arrangement_fingerprint(dmabuf: &Dmabuf) -> u64 {
+    const FNV_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
+    const FNV_PRIME: u64 = 0x0000_0100_0000_01b3;
+    let format = AllocatorBuffer::format(dmabuf);
+    let mut hash = FNV_OFFSET;
+    for value in [
+        u64::from(format.code as u32),
+        u64::from(format.modifier),
+        u64::from(dmabuf.width()),
+        u64::from(dmabuf.height()),
+        dmabuf.num_planes() as u64,
+    ] {
+        for byte in value.to_le_bytes() {
+            hash ^= u64::from(byte);
+            hash = hash.wrapping_mul(FNV_PRIME);
+        }
+    }
+    hash
+}
+
 pub(super) struct AtlasSwapchain {
     pub(super) size: PixelSize,
     pub(super) buffers: Vec<AtlasBuffer>,

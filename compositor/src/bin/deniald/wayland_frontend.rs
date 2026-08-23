@@ -3796,6 +3796,30 @@ impl WaylandFrontend {
     }
 
     #[cfg(feature = "flutter")]
+    pub(super) const fn promoted_surface(&self) -> Option<u64> {
+        self.promoted_surface_id
+    }
+
+    /// Whether a cursor is currently drawn by the shell.
+    ///
+    /// A visible software cursor means the shell still owns pixels on this
+    /// output, which the minimal promotion scope excludes (C1 §K8).
+    #[cfg(feature = "flutter")]
+    pub(super) fn shell_cursor_visible(&self) -> bool {
+        !matches!(self.cursor_status, CursorImageStatus::Hidden)
+    }
+
+    /// Whether a surface still exists.
+    ///
+    /// Direct Scanout's fallback waits for Flutter to sample the client's last
+    /// revision. A destroyed client can never produce that sample, so the
+    /// state machine needs to distinguish "not yet" from "never".
+    #[cfg(feature = "flutter")]
+    pub(super) fn surface_exists(&self, surface_id: u64) -> bool {
+        self.surfaces_by_id.contains_key(&surface_id)
+    }
+
+    #[cfg(feature = "flutter")]
     pub(super) fn primary_scanout_candidate(
         &self,
         output_id: OutputId,
