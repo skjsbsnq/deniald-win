@@ -16,6 +16,7 @@ use smithay::reexports::drm::control::framebuffer;
 use smithay::utils::{Buffer, Physical, Rectangle};
 use tracing::info;
 
+use super::direct_scanout::PromotionState;
 use super::flutter_runtime::{FlutterRuntime, ReadyFrame};
 use super::frame_scheduler::FrameTick;
 use super::kms_state::{AtlasSwapchain, Scanout};
@@ -28,6 +29,10 @@ const VOLITION_SUBMIT_LEAD: Duration = Duration::from_micros(400);
 /// KMS/GPU generation indefinitely.
 const PRESENTATION_STALL_TIMEOUT: Duration = Duration::from_secs(2);
 static NEXT_READY_FENCE_TOKEN: AtomicU64 = AtomicU64::new(1);
+
+const fn screencopy_can_read_atlas(state: PromotionState) -> bool {
+    matches!(state, PromotionState::Composed)
+}
 
 fn next_ready_fence_token() -> u64 {
     loop {
@@ -1208,6 +1213,13 @@ impl OutputScheduler {
         scanouts: &[Scanout],
         events: &mut RuntimeState,
     ) -> Result<(), Box<dyn Error>> {
+        if !screencopy_can_read_atlas(events.direct_scanout.state(tick.output.0)) {
+            // The scheduler's retained atlas slot is not the current screen
+            // while a client primary is scanning or queued for the plane.
+            // Keep the request pending until the prepared composition page
+            // flip has replaced the client and retired its lease (C1 §C1).
+            return Ok(());
+        }
         let Some(buffer_index) = self.framebuffer_index_for_output(tick.output, scanouts) else {
             return Ok(());
         };
@@ -1531,8 +1543,34 @@ mod tests {
 
     use super::{
         OutputSchedulerAudit, PRESENTATION_STALL_TIMEOUT, ReadyFenceSlot, presentation_stall_age,
-        presentation_watchdog_remaining,
+        presentation_watchdog_remaining, screencopy_can_read_atlas,
     };
+    use crate::direct_scanout::{CandidateKey, FallbackStep, InvalidationCause, PromotionState};
+
+    const fn direct_key() -> CandidateKey {
+        CandidateKey {
+            output: 1,
+            surface: 2,
+            revision: 3,
+            certificate_epoch: 4,
+            output_epoch: 5,
+            buffer_epoch: 6,
+        }
+    }
+
+    #[test]
+    fn screencopy_waits_until_client_primary_is_replaced() {
+        assert!(screencopy_can_read_atlas(PromotionState::Composed));
+        assert!(!screencopy_can_read_atlas(PromotionState::Promoted {
+            active: direct_key(),
+            replacement: None,
+        }));
+        assert!(!screencopy_can_read_atlas(PromotionState::FallbackArmed {
+            active: direct_key(),
+            cause: InvalidationCause::CaptureRequested,
+            step: FallbackStep::Flipping,
+        }));
+    }
 
     #[test]
     fn ready_fence_slot_closes_only_after_its_last_pipeline_user() {
