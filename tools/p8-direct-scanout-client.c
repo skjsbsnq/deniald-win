@@ -3,6 +3,7 @@
 #include <EGL/egl.h>
 #include <GLES2/gl2.h>
 #include <errno.h>
+#include <poll.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -312,6 +313,32 @@ static void draw_frame(struct client *client) {
     ++client->frame;
 }
 
+static bool dispatch_events(struct client *client) {
+    if (wl_display_dispatch_pending(client->display) < 0) {
+        return false;
+    }
+    if (wl_display_flush(client->display) < 0 && errno != EAGAIN) {
+        return false;
+    }
+
+    struct pollfd display_fd = {
+        .fd = wl_display_get_fd(client->display),
+        .events = POLLIN,
+    };
+    const int ready = poll(&display_fd, 1, 0);
+    if (ready < 0) {
+        return errno == EINTR;
+    }
+    if ((display_fd.revents & (POLLERR | POLLHUP | POLLNVAL)) != 0) {
+        return false;
+    }
+    if ((display_fd.revents & POLLIN) != 0 &&
+        wl_display_dispatch(client->display) < 0) {
+        return false;
+    }
+    return true;
+}
+
 static uint32_t parse_dimension(const char *value, const char *name) {
     char *end = NULL;
     errno = 0;
@@ -386,13 +413,12 @@ int main(int argc, char **argv) {
             client.width, client.height);
 
     while (client.running) {
-        if (wl_display_dispatch_pending(client.display) < 0) {
+        if (!dispatch_events(&client)) {
             break;
         }
         draw_frame(&client);
         struct timespec delay = {.tv_sec = 0, .tv_nsec = 16 * 1000 * 1000};
         nanosleep(&delay, NULL);
-        wl_display_flush(client.display);
     }
     return EXIT_SUCCESS;
 }
