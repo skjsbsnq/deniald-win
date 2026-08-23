@@ -3829,7 +3829,8 @@ impl WaylandFrontend {
             || certificate.sole_root_surface_id == 0
             || certificate.requires_client_sampling
             || !certificate.known_opaque
-            || !certificate.shell_fully_transparent
+            || (!certificate.shell_fully_transparent
+                && !(certificate.overlay_compatible && certificate.overlay_rendering))
             || certificate.has_popup
             || certificate.has_subsurface
             || certificate.has_drag_icon

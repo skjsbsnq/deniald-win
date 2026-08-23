@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../l10n/generated/app_localizations.dart';
 import '../localization/denial_localizations.dart';
 import '../input/shell_interaction_registry.dart';
+import '../input/shell_visual_registry.dart';
 import '../models/desktop_notification.dart';
 import '../settings/settings_controller.dart';
 import '../services/notification_policy_repository.dart';
@@ -61,15 +62,24 @@ class NotificationBannerLayer extends ConsumerWidget {
               rect: rect,
               child: Align(
                 alignment: placement.anchor.alignment,
-                child: SizedBox(
-                  width: rect.width,
-                  child: NotificationBannerView(
-                    notifications: notifications,
-                    previewMode: previewMode,
-                    interactive: !locked,
-                    onDismiss: controller.dismiss,
-                    onDefaultAction: controller.invokeDefaultAction,
-                    onAction: controller.invokeAction,
+                child: ShellVisualRegion(
+                  debugLabel: 'Notification banners',
+                  active: notifications.isNotEmpty,
+                  revision: Object.hashAll(
+                    notifications.map((notification) => notification.id),
+                  ),
+                  requiresClientSampling:
+                      ShellTheme.of(context).panelOpacity < 1.0,
+                  child: SizedBox(
+                    width: rect.width,
+                    child: NotificationBannerView(
+                      notifications: notifications,
+                      previewMode: previewMode,
+                      interactive: !locked,
+                      onDismiss: controller.dismiss,
+                      onDefaultAction: controller.invokeDefaultAction,
+                      onAction: controller.invokeAction,
+                    ),
                   ),
                 ),
               ),

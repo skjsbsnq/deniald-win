@@ -8,6 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../input/shell_interaction_registry.dart';
+import '../input/shell_visual_registry.dart';
 import '../localization/denial_localizations.dart';
 import '../models/clipboard_history.dart';
 import '../settings/settings_controller.dart';
@@ -268,21 +269,31 @@ class _ClipboardTrayLayerState extends ConsumerState<ClipboardTrayLayer>
                       child: ShellInputRegion(
                         debugLabel: 'Clipboard history tray',
                         active: tray.painted,
-                        child: trayVisible
-                            ? _ClipboardTraySurface(
-                                edge: edge,
-                                onClose: _closeTray,
-                                onDragStart: _beginTrayDrag,
-                                onDragUpdate: (details) =>
-                                    _updateTrayDrag(details, edge, extent),
-                                onDragEnd: (details) =>
-                                    _endTrayDrag(details, edge, extent),
-                                draggedEntryId: entryDrag?.entry.id,
-                                onEntryDragStart: _beginEntryDrag,
-                                onEntryDragUpdate: _updateEntryDragPosition,
-                                onEntryDragEnd: _endEntryDrag,
-                              )
-                            : const SizedBox.expand(),
+                        child: ShellVisualRegion(
+                          debugLabel: 'Clipboard history tray',
+                          active: tray.painted,
+                          revision: Object.hash(
+                            tray.progress,
+                            entryDrag?.entry.id,
+                          ),
+                          requiresClientSampling:
+                              ShellTheme.of(context).panelOpacity < 1.0,
+                          child: trayVisible
+                              ? _ClipboardTraySurface(
+                                  edge: edge,
+                                  onClose: _closeTray,
+                                  onDragStart: _beginTrayDrag,
+                                  onDragUpdate: (details) =>
+                                      _updateTrayDrag(details, edge, extent),
+                                  onDragEnd: (details) =>
+                                      _endTrayDrag(details, edge, extent),
+                                  draggedEntryId: entryDrag?.entry.id,
+                                  onEntryDragStart: _beginEntryDrag,
+                                  onEntryDragUpdate: _updateEntryDragPosition,
+                                  onEntryDragEnd: _endEntryDrag,
+                                )
+                              : const SizedBox.expand(),
+                        ),
                       ),
                     ),
                   ),

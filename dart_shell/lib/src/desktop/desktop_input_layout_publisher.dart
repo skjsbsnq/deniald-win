@@ -5,9 +5,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../input/input_layout.dart';
 import '../input/shell_interaction_registry.dart';
+import '../input/shell_visual_registry.dart';
 import '../models/denial_window.dart';
 import '../state/desktop_window_switcher.dart';
 import '../state/shell_controller.dart';
+import '../state/shell_render_mode.dart';
 import 'desktop_taskbar_preview.dart';
 import 'desktop_visibility.dart';
 import 'desktop_workspace.dart';
@@ -32,7 +34,11 @@ class _DesktopInputLayoutPublisherState
   bool _scheduled = false;
   int _epoch = 0;
   int _certificateEpoch = 0;
+  int _shellRevision = 0;
   String? _lastCertificateKey;
+  String? _lastClientCertificateKey;
+  Rect _lastShellVisibleBounds = Rect.zero;
+  int _lastShellVisualRevision = 0;
   InputLayoutSnapshot? _lastSnapshot;
 
   @override
@@ -45,6 +51,8 @@ class _DesktopInputLayoutPublisherState
     ref.watch(desktopWorkspaceProvider);
     ref.watch(desktopWindowSwitcherProvider);
     ref.watch(shellInteractionRegistryProvider);
+    ref.watch(shellVisualRegistryProvider);
+    ref.watch(shellRenderModeProvider);
     ref.watch(
       desktopTaskbarPreviewProvider.select((target) => target?.objectId),
     );
@@ -302,11 +310,10 @@ class _DesktopInputLayoutPublisherState
       keyboardCapture: interactions.capturesKeyboard,
       exclusiveShellMode: interactions.compositorExclusive,
     );
-    if (_lastSnapshot?.hasSameRoutingAs(snapshot) ?? false) {
-      return;
-    }
-
-    if (!ref.read(denialBridgeProvider).publishInputLayout(snapshot)) {
+    final routingChanged =
+        !(_lastSnapshot?.hasSameRoutingAs(snapshot) ?? false);
+    if (routingChanged &&
+        !ref.read(denialBridgeProvider).publishInputLayout(snapshot)) {
       return;
     }
     _publishCompositionCertificate(
@@ -318,8 +325,10 @@ class _DesktopInputLayoutPublisherState
       outputLayout: ref.read(displayLayoutProvider),
       previewActive: previewTarget != null || desktop.overviewActive,
     );
-    _epoch = snapshot.epoch;
-    _lastSnapshot = snapshot;
+    if (routingChanged) {
+      _epoch = snapshot.epoch;
+      _lastSnapshot = snapshot;
+    }
   }
 
   void _publishCompositionCertificate({
@@ -332,6 +341,7 @@ class _DesktopInputLayoutPublisherState
     required bool previewActive,
   }) {
     final bridge = ref.read(denialBridgeProvider);
+    final visuals = ref.read(shellVisualRegistryProvider);
     final output = outputLayout?.outputs.length == 1
         ? outputLayout!.outputs.single
         : null;
@@ -353,7 +363,8 @@ class _DesktopInputLayoutPublisherState
         }
       }
     }
-    final eligibleShape = output != null &&
+    final eligibleShape =
+        output != null &&
         candidate != null &&
         window != null &&
         candidate.fullscreen &&
@@ -368,49 +379,93 @@ class _DesktopInputLayoutPublisherState
         _coversOutput(candidate.contentRect, output.logicalRect) &&
         window.contentCoordinateRect.width > 0.0 &&
         window.contentCoordinateRect.height > 0.0;
-    final certificateKey = <Object?>[
+    final canvas = Offset.zero & viewSize;
+    final visibleRects = visuals.orderedSurfaces
+        .map((surface) => surface.bounds.intersect(canvas))
+        .where((rect) => !rect.isEmpty)
+        .toList(growable: false);
+    final shellVisibleBounds = _unionRects(visibleRects);
+    final visualRevision = visuals.revision;
+    final shellDamage = visualRevision == _lastShellVisualRevision
+        ? Rect.zero
+        : _unionRects(<Rect>[_lastShellVisibleBounds, shellVisibleBounds]);
+    final overlayCompatible = eligibleShape && !visuals.requiresClientSampling;
+    final overlayRendering =
+        output != null &&
+        ref.read(shellRenderModeProvider).overlayEnabledFor(output.monitorId);
+    final clientCertificateKey = <Object?>[
       layoutEpoch,
       output?.monitorId ?? 0,
       outputLayout?.epoch ?? layoutEpoch,
-      eligibleShape ? window!.objectId : 0,
+      eligibleShape ? window.objectId : 0,
       eligibleShape,
       previewActive,
       interactions.capturesFullScene,
       candidate?.dragging ?? false,
+      overlayCompatible,
+    ].join(':');
+    if (_lastClientCertificateKey != clientCertificateKey) {
+      _lastClientCertificateKey = clientCertificateKey;
+      _certificateEpoch += 1;
+    }
+    final certificateKey = <Object?>[
+      clientCertificateKey,
+      visualRevision,
+      shellVisibleBounds,
+      overlayRendering,
     ].join(':');
     if (_lastCertificateKey == certificateKey) {
       return;
     }
     _lastCertificateKey = certificateKey;
-    _certificateEpoch += 1;
+    _shellRevision += 1;
     final certificate = wire.DenialCompositionCertificate(
       certificateEpoch: _certificateEpoch,
       layoutEpoch: layoutEpoch,
       outputId: output?.monitorId ?? 0,
       outputConfigurationEpoch: outputLayout?.epoch ?? layoutEpoch,
-      soleRootSurfaceId: eligibleShape ? window!.objectId : 0,
+      soleRootSurfaceId: eligibleShape ? window.objectId : 0,
       surfaceTreeRevision: eligibleShape ? 1 : 0,
       bufferRevision: eligibleShape ? 1 : 0,
-      sourceRect: eligibleShape ? window!.contentCoordinateRect : Rect.zero,
-      destinationRect: eligibleShape ? candidate!.contentRect : Rect.zero,
+      sourceRect: eligibleShape ? window.contentCoordinateRect : Rect.zero,
+      destinationRect: eligibleShape ? candidate.contentRect : Rect.zero,
       outputPixelSize: output?.pixelSize ?? viewSize,
       scale: output?.scale ?? 1.0,
       transform: output == null ? 0 : 0,
       knownOpaque: eligibleShape,
-      shellFullyTransparent: eligibleShape,
-      requiresClientSampling: !eligibleShape,
+      shellFullyTransparent: eligibleShape && shellVisibleBounds.isEmpty,
+      requiresClientSampling: !eligibleShape || visuals.requiresClientSampling,
       hasPopup: window?.popupRoots.isNotEmpty ?? false,
       hasSubsurface: (window?.surfaceLayers.length ?? 0) > 1,
       hasDragIcon: candidate?.dragging ?? false,
       hasIme: false,
       hasPreview: previewActive,
       hasCapture: interactions.capturesFullScene,
-      hasEffect: !eligibleShape,
+      hasEffect: visuals.requiresClientSampling,
       colorClass: wire.CompositionColorClass.Unknown,
       reasonFlags: eligibleShape ? 0 : 1,
       engineGeneration: 1,
+      shellDamage: shellDamage,
+      shellVisibleBounds: shellVisibleBounds,
+      shellRevision: _shellRevision,
+      overlayCompatible: overlayCompatible,
+      overlayRendering: overlayRendering,
     );
-    bridge.publishCompositionCertificate(certificate);
+    if (bridge.publishCompositionCertificate(certificate)) {
+      _lastShellVisibleBounds = shellVisibleBounds;
+      _lastShellVisualRevision = visualRevision;
+    }
+  }
+
+  Rect _unionRects(Iterable<Rect> rects) {
+    Rect result = Rect.zero;
+    for (final rect in rects) {
+      if (rect.isEmpty) {
+        continue;
+      }
+      result = result.isEmpty ? rect : result.expandToInclude(rect);
+    }
+    return result;
   }
 
   bool _coversOutput(Rect candidate, Rect output) {

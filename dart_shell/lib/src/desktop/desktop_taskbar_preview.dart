@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../input/shell_interaction_registry.dart';
+import '../input/shell_visual_registry.dart';
 import '../local_apps/local_flutter_application.dart';
 import '../localization/denial_localizations.dart';
 import '../models/denial_window.dart';
@@ -260,20 +261,25 @@ class DesktopTaskbarPreviewPositionedCard extends ConsumerWidget {
       width: _cardWidth,
       height: totalCardHeight,
       child: RepaintBoundary(
-        child: ShellInputRegion(
+        child: ShellVisualRegion(
           debugLabel: 'Taskbar preview (${window.title})',
-          child: MouseRegion(
-            onEnter: (_) {
-              ref.read(desktopTaskbarPreviewProvider.notifier).cancelHide();
-            },
-            onExit: (_) {
-              ref.read(desktopTaskbarPreviewProvider.notifier).scheduleHide();
-            },
-            child: _DesktopTaskbarPreviewCardContent(
-              target: target,
-              window: window,
-              thumbnailWidth: thumbnailWidth,
-              thumbnailHeight: thumbnailHeight,
+          revision: Object.hash(target.objectId, target.monitorId),
+          requiresClientSampling: true,
+          child: ShellInputRegion(
+            debugLabel: 'Taskbar preview (${window.title})',
+            child: MouseRegion(
+              onEnter: (_) {
+                ref.read(desktopTaskbarPreviewProvider.notifier).cancelHide();
+              },
+              onExit: (_) {
+                ref.read(desktopTaskbarPreviewProvider.notifier).scheduleHide();
+              },
+              child: _DesktopTaskbarPreviewCardContent(
+                target: target,
+                window: window,
+                thumbnailWidth: thumbnailWidth,
+                thumbnailHeight: thumbnailHeight,
+              ),
             ),
           ),
         ),

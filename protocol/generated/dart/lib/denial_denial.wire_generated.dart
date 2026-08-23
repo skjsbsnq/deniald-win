@@ -904,7 +904,8 @@ enum PayloadTypeId {
   SettingsRequest(13),
   SettingsResponse(14),
   TextInputState(15),
-  CompositionCertificate(16);
+  CompositionCertificate(16),
+  ShellRenderMode(17);
 
   final int value;
   const PayloadTypeId(this.value);
@@ -928,6 +929,7 @@ enum PayloadTypeId {
       case 14: return PayloadTypeId.SettingsResponse;
       case 15: return PayloadTypeId.TextInputState;
       case 16: return PayloadTypeId.CompositionCertificate;
+      case 17: return PayloadTypeId.ShellRenderMode;
       default: throw StateError('Invalid value $value for bit flag enum');
     }
   }
@@ -936,7 +938,7 @@ enum PayloadTypeId {
       value == null ? null : PayloadTypeId.fromValue(value);
 
   static const int minValue = 0;
-  static const int maxValue = 16;
+  static const int maxValue = 17;
   static const fb.Reader<PayloadTypeId> reader = _PayloadTypeIdReader();
 }
 
@@ -1205,10 +1207,15 @@ class CompositionCertificate {
   CompositionColorClass get colorClass => CompositionColorClass.fromValue(const fb.Uint8Reader().vTableGet(_bc, _bcOffset, 50, 0));
   int get reasonFlags => const fb.Uint32Reader().vTableGet(_bc, _bcOffset, 52, 0);
   int get engineGeneration => const fb.Uint64Reader().vTableGet(_bc, _bcOffset, 54, 0);
+  WireRect? get shellDamage => WireRect.reader.vTableGetNullable(_bc, _bcOffset, 56);
+  WireRect? get shellVisibleBounds => WireRect.reader.vTableGetNullable(_bc, _bcOffset, 58);
+  int get shellRevision => const fb.Uint64Reader().vTableGet(_bc, _bcOffset, 60, 0);
+  bool get overlayCompatible => const fb.BoolReader().vTableGet(_bc, _bcOffset, 62, false);
+  bool get overlayRendering => const fb.BoolReader().vTableGet(_bc, _bcOffset, 64, false);
 
   @override
   String toString() {
-    return 'CompositionCertificate{protocolVersion: ${protocolVersion}, certificateEpoch: ${certificateEpoch}, layoutEpoch: ${layoutEpoch}, outputId: ${outputId}, outputConfigurationEpoch: ${outputConfigurationEpoch}, soleRootSurfaceId: ${soleRootSurfaceId}, surfaceTreeRevision: ${surfaceTreeRevision}, bufferRevision: ${bufferRevision}, sourceRect: ${sourceRect}, destinationRect: ${destinationRect}, outputPixelSize: ${outputPixelSize}, scale: ${scale}, transform: ${transform}, knownOpaque: ${knownOpaque}, shellFullyTransparent: ${shellFullyTransparent}, requiresClientSampling: ${requiresClientSampling}, hasPopup: ${hasPopup}, hasSubsurface: ${hasSubsurface}, hasDragIcon: ${hasDragIcon}, hasIme: ${hasIme}, hasPreview: ${hasPreview}, hasCapture: ${hasCapture}, hasEffect: ${hasEffect}, colorClass: ${colorClass}, reasonFlags: ${reasonFlags}, engineGeneration: ${engineGeneration}}';
+    return 'CompositionCertificate{protocolVersion: ${protocolVersion}, certificateEpoch: ${certificateEpoch}, layoutEpoch: ${layoutEpoch}, outputId: ${outputId}, outputConfigurationEpoch: ${outputConfigurationEpoch}, soleRootSurfaceId: ${soleRootSurfaceId}, surfaceTreeRevision: ${surfaceTreeRevision}, bufferRevision: ${bufferRevision}, sourceRect: ${sourceRect}, destinationRect: ${destinationRect}, outputPixelSize: ${outputPixelSize}, scale: ${scale}, transform: ${transform}, knownOpaque: ${knownOpaque}, shellFullyTransparent: ${shellFullyTransparent}, requiresClientSampling: ${requiresClientSampling}, hasPopup: ${hasPopup}, hasSubsurface: ${hasSubsurface}, hasDragIcon: ${hasDragIcon}, hasIme: ${hasIme}, hasPreview: ${hasPreview}, hasCapture: ${hasCapture}, hasEffect: ${hasEffect}, colorClass: ${colorClass}, reasonFlags: ${reasonFlags}, engineGeneration: ${engineGeneration}, shellDamage: ${shellDamage}, shellVisibleBounds: ${shellVisibleBounds}, shellRevision: ${shellRevision}, overlayCompatible: ${overlayCompatible}, overlayRendering: ${overlayRendering}}';
   }
 }
 
@@ -1226,7 +1233,7 @@ class CompositionCertificateBuilder {
   final fb.Builder fbBuilder;
 
   void begin() {
-    fbBuilder.startTable(26);
+    fbBuilder.startTable(31);
   }
 
   int addProtocolVersion(int? protocolVersion) {
@@ -1333,6 +1340,26 @@ class CompositionCertificateBuilder {
     fbBuilder.addUint64(25, engineGeneration);
     return fbBuilder.offset;
   }
+  int addShellDamage(int offset) {
+    fbBuilder.addStruct(26, offset);
+    return fbBuilder.offset;
+  }
+  int addShellVisibleBounds(int offset) {
+    fbBuilder.addStruct(27, offset);
+    return fbBuilder.offset;
+  }
+  int addShellRevision(int? shellRevision) {
+    fbBuilder.addUint64(28, shellRevision);
+    return fbBuilder.offset;
+  }
+  int addOverlayCompatible(bool? overlayCompatible) {
+    fbBuilder.addBool(29, overlayCompatible);
+    return fbBuilder.offset;
+  }
+  int addOverlayRendering(bool? overlayRendering) {
+    fbBuilder.addBool(30, overlayRendering);
+    return fbBuilder.offset;
+  }
 
   int finish() {
     return fbBuilder.endTable();
@@ -1366,6 +1393,11 @@ class CompositionCertificateObjectBuilder extends fb.ObjectBuilder {
   final CompositionColorClass? _colorClass;
   final int? _reasonFlags;
   final int? _engineGeneration;
+  final WireRectObjectBuilder? _shellDamage;
+  final WireRectObjectBuilder? _shellVisibleBounds;
+  final int? _shellRevision;
+  final bool? _overlayCompatible;
+  final bool? _overlayRendering;
 
   CompositionCertificateObjectBuilder({
     int? protocolVersion,
@@ -1394,6 +1426,11 @@ class CompositionCertificateObjectBuilder extends fb.ObjectBuilder {
     CompositionColorClass? colorClass,
     int? reasonFlags,
     int? engineGeneration,
+    WireRectObjectBuilder? shellDamage,
+    WireRectObjectBuilder? shellVisibleBounds,
+    int? shellRevision,
+    bool? overlayCompatible,
+    bool? overlayRendering,
   })
       : _protocolVersion = protocolVersion,
         _certificateEpoch = certificateEpoch,
@@ -1420,12 +1457,17 @@ class CompositionCertificateObjectBuilder extends fb.ObjectBuilder {
         _hasEffect = hasEffect,
         _colorClass = colorClass,
         _reasonFlags = reasonFlags,
-        _engineGeneration = engineGeneration;
+        _engineGeneration = engineGeneration,
+        _shellDamage = shellDamage,
+        _shellVisibleBounds = shellVisibleBounds,
+        _shellRevision = shellRevision,
+        _overlayCompatible = overlayCompatible,
+        _overlayRendering = overlayRendering;
 
   /// Finish building, and store into the [fbBuilder].
   @override
   int finish(fb.Builder fbBuilder) {
-    fbBuilder.startTable(26);
+    fbBuilder.startTable(31);
     fbBuilder.addUint16(0, _protocolVersion);
     fbBuilder.addUint64(1, _certificateEpoch);
     fbBuilder.addUint64(2, _layoutEpoch);
@@ -1458,6 +1500,113 @@ class CompositionCertificateObjectBuilder extends fb.ObjectBuilder {
     fbBuilder.addUint8(23, _colorClass?.value);
     fbBuilder.addUint32(24, _reasonFlags);
     fbBuilder.addUint64(25, _engineGeneration);
+    if (_shellDamage != null) {
+      fbBuilder.addStruct(26, _shellDamage!.finish(fbBuilder));
+    }
+    if (_shellVisibleBounds != null) {
+      fbBuilder.addStruct(27, _shellVisibleBounds!.finish(fbBuilder));
+    }
+    fbBuilder.addUint64(28, _shellRevision);
+    fbBuilder.addBool(29, _overlayCompatible);
+    fbBuilder.addBool(30, _overlayRendering);
+    return fbBuilder.endTable();
+  }
+
+  /// Convenience method to serialize to byte list.
+  @override
+  Uint8List toBytes([String? fileIdentifier]) {
+    final fbBuilder = fb.Builder(deduplicateTables: false);
+    fbBuilder.finish(finish(fbBuilder), fileIdentifier);
+    return fbBuilder.buffer;
+  }
+}
+class ShellRenderMode {
+  ShellRenderMode._(this._bc, this._bcOffset);
+  factory ShellRenderMode(List<int> bytes) {
+    final rootRef = fb.BufferContext.fromBytes(bytes);
+    return reader.read(rootRef, 0);
+  }
+
+  static const fb.Reader<ShellRenderMode> reader = _ShellRenderModeReader();
+
+  final fb.BufferContext _bc;
+  final int _bcOffset;
+
+  int get protocolVersion => const fb.Uint16Reader().vTableGet(_bc, _bcOffset, 4, 1);
+  int get generation => const fb.Uint64Reader().vTableGet(_bc, _bcOffset, 6, 0);
+  int get outputId => const fb.Int64Reader().vTableGet(_bc, _bcOffset, 8, 0);
+  bool get overlayEnabled => const fb.BoolReader().vTableGet(_bc, _bcOffset, 10, false);
+
+  @override
+  String toString() {
+    return 'ShellRenderMode{protocolVersion: ${protocolVersion}, generation: ${generation}, outputId: ${outputId}, overlayEnabled: ${overlayEnabled}}';
+  }
+}
+
+class _ShellRenderModeReader extends fb.TableReader<ShellRenderMode> {
+  const _ShellRenderModeReader();
+
+  @override
+  ShellRenderMode createObject(fb.BufferContext bc, int offset) => 
+    ShellRenderMode._(bc, offset);
+}
+
+class ShellRenderModeBuilder {
+  ShellRenderModeBuilder(this.fbBuilder);
+
+  final fb.Builder fbBuilder;
+
+  void begin() {
+    fbBuilder.startTable(4);
+  }
+
+  int addProtocolVersion(int? protocolVersion) {
+    fbBuilder.addUint16(0, protocolVersion);
+    return fbBuilder.offset;
+  }
+  int addGeneration(int? generation) {
+    fbBuilder.addUint64(1, generation);
+    return fbBuilder.offset;
+  }
+  int addOutputId(int? outputId) {
+    fbBuilder.addInt64(2, outputId);
+    return fbBuilder.offset;
+  }
+  int addOverlayEnabled(bool? overlayEnabled) {
+    fbBuilder.addBool(3, overlayEnabled);
+    return fbBuilder.offset;
+  }
+
+  int finish() {
+    return fbBuilder.endTable();
+  }
+}
+
+class ShellRenderModeObjectBuilder extends fb.ObjectBuilder {
+  final int? _protocolVersion;
+  final int? _generation;
+  final int? _outputId;
+  final bool? _overlayEnabled;
+
+  ShellRenderModeObjectBuilder({
+    int? protocolVersion,
+    int? generation,
+    int? outputId,
+    bool? overlayEnabled,
+  })
+      : _protocolVersion = protocolVersion,
+        _generation = generation,
+        _outputId = outputId,
+        _overlayEnabled = overlayEnabled;
+
+  /// Finish building, and store into the [fbBuilder].
+  @override
+  int finish(fb.Builder fbBuilder) {
+    fbBuilder.startTable(4);
+    fbBuilder.addUint16(0, _protocolVersion);
+    fbBuilder.addUint64(1, _generation);
+    fbBuilder.addInt64(2, _outputId);
+    fbBuilder.addBool(3, _overlayEnabled);
     return fbBuilder.endTable();
   }
 
@@ -5535,6 +5684,7 @@ class Envelope {
       case 14: return SettingsResponse.reader.vTableGetNullable(_bc, _bcOffset, 12);
       case 15: return TextInputState.reader.vTableGetNullable(_bc, _bcOffset, 12);
       case 16: return CompositionCertificate.reader.vTableGetNullable(_bc, _bcOffset, 12);
+      case 17: return ShellRenderMode.reader.vTableGetNullable(_bc, _bcOffset, 12);
       default: return null;
     }
   }

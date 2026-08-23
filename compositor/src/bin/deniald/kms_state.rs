@@ -40,11 +40,112 @@ pub(super) struct Scanout {
     pub(super) output: ConnectedOutput,
     pub(super) surface: DrmSurface,
     pub(super) plane_properties: AtlasPlaneProperties,
+    pub(super) shell_overlay: Option<ShellOverlayPlane>,
     pub(super) source_rect: PixelRect,
     pub(super) original_mode: Mode,
     /// Whether this logical output currently owns an active KMS pipeline.
     /// DPMS-off outputs deliberately remain in the topology and scanout list.
     pub(super) powered: bool,
+}
+
+#[derive(Clone, Debug)]
+pub(super) struct ShellOverlayPlane {
+    pub(super) info: smithay::backend::drm::PlaneInfo,
+}
+
+impl ShellOverlayPlane {
+    pub(super) fn supports(&self, format: Format) -> bool {
+        self.info.formats.contains(&format)
+            || (format.modifier == Modifier::Linear
+                && self.info.formats.contains(&Format {
+                    code: format.code,
+                    modifier: Modifier::Invalid,
+                }))
+    }
+}
+
+pub(super) fn select_shell_overlay_plane(
+    drm: &DrmDevice,
+    surface: &DrmSurface,
+) -> Result<Option<ShellOverlayPlane>, Box<dyn Error>> {
+    let primary_zpos = surface.plane_info().zpos;
+    let mut candidates = surface.planes().overlay.clone();
+    candidates.sort_by_key(|candidate| {
+        (
+            candidate.zpos.unwrap_or(i32::MAX),
+            u32::from(candidate.handle),
+        )
+    });
+    for candidate in candidates {
+        if primary_zpos
+            .zip(candidate.zpos)
+            .is_some_and(|(primary, overlay)| overlay <= primary)
+        {
+            continue;
+        }
+        if !candidate
+            .formats
+            .iter()
+            .any(|format| format.code == Fourcc::Argb8888)
+        {
+            continue;
+        }
+        if [
+            "FB_ID",
+            "CRTC_ID",
+            "SRC_X",
+            "SRC_Y",
+            "SRC_W",
+            "SRC_H",
+            "CRTC_X",
+            "CRTC_Y",
+            "CRTC_W",
+            "CRTC_H",
+            "alpha",
+            "pixel blend mode",
+        ]
+        .iter()
+        .any(|name| {
+            optional_named_property(drm, candidate.handle, name)
+                .ok()
+                .flatten()
+                .is_none()
+        }) {
+            continue;
+        }
+        let alpha = named_property(drm, candidate.handle, "alpha")?;
+        if drm.get_property(alpha)?.value_type()
+            != property::ValueType::UnsignedRange(0, u16::MAX as u64)
+        {
+            continue;
+        }
+        let blend = named_property(drm, candidate.handle, "pixel blend mode")?;
+        let blend_info = drm.get_property(blend)?;
+        let property::ValueType::Enum(values) = blend_info.value_type() else {
+            continue;
+        };
+        let (_, enums) = values.values();
+        let Some(premultiplied) = enums.iter().find(|value| {
+            value
+                .name()
+                .to_str()
+                .is_ok_and(|name| name.eq_ignore_ascii_case("Pre-multiplied"))
+        }) else {
+            continue;
+        };
+        let current_blend = drm
+            .get_properties(candidate.handle)?
+            .into_iter()
+            .find_map(|(property, value)| (property == blend).then_some(value));
+        if current_blend != Some(premultiplied.value()) {
+            // Smithay's PlaneState currently leaves pixel blend mode untouched.
+            // Only accept a plane already configured for the exact Flutter
+            // premultiplied contract; otherwise composition remains correct.
+            continue;
+        }
+        return Ok(Some(ShellOverlayPlane { info: candidate }));
+    }
+    Ok(None)
 }
 
 pub(super) struct PreviousScanoutState {
@@ -509,6 +610,7 @@ impl AtlasAllocator {
         size: PixelSize,
         modifiers: &[Modifier],
         linear_render_target: bool,
+        code: Fourcc,
     ) -> Result<AtlasBuffer, Box<dyn Error>> {
         let mut buffer = AtlasBuffer::allocate_gbm(
             &mut self.allocator,
@@ -516,9 +618,14 @@ impl AtlasAllocator {
             self.cross_device,
             size,
             modifiers,
+            code,
         )?;
         if linear_render_target {
-            buffer.render_target = Some(LinearRenderBuffer::allocate(&mut self.allocator, size)?);
+            buffer.render_target = Some(LinearRenderBuffer::allocate(
+                &mut self.allocator,
+                size,
+                code,
+            )?);
         }
         Ok(buffer)
     }
@@ -533,18 +640,15 @@ impl LinearRenderBuffer {
     fn allocate(
         allocator: &mut GbmAllocator<DrmDeviceFd>,
         size: PixelSize,
+        code: Fourcc,
     ) -> Result<Self, Box<dyn Error>> {
-        let buffer = allocator.create_buffer(
-            size.width,
-            size.height,
-            Fourcc::Xrgb8888,
-            &[Modifier::Linear],
-        )?;
+        let buffer = allocator.create_buffer(size.width, size.height, code, &[Modifier::Linear])?;
         let format = smithay::backend::allocator::Buffer::format(&buffer);
-        if format.code != Fourcc::Xrgb8888 || format.modifier != Modifier::Linear {
-            return Err(
-                format!("offscreen Flutter render target is not linear XR24: {format:?}").into(),
-            );
+        if format.code != code || format.modifier != Modifier::Linear {
+            return Err(format!(
+                "offscreen Flutter render target is not linear {code:?}: {format:?}"
+            )
+            .into());
         }
         let dmabuf = buffer.export()?;
         Ok(Self {
@@ -570,9 +674,9 @@ impl AtlasBuffer {
         cross_device: bool,
         size: PixelSize,
         modifiers: &[Modifier],
+        code: Fourcc,
     ) -> Result<Self, Box<dyn Error>> {
-        let buffer =
-            allocator.create_buffer(size.width, size.height, Fourcc::Xrgb8888, modifiers)?;
+        let buffer = allocator.create_buffer(size.width, size.height, code, modifiers)?;
         let format = smithay::backend::allocator::Buffer::format(&buffer);
         let dmabuf = buffer.export()?;
         let framebuffer = if cross_device {
@@ -757,6 +861,7 @@ pub(super) struct AtlasSwapchain {
     pub(super) size: PixelSize,
     pub(super) buffers: Vec<AtlasBuffer>,
     pub(super) current: usize,
+    pub(super) code: Fourcc,
 }
 
 pub(super) struct ScreenshotBuffer {
@@ -1138,7 +1243,15 @@ pub(super) fn flutter_pool_length(output_count: usize) -> Result<usize, Box<dyn 
     Ok(length)
 }
 
+#[cfg(test)]
 fn common_xrgb8888_modifiers<'a>(
+    format_sets: impl IntoIterator<Item = &'a FormatSet>,
+) -> Vec<Modifier> {
+    common_format_modifiers(Fourcc::Xrgb8888, format_sets)
+}
+
+fn common_format_modifiers<'a>(
+    code: Fourcc,
     format_sets: impl IntoIterator<Item = &'a FormatSet>,
 ) -> Vec<Modifier> {
     let mut format_sets = format_sets.into_iter();
@@ -1148,7 +1261,7 @@ fn common_xrgb8888_modifiers<'a>(
     let remaining = format_sets.collect::<Vec<_>>();
     first
         .iter()
-        .filter(|format| format.code == Fourcc::Xrgb8888 && format.modifier != Modifier::Invalid)
+        .filter(|format| format.code == code && format.modifier != Modifier::Invalid)
         .filter(|format| remaining.iter().all(|formats| formats.contains(format)))
         .map(|format| format.modifier)
         .collect()
@@ -1158,15 +1271,23 @@ fn compatible_xrgb8888_modifiers<'a>(
     plane_formats: impl IntoIterator<Item = &'a FormatSet>,
     render_formats: &FormatSet,
 ) -> Vec<Modifier> {
+    compatible_format_modifiers(Fourcc::Xrgb8888, plane_formats, render_formats)
+}
+
+fn compatible_format_modifiers<'a>(
+    code: Fourcc,
+    plane_formats: impl IntoIterator<Item = &'a FormatSet>,
+    render_formats: &FormatSet,
+) -> Vec<Modifier> {
     let plane_formats = plane_formats.into_iter().collect::<Vec<_>>();
-    let mut modifiers = common_xrgb8888_modifiers(plane_formats.iter().copied());
+    let mut modifiers = common_format_modifiers(code, plane_formats.iter().copied());
     let renderer_has_explicit_modifiers = render_formats
         .iter()
-        .any(|format| format.code == Fourcc::Xrgb8888 && format.modifier != Modifier::Invalid);
+        .any(|format| format.code == code && format.modifier != Modifier::Invalid);
     if renderer_has_explicit_modifiers {
         modifiers.retain(|modifier| {
             render_formats.contains(&Format {
-                code: Fourcc::Xrgb8888,
+                code,
                 modifier: *modifier,
             })
         });
@@ -1174,16 +1295,16 @@ fn compatible_xrgb8888_modifiers<'a>(
         modifiers.retain(|modifier| *modifier == Modifier::Linear);
     }
 
-    let implicit_xrgb8888 = Format {
-        code: Fourcc::Xrgb8888,
+    let implicit_format = Format {
+        code,
         modifier: Modifier::Invalid,
     };
     if modifiers.is_empty()
         && !plane_formats.is_empty()
         && plane_formats
             .iter()
-            .all(|formats| formats.contains(&implicit_xrgb8888))
-        && render_formats.contains(&implicit_xrgb8888)
+            .all(|formats| formats.contains(&implicit_format))
+        && render_formats.contains(&implicit_format)
     {
         // GBM may satisfy this through an explicit LINEAR allocation or its
         // legacy implicit allocation path. Both are safe when every consumer
@@ -1229,13 +1350,61 @@ pub(super) fn shared_atlas_modifiers(
     Ok(modifiers)
 }
 
+/// Prefer an alpha-capable Flutter atlas only when EGL, every primary plane,
+/// and at least one dynamically selected shell overlay can consume the same
+/// format/modifier. Otherwise preserve the established opaque XR24
+/// composition path and leave overlay promotion unavailable for the topology.
+pub(super) fn shared_atlas_format(
+    scanouts: &[Scanout],
+    render_formats: &FormatSet,
+) -> Result<(Fourcc, Vec<Modifier>), Box<dyn Error>> {
+    if scanouts.is_empty() {
+        return Err("shared atlas format selection needs at least one primary plane".into());
+    }
+    for code in [Fourcc::Argb8888, Fourcc::Xrgb8888] {
+        let mut modifiers = compatible_format_modifiers(
+            code,
+            scanouts
+                .iter()
+                .map(|scanout| &scanout.surface.plane_info().formats),
+            render_formats,
+        );
+        if code == Fourcc::Argb8888 {
+            modifiers.retain(|modifier| {
+                let format = Format {
+                    code,
+                    modifier: *modifier,
+                };
+                scanouts.iter().any(|scanout| {
+                    scanout
+                        .shell_overlay
+                        .as_ref()
+                        .is_some_and(|plane| plane.supports(format))
+                })
+            });
+        }
+        if !modifiers.is_empty() {
+            return Ok((code, modifiers));
+        }
+    }
+    let outputs = scanouts
+        .iter()
+        .map(|scanout| scanout.output.name.as_str())
+        .collect::<Vec<_>>()
+        .join(", ");
+    Err(format!(
+        "no AR24 or XR24 modifier is common to EGL rendering and the primary planes for {outputs}"
+    )
+    .into())
+}
+
 impl AtlasSwapchain {
     pub(super) fn allocate(
         allocator: &mut AtlasAllocator,
         size: PixelSize,
         modifiers: &[Modifier],
     ) -> Result<Self, Box<dyn Error>> {
-        Self::allocate_pool(allocator, size, 2, modifiers, false)
+        Self::allocate_pool(allocator, size, 2, modifiers, false, Fourcc::Xrgb8888)
     }
 
     pub(super) fn allocate_pool(
@@ -1244,6 +1413,7 @@ impl AtlasSwapchain {
         length: usize,
         modifiers: &[Modifier],
         linear_render_targets: bool,
+        code: Fourcc,
     ) -> Result<Self, Box<dyn Error>> {
         if length < 2 {
             return Err("an atlas swapchain needs at least two buffers".into());
@@ -1261,7 +1431,7 @@ impl AtlasSwapchain {
 
         let allocate = |allocator: &mut AtlasAllocator, modifiers: &[Modifier]| {
             (0..length)
-                .map(|_| allocator.allocate(size, modifiers, linear_render_targets))
+                .map(|_| allocator.allocate(size, modifiers, linear_render_targets, code))
                 .collect::<Result<Vec<_>, _>>()
         };
         let buffers = if optimized.is_empty() {
@@ -1292,6 +1462,7 @@ impl AtlasSwapchain {
             size,
             buffers,
             current: 0,
+            code,
         })
     }
 

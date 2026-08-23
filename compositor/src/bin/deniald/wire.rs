@@ -109,6 +109,18 @@ pub struct CompositionCertificate {
     pub color_class: CompositionColorClass,
     pub reason_flags: u32,
     pub engine_generation: u64,
+    pub shell_damage: InputRect,
+    pub shell_visible_bounds: InputRect,
+    pub shell_revision: u64,
+    pub overlay_compatible: bool,
+    pub overlay_rendering: bool,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct ShellRenderMode {
+    pub generation: u64,
+    pub output_id: i64,
+    pub overlay_enabled: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -763,6 +775,16 @@ impl WireBridge {
             0,
             None,
         )?;
+        Ok(self.outbound_builder.finished_data())
+    }
+
+    pub fn encode_shell_render_mode(&mut self, mode: ShellRenderMode) -> Result<&[u8], WireError> {
+        if mode.generation == 0 || mode.output_id < 0 {
+            return Err(WireError::Payload);
+        }
+        let sequence = self.take_sequence();
+        self.outbound_builder.reset();
+        encode_shell_render_mode(&mut self.outbound_builder, sequence, mode)?;
         Ok(self.outbound_builder.finished_data())
     }
 
@@ -1939,6 +1961,31 @@ fn decode_composition_certificate(
     {
         return Err(WireError::Geometry);
     }
+    let shell_damage = certificate
+        .shell_damage()
+        .map(|rect| decode_certificate_rect(rect, true))
+        .transpose()?
+        .unwrap_or(InputRect {
+            x: 0.0,
+            y: 0.0,
+            width: 0.0,
+            height: 0.0,
+        });
+    let shell_visible_bounds = certificate
+        .shell_visible_bounds()
+        .map(|rect| decode_certificate_rect(rect, true))
+        .transpose()?
+        .unwrap_or(InputRect {
+            x: 0.0,
+            y: 0.0,
+            width: 0.0,
+            height: 0.0,
+        });
+    if (certificate.overlay_compatible() || certificate.overlay_rendering())
+        && certificate.shell_revision() == 0
+    {
+        return Err(WireError::Payload);
+    }
     Ok(CompositionCertificate {
         certificate_epoch: certificate.certificate_epoch(),
         layout_epoch: certificate.layout_epoch(),
@@ -1974,6 +2021,11 @@ fn decode_composition_certificate(
         },
         reason_flags: certificate.reason_flags(),
         engine_generation: certificate.engine_generation(),
+        shell_damage,
+        shell_visible_bounds,
+        shell_revision: certificate.shell_revision(),
+        overlay_compatible: certificate.overlay_compatible(),
+        overlay_rendering: certificate.overlay_rendering(),
     })
 }
 
@@ -2379,6 +2431,34 @@ fn encode_shell_action(
             request_id,
             payload_type: fb::Payload::ShellAction,
             payload: Some(action.as_union_value()),
+        },
+    );
+    fb::finish_envelope_buffer(builder, envelope);
+    validate_finished_message(builder)
+}
+
+fn encode_shell_render_mode(
+    builder: &mut FlatBufferBuilder<'_>,
+    sequence: u64,
+    mode: ShellRenderMode,
+) -> Result<(), WireError> {
+    let state = fb::ShellRenderMode::create(
+        builder,
+        &fb::ShellRenderModeArgs {
+            protocol_version: PROTOCOL_VERSION,
+            generation: mode.generation,
+            output_id: mode.output_id,
+            overlay_enabled: mode.overlay_enabled,
+        },
+    );
+    let envelope = fb::Envelope::create(
+        builder,
+        &fb::EnvelopeArgs {
+            protocol_version: PROTOCOL_VERSION,
+            sequence,
+            request_id: 0,
+            payload_type: fb::Payload::ShellRenderMode,
+            payload: Some(state.as_union_value()),
         },
     );
     fb::finish_envelope_buffer(builder, envelope);

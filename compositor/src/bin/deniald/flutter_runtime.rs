@@ -28,7 +28,7 @@ use denial_flutter_engine::{
 };
 use sha2::{Digest, Sha256};
 use smithay::backend::allocator::dmabuf::Dmabuf;
-use smithay::backend::allocator::{Buffer as AllocatorBuffer, Fourcc, Modifier};
+use smithay::backend::allocator::{Buffer as AllocatorBuffer, Modifier};
 use smithay::backend::egl::display::EGLDisplayHandle;
 use smithay::backend::egl::fence::EGLFence;
 use smithay::backend::egl::{EGLContext, ffi as egl_ffi, get_proc_address};
@@ -2841,6 +2841,7 @@ impl FlutterGlHandler {
         let mut targets = Vec::new();
 
         for (scanout_dmabuf, render_dmabuf) in dmabufs {
+            let scanout_format = AllocatorBuffer::format(scanout_dmabuf);
             let image = match render_context
                 .display()
                 .create_image_from_dmabuf(scanout_dmabuf)
@@ -2937,7 +2938,7 @@ impl FlutterGlHandler {
                     return Err("offscreen blit target is missing its linear render DMA-BUF".into());
                 };
                 let render_format = AllocatorBuffer::format(render_dmabuf);
-                if render_format.code != Fourcc::Xrgb8888
+                if render_format.code != scanout_format.code
                     || render_format.modifier != Modifier::Linear
                 {
                     let mut failed = vec![target];
@@ -2946,7 +2947,8 @@ impl FlutterGlHandler {
                     destroy_depth_stencil(gl, &mut depth_stencil);
                     render_context.unbind()?;
                     return Err(format!(
-                        "offscreen Flutter render target is not linear XR24: {render_format:?}"
+                        "offscreen Flutter render target does not match linear {:?}: {render_format:?}",
+                        scanout_format.code
                     )
                     .into());
                 }
@@ -6126,6 +6128,20 @@ impl FlutterRuntime {
             .expect("Flutter runtime is shutting down")
             .engine();
         let event = self.wire.encode_shell_action(action, monitor_id)?;
+        engine.send_platform_message(wire::TO_FLUTTER_CHANNEL, event)?;
+        Ok(())
+    }
+
+    pub fn send_shell_render_mode(
+        &mut self,
+        mode: wire::ShellRenderMode,
+    ) -> Result<(), Box<dyn Error>> {
+        let engine = self
+            .host
+            .as_ref()
+            .expect("Flutter runtime is shutting down")
+            .engine();
+        let event = self.wire.encode_shell_render_mode(mode)?;
         engine.send_platform_message(wire::TO_FLUTTER_CHANNEL, event)?;
         Ok(())
     }

@@ -2165,10 +2165,10 @@ pub struct ShortcutTargetUnionTableOffset {}
 #[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
 pub const ENUM_MIN_PAYLOAD: u8 = 0;
 #[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
-pub const ENUM_MAX_PAYLOAD: u8 = 16;
+pub const ENUM_MAX_PAYLOAD: u8 = 17;
 #[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
 #[allow(non_camel_case_types)]
-pub const ENUM_VALUES_PAYLOAD: [Payload; 17] = [
+pub const ENUM_VALUES_PAYLOAD: [Payload; 18] = [
   Payload::NONE,
   Payload::InputLayout,
   Payload::WindowSnapshot,
@@ -2186,6 +2186,7 @@ pub const ENUM_VALUES_PAYLOAD: [Payload; 17] = [
   Payload::SettingsResponse,
   Payload::TextInputState,
   Payload::CompositionCertificate,
+  Payload::ShellRenderMode,
 ];
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
@@ -2210,9 +2211,10 @@ impl Payload {
   pub const SettingsResponse: Self = Self(14);
   pub const TextInputState: Self = Self(15);
   pub const CompositionCertificate: Self = Self(16);
+  pub const ShellRenderMode: Self = Self(17);
 
   pub const ENUM_MIN: u8 = 0;
-  pub const ENUM_MAX: u8 = 16;
+  pub const ENUM_MAX: u8 = 17;
   pub const ENUM_VALUES: &'static [Self] = &[
     Self::NONE,
     Self::InputLayout,
@@ -2231,6 +2233,7 @@ impl Payload {
     Self::SettingsResponse,
     Self::TextInputState,
     Self::CompositionCertificate,
+    Self::ShellRenderMode,
   ];
   /// Returns the variant's name or "" if unknown.
   pub fn variant_name(self) -> Option<&'static str> {
@@ -2252,6 +2255,7 @@ impl Payload {
       Self::SettingsResponse => Some("SettingsResponse"),
       Self::TextInputState => Some("TextInputState"),
       Self::CompositionCertificate => Some("CompositionCertificate"),
+      Self::ShellRenderMode => Some("ShellRenderMode"),
       _ => None,
     }
   }
@@ -3053,6 +3057,11 @@ impl<'a> CompositionCertificate<'a> {
   pub const VT_COLOR_CLASS: flatbuffers::VOffsetT = 50;
   pub const VT_REASON_FLAGS: flatbuffers::VOffsetT = 52;
   pub const VT_ENGINE_GENERATION: flatbuffers::VOffsetT = 54;
+  pub const VT_SHELL_DAMAGE: flatbuffers::VOffsetT = 56;
+  pub const VT_SHELL_VISIBLE_BOUNDS: flatbuffers::VOffsetT = 58;
+  pub const VT_SHELL_REVISION: flatbuffers::VOffsetT = 60;
+  pub const VT_OVERLAY_COMPATIBLE: flatbuffers::VOffsetT = 62;
+  pub const VT_OVERLAY_RENDERING: flatbuffers::VOffsetT = 64;
 
   #[inline]
   pub unsafe fn init_from_table(table: flatbuffers::Table<'a>) -> Self {
@@ -3064,6 +3073,7 @@ impl<'a> CompositionCertificate<'a> {
     args: &'args CompositionCertificateArgs<'args>
   ) -> flatbuffers::WIPOffset<CompositionCertificate<'bldr>> {
     let mut builder = CompositionCertificateBuilder::new(_fbb);
+    builder.add_shell_revision(args.shell_revision);
     builder.add_engine_generation(args.engine_generation);
     builder.add_scale(args.scale);
     builder.add_buffer_revision(args.buffer_revision);
@@ -3073,12 +3083,16 @@ impl<'a> CompositionCertificate<'a> {
     builder.add_output_id(args.output_id);
     builder.add_layout_epoch(args.layout_epoch);
     builder.add_certificate_epoch(args.certificate_epoch);
+    if let Some(x) = args.shell_visible_bounds { builder.add_shell_visible_bounds(x); }
+    if let Some(x) = args.shell_damage { builder.add_shell_damage(x); }
     builder.add_reason_flags(args.reason_flags);
     builder.add_transform(args.transform);
     if let Some(x) = args.output_pixel_size { builder.add_output_pixel_size(x); }
     if let Some(x) = args.destination_rect { builder.add_destination_rect(x); }
     if let Some(x) = args.source_rect { builder.add_source_rect(x); }
     builder.add_protocol_version(args.protocol_version);
+    builder.add_overlay_rendering(args.overlay_rendering);
+    builder.add_overlay_compatible(args.overlay_compatible);
     builder.add_color_class(args.color_class);
     builder.add_has_effect(args.has_effect);
     builder.add_has_capture(args.has_capture);
@@ -3276,6 +3290,41 @@ impl<'a> CompositionCertificate<'a> {
     // which contains a valid value in this slot
     unsafe { self._tab.get::<u64>(CompositionCertificate::VT_ENGINE_GENERATION, Some(0)).unwrap()}
   }
+  #[inline]
+  pub fn shell_damage(&self) -> Option<&'a WireRect> {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<WireRect>(CompositionCertificate::VT_SHELL_DAMAGE, None)}
+  }
+  #[inline]
+  pub fn shell_visible_bounds(&self) -> Option<&'a WireRect> {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<WireRect>(CompositionCertificate::VT_SHELL_VISIBLE_BOUNDS, None)}
+  }
+  #[inline]
+  pub fn shell_revision(&self) -> u64 {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<u64>(CompositionCertificate::VT_SHELL_REVISION, Some(0)).unwrap()}
+  }
+  #[inline]
+  pub fn overlay_compatible(&self) -> bool {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<bool>(CompositionCertificate::VT_OVERLAY_COMPATIBLE, Some(false)).unwrap()}
+  }
+  #[inline]
+  pub fn overlay_rendering(&self) -> bool {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<bool>(CompositionCertificate::VT_OVERLAY_RENDERING, Some(false)).unwrap()}
+  }
 }
 
 impl flatbuffers::Verifiable for CompositionCertificate<'_> {
@@ -3311,6 +3360,11 @@ impl flatbuffers::Verifiable for CompositionCertificate<'_> {
      .visit_field::<CompositionColorClass>("color_class", Self::VT_COLOR_CLASS, false)?
      .visit_field::<u32>("reason_flags", Self::VT_REASON_FLAGS, false)?
      .visit_field::<u64>("engine_generation", Self::VT_ENGINE_GENERATION, false)?
+     .visit_field::<WireRect>("shell_damage", Self::VT_SHELL_DAMAGE, false)?
+     .visit_field::<WireRect>("shell_visible_bounds", Self::VT_SHELL_VISIBLE_BOUNDS, false)?
+     .visit_field::<u64>("shell_revision", Self::VT_SHELL_REVISION, false)?
+     .visit_field::<bool>("overlay_compatible", Self::VT_OVERLAY_COMPATIBLE, false)?
+     .visit_field::<bool>("overlay_rendering", Self::VT_OVERLAY_RENDERING, false)?
      .finish();
     Ok(())
   }
@@ -3342,6 +3396,11 @@ pub struct CompositionCertificateArgs<'a> {
     pub color_class: CompositionColorClass,
     pub reason_flags: u32,
     pub engine_generation: u64,
+    pub shell_damage: Option<&'a WireRect>,
+    pub shell_visible_bounds: Option<&'a WireRect>,
+    pub shell_revision: u64,
+    pub overlay_compatible: bool,
+    pub overlay_rendering: bool,
 }
 impl<'a> Default for CompositionCertificateArgs<'a> {
   #[inline]
@@ -3373,6 +3432,11 @@ impl<'a> Default for CompositionCertificateArgs<'a> {
       color_class: CompositionColorClass::Unknown,
       reason_flags: 0,
       engine_generation: 0,
+      shell_damage: None,
+      shell_visible_bounds: None,
+      shell_revision: 0,
+      overlay_compatible: false,
+      overlay_rendering: false,
     }
   }
 }
@@ -3487,6 +3551,26 @@ impl<'a: 'b, 'b, A: flatbuffers::Allocator + 'a> CompositionCertificateBuilder<'
     self.fbb_.push_slot::<u64>(CompositionCertificate::VT_ENGINE_GENERATION, engine_generation, 0);
   }
   #[inline]
+  pub fn add_shell_damage(&mut self, shell_damage: &WireRect) {
+    self.fbb_.push_slot_always::<&WireRect>(CompositionCertificate::VT_SHELL_DAMAGE, shell_damage);
+  }
+  #[inline]
+  pub fn add_shell_visible_bounds(&mut self, shell_visible_bounds: &WireRect) {
+    self.fbb_.push_slot_always::<&WireRect>(CompositionCertificate::VT_SHELL_VISIBLE_BOUNDS, shell_visible_bounds);
+  }
+  #[inline]
+  pub fn add_shell_revision(&mut self, shell_revision: u64) {
+    self.fbb_.push_slot::<u64>(CompositionCertificate::VT_SHELL_REVISION, shell_revision, 0);
+  }
+  #[inline]
+  pub fn add_overlay_compatible(&mut self, overlay_compatible: bool) {
+    self.fbb_.push_slot::<bool>(CompositionCertificate::VT_OVERLAY_COMPATIBLE, overlay_compatible, false);
+  }
+  #[inline]
+  pub fn add_overlay_rendering(&mut self, overlay_rendering: bool) {
+    self.fbb_.push_slot::<bool>(CompositionCertificate::VT_OVERLAY_RENDERING, overlay_rendering, false);
+  }
+  #[inline]
   pub fn new(_fbb: &'b mut flatbuffers::FlatBufferBuilder<'a, A>) -> CompositionCertificateBuilder<'a, 'b, A> {
     let start = _fbb.start_table();
     CompositionCertificateBuilder {
@@ -3530,6 +3614,159 @@ impl core::fmt::Debug for CompositionCertificate<'_> {
       ds.field("color_class", &self.color_class());
       ds.field("reason_flags", &self.reason_flags());
       ds.field("engine_generation", &self.engine_generation());
+      ds.field("shell_damage", &self.shell_damage());
+      ds.field("shell_visible_bounds", &self.shell_visible_bounds());
+      ds.field("shell_revision", &self.shell_revision());
+      ds.field("overlay_compatible", &self.overlay_compatible());
+      ds.field("overlay_rendering", &self.overlay_rendering());
+      ds.finish()
+  }
+}
+pub enum ShellRenderModeOffset {}
+#[derive(Copy, Clone, PartialEq)]
+
+pub struct ShellRenderMode<'a> {
+  pub _tab: flatbuffers::Table<'a>,
+}
+
+impl<'a> flatbuffers::Follow<'a> for ShellRenderMode<'a> {
+  type Inner = ShellRenderMode<'a>;
+  #[inline]
+  unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+    Self { _tab: unsafe { flatbuffers::Table::new(buf, loc) } }
+  }
+}
+
+impl<'a> ShellRenderMode<'a> {
+  pub const VT_PROTOCOL_VERSION: flatbuffers::VOffsetT = 4;
+  pub const VT_GENERATION: flatbuffers::VOffsetT = 6;
+  pub const VT_OUTPUT_ID: flatbuffers::VOffsetT = 8;
+  pub const VT_OVERLAY_ENABLED: flatbuffers::VOffsetT = 10;
+
+  #[inline]
+  pub unsafe fn init_from_table(table: flatbuffers::Table<'a>) -> Self {
+    ShellRenderMode { _tab: table }
+  }
+  #[allow(unused_mut)]
+  pub fn create<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr, A: flatbuffers::Allocator + 'bldr>(
+    _fbb: &'mut_bldr mut flatbuffers::FlatBufferBuilder<'bldr, A>,
+    args: &'args ShellRenderModeArgs
+  ) -> flatbuffers::WIPOffset<ShellRenderMode<'bldr>> {
+    let mut builder = ShellRenderModeBuilder::new(_fbb);
+    builder.add_output_id(args.output_id);
+    builder.add_generation(args.generation);
+    builder.add_protocol_version(args.protocol_version);
+    builder.add_overlay_enabled(args.overlay_enabled);
+    builder.finish()
+  }
+
+
+  #[inline]
+  pub fn protocol_version(&self) -> u16 {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<u16>(ShellRenderMode::VT_PROTOCOL_VERSION, Some(1)).unwrap()}
+  }
+  #[inline]
+  pub fn generation(&self) -> u64 {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<u64>(ShellRenderMode::VT_GENERATION, Some(0)).unwrap()}
+  }
+  #[inline]
+  pub fn output_id(&self) -> i64 {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<i64>(ShellRenderMode::VT_OUTPUT_ID, Some(0)).unwrap()}
+  }
+  #[inline]
+  pub fn overlay_enabled(&self) -> bool {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<bool>(ShellRenderMode::VT_OVERLAY_ENABLED, Some(false)).unwrap()}
+  }
+}
+
+impl flatbuffers::Verifiable for ShellRenderMode<'_> {
+  #[inline]
+  fn run_verifier(
+    v: &mut flatbuffers::Verifier, pos: usize
+  ) -> Result<(), flatbuffers::InvalidFlatbuffer> {
+    use self::flatbuffers::Verifiable;
+    v.visit_table(pos)?
+     .visit_field::<u16>("protocol_version", Self::VT_PROTOCOL_VERSION, false)?
+     .visit_field::<u64>("generation", Self::VT_GENERATION, false)?
+     .visit_field::<i64>("output_id", Self::VT_OUTPUT_ID, false)?
+     .visit_field::<bool>("overlay_enabled", Self::VT_OVERLAY_ENABLED, false)?
+     .finish();
+    Ok(())
+  }
+}
+pub struct ShellRenderModeArgs {
+    pub protocol_version: u16,
+    pub generation: u64,
+    pub output_id: i64,
+    pub overlay_enabled: bool,
+}
+impl<'a> Default for ShellRenderModeArgs {
+  #[inline]
+  fn default() -> Self {
+    ShellRenderModeArgs {
+      protocol_version: 1,
+      generation: 0,
+      output_id: 0,
+      overlay_enabled: false,
+    }
+  }
+}
+
+pub struct ShellRenderModeBuilder<'a: 'b, 'b, A: flatbuffers::Allocator + 'a> {
+  fbb_: &'b mut flatbuffers::FlatBufferBuilder<'a, A>,
+  start_: flatbuffers::WIPOffset<flatbuffers::TableUnfinishedWIPOffset>,
+}
+impl<'a: 'b, 'b, A: flatbuffers::Allocator + 'a> ShellRenderModeBuilder<'a, 'b, A> {
+  #[inline]
+  pub fn add_protocol_version(&mut self, protocol_version: u16) {
+    self.fbb_.push_slot::<u16>(ShellRenderMode::VT_PROTOCOL_VERSION, protocol_version, 1);
+  }
+  #[inline]
+  pub fn add_generation(&mut self, generation: u64) {
+    self.fbb_.push_slot::<u64>(ShellRenderMode::VT_GENERATION, generation, 0);
+  }
+  #[inline]
+  pub fn add_output_id(&mut self, output_id: i64) {
+    self.fbb_.push_slot::<i64>(ShellRenderMode::VT_OUTPUT_ID, output_id, 0);
+  }
+  #[inline]
+  pub fn add_overlay_enabled(&mut self, overlay_enabled: bool) {
+    self.fbb_.push_slot::<bool>(ShellRenderMode::VT_OVERLAY_ENABLED, overlay_enabled, false);
+  }
+  #[inline]
+  pub fn new(_fbb: &'b mut flatbuffers::FlatBufferBuilder<'a, A>) -> ShellRenderModeBuilder<'a, 'b, A> {
+    let start = _fbb.start_table();
+    ShellRenderModeBuilder {
+      fbb_: _fbb,
+      start_: start,
+    }
+  }
+  #[inline]
+  pub fn finish(self) -> flatbuffers::WIPOffset<ShellRenderMode<'a>> {
+    let o = self.fbb_.end_table(self.start_);
+    flatbuffers::WIPOffset::new(o.value())
+  }
+}
+
+impl core::fmt::Debug for ShellRenderMode<'_> {
+  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    let mut ds = f.debug_struct("ShellRenderMode");
+      ds.field("protocol_version", &self.protocol_version());
+      ds.field("generation", &self.generation());
+      ds.field("output_id", &self.output_id());
+      ds.field("overlay_enabled", &self.overlay_enabled());
       ds.finish()
   }
 }
@@ -9903,6 +10140,21 @@ impl<'a> Envelope<'a> {
     }
   }
 
+  #[inline]
+  #[allow(non_snake_case)]
+  pub fn payload_as_shell_render_mode(&self) -> Option<ShellRenderMode<'a>> {
+    if self.payload_type() == Payload::ShellRenderMode {
+      self.payload().map(|t| {
+       // Safety:
+       // Created from a valid Table for this object
+       // Which contains a valid union in this slot
+       unsafe { ShellRenderMode::init_from_table(t) }
+     })
+    } else {
+      None
+    }
+  }
+
 }
 
 impl flatbuffers::Verifiable for Envelope<'_> {
@@ -9933,6 +10185,7 @@ impl flatbuffers::Verifiable for Envelope<'_> {
           Payload::SettingsResponse => v.verify_union_variant::<flatbuffers::ForwardsUOffset<SettingsResponse>>("Payload::SettingsResponse", pos),
           Payload::TextInputState => v.verify_union_variant::<flatbuffers::ForwardsUOffset<TextInputState>>("Payload::TextInputState", pos),
           Payload::CompositionCertificate => v.verify_union_variant::<flatbuffers::ForwardsUOffset<CompositionCertificate>>("Payload::CompositionCertificate", pos),
+          Payload::ShellRenderMode => v.verify_union_variant::<flatbuffers::ForwardsUOffset<ShellRenderMode>>("Payload::ShellRenderMode", pos),
           _ => Ok(()),
         }
      })?
@@ -10115,6 +10368,13 @@ impl core::fmt::Debug for Envelope<'_> {
         },
         Payload::CompositionCertificate => {
           if let Some(x) = self.payload_as_composition_certificate() {
+            ds.field("payload", &x)
+          } else {
+            ds.field("payload", &"InvalidFlatbuffer: Union discriminant does not match value.")
+          }
+        },
+        Payload::ShellRenderMode => {
+          if let Some(x) = self.payload_as_shell_render_mode() {
             ds.field("payload", &x)
           } else {
             ds.field("payload", &"InvalidFlatbuffer: Union discriminant does not match value.")

@@ -145,7 +145,8 @@ use hotplug_transaction::{
 use kms_state::{
     AtlasAllocator, AtlasPlaneProperties, AtlasSwapchain, ConnectedOutput, KmsContext,
     LayoutTransition, PreviousScanoutState, ReconciledScanoutOrigin, RestoreState, Scanout,
-    ScanoutReconciliation, atlas_gbm_flags, shared_atlas_modifiers,
+    ScanoutReconciliation, atlas_gbm_flags, select_shell_overlay_plane, shared_atlas_format,
+    shared_atlas_modifiers,
 };
 #[cfg(feature = "flutter")]
 use kms_state::{FlutterLaunchConfiguration, FlutterLauncher, flutter_pool_length};
@@ -590,6 +591,7 @@ fn run(options: Options) -> Result<(), Box<dyn Error>> {
             .drm
             .create_surface(output.crtc, output.mode, &[output.connector])?;
         stage_output_vrr(&surface, &output)?;
+        let shell_overlay = select_shell_overlay_plane(&kms.drm, &surface)?;
         let plane_properties = AtlasPlaneProperties::load(&kms.drm, surface.plane())?;
         let source_rect = atlas
             .outputs
@@ -602,6 +604,7 @@ fn run(options: Options) -> Result<(), Box<dyn Error>> {
             output,
             surface,
             plane_properties,
+            shell_overlay,
             source_rect,
             original_mode,
             powered: true,
@@ -631,8 +634,8 @@ fn run(options: Options) -> Result<(), Box<dyn Error>> {
             render_device.display()
         )
     })?;
-    let atlas_modifiers =
-        shared_atlas_modifiers(&kms.scanouts, egl_display.dmabuf_render_formats())?;
+    let (atlas_code, atlas_modifiers) =
+        shared_atlas_format(&kms.scanouts, egl_display.dmabuf_render_formats())?;
     let atlas_pool_length = if options.flutter_bundle.is_some() {
         #[cfg(feature = "flutter")]
         {
@@ -651,6 +654,7 @@ fn run(options: Options) -> Result<(), Box<dyn Error>> {
         atlas_pool_length,
         &atlas_modifiers,
         options.flutter_offscreen_blit,
+        atlas_code,
     )
     .map_err(|error| {
         format!(
@@ -1400,6 +1404,55 @@ struct RuntimeState {
     /// certificate.
     #[cfg(feature = "flutter")]
     direct_arm_watch: BTreeMap<OutputId, (direct_scanout::CandidateKey, u64)>,
+    /// Flutter must render a transparent shell-only scene only after a client
+    /// primary is actually scanning. The generation makes delayed wire
+    /// messages harmless across rapid promotion/fallback transitions.
+    #[cfg(feature = "flutter")]
+    shell_overlay_render_outputs: HashSet<OutputId>,
+    #[cfg(feature = "flutter")]
+    shell_render_generation: u64,
+    #[cfg(feature = "flutter")]
+    flutter_work_output: Option<OutputId>,
+    #[cfg(feature = "flutter")]
+    shell_overlay_reports: BTreeMap<OutputId, ShellOverlayReport>,
+    #[cfg(feature = "flutter")]
+    direct_overlays: BTreeMap<OutputId, DirectOverlayOutput>,
+}
+
+#[cfg(feature = "flutter")]
+#[derive(Clone, Copy, Debug)]
+struct ShellOverlayReport {
+    certificate_epoch: u64,
+    shell_revision: u64,
+    scale: f64,
+    output_pixel_size: (f64, f64),
+    visible_bounds: wire::InputRect,
+    compatible: bool,
+    rendering: bool,
+    requires_client_sampling: bool,
+}
+
+#[cfg(feature = "flutter")]
+#[derive(Debug)]
+struct DirectOverlayFrame {
+    index: usize,
+    fence: Option<OwnedFd>,
+    shell_revision: u64,
+}
+
+#[cfg(feature = "flutter")]
+#[derive(Debug)]
+struct SubmittedDirectOverlay {
+    frame: DirectOverlayFrame,
+    visible: bool,
+}
+
+#[cfg(feature = "flutter")]
+#[derive(Debug, Default)]
+struct DirectOverlayOutput {
+    ready: Option<DirectOverlayFrame>,
+    submitted: Option<SubmittedDirectOverlay>,
+    active_index: Option<usize>,
 }
 
 #[cfg(feature = "flutter")]
@@ -2939,8 +2992,12 @@ fn run_flutter_event_loop(
         let scanout_rebased = events.scanout_rebased;
         events.scanout_rebased = false;
         if scanout_rebased {
+            let runtime = flutter
+                .as_ref()
+                .ok_or("Flutter runtime disappeared during scanout rebase")?;
             reset_direct_scanout(
                 drm,
+                runtime,
                 &mut scheduler,
                 scanouts,
                 &mut events,
@@ -2959,6 +3016,7 @@ fn run_flutter_event_loop(
             let runtime = flutter
                 .as_mut()
                 .ok_or("Flutter runtime disappeared during page-flip completion")?;
+            handle_direct_overlay_page_flip(runtime, &mut scheduler, scanouts, &mut events)?;
             handle_direct_page_flip(drm, &mut scheduler, scanouts, &mut events)?;
             scheduler.handle_completions(runtime, swapchain, scanouts, &mut events)?;
             if drm.is_active()
@@ -2999,6 +3057,7 @@ fn run_flutter_event_loop(
                 .collect::<Vec<_>>();
             handle_direct_fallback_presentation(
                 drm,
+                runtime,
                 &mut scheduler,
                 scanouts,
                 &presented_outputs,
@@ -3021,11 +3080,23 @@ fn run_flutter_event_loop(
             // broker remains Ready for one more display edge and Flutter must
             // skip that edge even when another atlas target is free.
             submit_ready_frames(&mut scheduler, swapchain, scanouts, &mut events)?;
+            submit_direct_overlay_ready(
+                drm,
+                runtime,
+                &mut scheduler,
+                swapchain,
+                scanouts,
+                &mut events,
+            )?;
 
             if scheduler.can_accept_ready()
+                && direct_overlay_broker_can_accept(&events)
                 && let Some(ready) = runtime.take_ready()
             {
-                if let Some(watch) = scheduler.publish_ready(runtime, ready, swapchain, scanouts)? {
+                if let Some(ready) = publish_direct_overlay_ready(runtime, ready, &mut events)?
+                    && let Some(watch) =
+                        scheduler.publish_ready(runtime, ready, swapchain, scanouts)?
+                {
                     install_ready_fence_watch(event_loop, watch)?;
                 }
                 raster_frames = raster_frames.saturating_add(1);
@@ -3034,6 +3105,8 @@ fn run_flutter_event_loop(
             if let Some(interval) = frame_scheduler.render_interval() {
                 runtime.update_frame_interval(interval);
             }
+            frame_scheduler.set_work_output(events.flutter_work_output);
+            frame_scheduler.set_work_aware(!events.shell_overlay_render_outputs.is_empty());
             let frame_action = frame_scheduler.step(Instant::now(), runtime.pending_frame());
             match frame_action {
                 frame_scheduler::FrameAction::Skip => {}
@@ -3054,6 +3127,14 @@ fn run_flutter_event_loop(
             // shell synchronization, but follows frame-clock authorization so
             // those tasks cannot perturb Flutter's animation timestamp.
             submit_ready_frames(&mut scheduler, swapchain, scanouts, &mut events)?;
+            submit_direct_overlay_ready(
+                drm,
+                runtime,
+                &mut scheduler,
+                swapchain,
+                scanouts,
+                &mut events,
+            )?;
             for tick in frame_scheduler.output_ticks().iter().copied() {
                 if let Some(frontend) = events.wayland.as_mut() {
                     frontend.frame_tick(tick)?;
@@ -3716,6 +3797,9 @@ fn run_flutter_event_loop(
 
             reset_direct_scanout(
                 drm,
+                flutter
+                    .as_ref()
+                    .ok_or("Flutter runtime disappeared before Direct Scanout reset")?,
                 &mut scheduler,
                 scanouts,
                 &mut events,
@@ -3815,7 +3899,22 @@ fn run_flutter_event_loop(
         synchronize_flutter_input_layout(runtime, &mut events)?;
         synchronize_flutter_composition_certificate(runtime, &mut events);
         synchronize_wayland_cursor(runtime, &mut events)?;
-        service_direct_scanout(drm, runtime, scanouts, &mut scheduler, &mut events)?;
+        service_direct_scanout(
+            drm,
+            runtime,
+            scanouts,
+            swapchain,
+            &mut scheduler,
+            &mut events,
+        )?;
+        submit_direct_overlay_ready(
+            drm,
+            runtime,
+            &mut scheduler,
+            swapchain,
+            scanouts,
+            &mut events,
+        )?;
         if background_started.elapsed() >= COMPOSITOR_BACKGROUND_SLICE {
             event_loop.dispatch(Duration::ZERO, &mut events)?;
             continue;
@@ -4449,13 +4548,47 @@ fn synchronize_flutter_composition_certificate(
     let Some(certificate) = runtime.take_composition_certificate() else {
         return;
     };
+    let output = OutputId(certificate.output_id as u64);
+    let work_output = (certificate.shell_damage.width > 0.0
+        && certificate.shell_damage.height > 0.0)
+        .then_some(output);
+    let report = ShellOverlayReport {
+        certificate_epoch: certificate.certificate_epoch,
+        shell_revision: certificate.shell_revision,
+        scale: certificate.scale,
+        output_pixel_size: certificate.output_pixel_size,
+        visible_bounds: certificate.shell_visible_bounds,
+        compatible: certificate.overlay_compatible,
+        rendering: certificate.overlay_rendering,
+        requires_client_sampling: certificate.requires_client_sampling,
+    };
+    let replace_report = events
+        .shell_overlay_reports
+        .get(&output)
+        .is_none_or(|previous| {
+            (report.certificate_epoch, report.shell_revision)
+                >= (previous.certificate_epoch, previous.shell_revision)
+        });
+    if replace_report {
+        events.shell_overlay_reports.insert(output, report);
+    }
     if let Some(frontend) = events.wayland.as_mut() {
         frontend.install_composition_certificate(certificate);
     }
+    events.flutter_work_output = work_output;
 }
 
 #[cfg(feature = "flutter")]
 fn direct_plane_state(scanout: &Scanout, framebuffer: framebuffer::Handle) -> PlaneState<'static> {
+    direct_plane_state_with_fence(scanout, framebuffer, None)
+}
+
+#[cfg(feature = "flutter")]
+fn direct_plane_state_with_fence<'a>(
+    scanout: &Scanout,
+    framebuffer: framebuffer::Handle,
+    fence: Option<std::os::fd::BorrowedFd<'a>>,
+) -> PlaneState<'a> {
     let (width, height) = scanout.output.mode.size();
     PlaneState {
         handle: scanout.surface.plane(),
@@ -4471,9 +4604,373 @@ fn direct_plane_state(scanout: &Scanout, framebuffer: framebuffer::Handle) -> Pl
             alpha: scanout.plane_properties.smithay_opaque_alpha,
             damage_clips: None,
             fb: framebuffer,
-            fence: None,
+            fence,
         }),
     }
+}
+
+#[cfg(feature = "flutter")]
+fn direct_overlay_broker_can_accept(events: &RuntimeState) -> bool {
+    let Some(output) = events.shell_overlay_render_outputs.iter().next() else {
+        return true;
+    };
+    events
+        .direct_overlays
+        .get(output)
+        .is_none_or(|state| state.ready.is_none() && state.submitted.is_none())
+}
+
+#[cfg(feature = "flutter")]
+fn publish_direct_overlay_ready(
+    runtime: &flutter_runtime::FlutterRuntime,
+    ready: flutter_runtime::ReadyFrame,
+    events: &mut RuntimeState,
+) -> Result<Option<flutter_runtime::ReadyFrame>, Box<dyn Error>> {
+    let Some(output) = events.shell_overlay_render_outputs.iter().next().copied() else {
+        return Ok(Some(ready));
+    };
+    let Some(report) = events
+        .shell_overlay_reports
+        .get(&output)
+        .copied()
+        .filter(|report| report.compatible && report.rendering && !report.requires_client_sampling)
+    else {
+        return Ok(Some(ready));
+    };
+    if ready.screenshot_request_id.is_some() {
+        return Ok(Some(ready));
+    }
+    let state = events.direct_overlays.entry(output).or_default();
+    if state.ready.is_some() || state.submitted.is_some() {
+        return Ok(Some(ready));
+    }
+    let flutter_runtime::ReadyFrame {
+        index,
+        fence,
+        damage: _,
+        screenshot_request_id: _,
+        rendered_at: _,
+    } = ready;
+    if let Err(error) = runtime.publish_to_outputs(index, 1) {
+        runtime.cancel_flip(index);
+        return Err(error);
+    }
+    state.ready = Some(DirectOverlayFrame {
+        index,
+        fence,
+        shell_revision: report.shell_revision,
+    });
+    Ok(None)
+}
+
+#[cfg(feature = "flutter")]
+fn shell_overlay_state<'a>(
+    scanout: &Scanout,
+    framebuffer: framebuffer::Handle,
+    report: ShellOverlayReport,
+    fence: Option<std::os::fd::BorrowedFd<'a>>,
+) -> Result<(PlaneState<'a>, bool), Box<dyn Error>> {
+    let plane = scanout
+        .shell_overlay
+        .as_ref()
+        .ok_or("the output has no compatible shell overlay plane")?;
+    let (mode_width, mode_height) = scanout.output.mode.size();
+    if report.output_pixel_size != (f64::from(mode_width), f64::from(mode_height))
+        || !report.scale.is_finite()
+        || report.scale <= 0.0
+    {
+        return Err("shell overlay report does not match the output epoch".into());
+    }
+    let bounds = report.visible_bounds;
+    if bounds.width == 0.0 || bounds.height == 0.0 {
+        return Ok((
+            PlaneState {
+                handle: plane.info.handle,
+                config: None,
+            },
+            false,
+        ));
+    }
+    let width = f64::from(mode_width);
+    let height = f64::from(mode_height);
+    let left = (bounds.x * report.scale).floor().clamp(0.0, width);
+    let top = (bounds.y * report.scale).floor().clamp(0.0, height);
+    let right = ((bounds.x + bounds.width) * report.scale)
+        .ceil()
+        .clamp(left, width);
+    let bottom = ((bounds.y + bounds.height) * report.scale)
+        .ceil()
+        .clamp(top, height);
+    let left = u32::try_from(left as u64)?;
+    let top = u32::try_from(top as u64)?;
+    let rect_width = u32::try_from((right - f64::from(left)) as u64)?;
+    let rect_height = u32::try_from((bottom - f64::from(top)) as u64)?;
+    if rect_width == 0 || rect_height == 0 {
+        return Ok((
+            PlaneState {
+                handle: plane.info.handle,
+                config: None,
+            },
+            false,
+        ));
+    }
+    Ok((
+        PlaneState {
+            handle: plane.info.handle,
+            config: Some(PlaneConfig {
+                src: Rectangle::<f64, Buffer>::new(
+                    (
+                        f64::from(scanout.source_rect.x + left),
+                        f64::from(scanout.source_rect.y + top),
+                    )
+                        .into(),
+                    (f64::from(rect_width), f64::from(rect_height)).into(),
+                ),
+                dst: Rectangle::<i32, Physical>::new(
+                    (i32::try_from(left)?, i32::try_from(top)?).into(),
+                    (i32::try_from(rect_width)?, i32::try_from(rect_height)?).into(),
+                ),
+                transform: Transform::Normal,
+                alpha: 1.0,
+                damage_clips: None,
+                fb: framebuffer,
+                fence,
+            }),
+        },
+        true,
+    ))
+}
+
+#[cfg(feature = "flutter")]
+fn submit_direct_overlay_ready(
+    drm: &DrmDevice,
+    runtime: &flutter_runtime::FlutterRuntime,
+    scheduler: &mut output_scheduler::OutputScheduler,
+    swapchain: &AtlasSwapchain,
+    scanouts: &[Scanout],
+    events: &mut RuntimeState,
+) -> Result<(), Box<dyn Error>> {
+    let outputs = events
+        .direct_overlays
+        .iter()
+        .filter_map(|(output, state)| {
+            (state.ready.is_some() && state.submitted.is_none()).then_some(*output)
+        })
+        .collect::<Vec<_>>();
+    for output in outputs {
+        let Some(scanout) = scanouts.iter().find(|scanout| scanout.output.id == output) else {
+            continue;
+        };
+        if events.pending.contains(&scanout.output.crtc)
+            || !matches!(
+                events.direct_scanout.state(output.0),
+                direct_scanout::PromotionState::Promoted {
+                    replacement: None,
+                    ..
+                }
+            )
+        {
+            continue;
+        }
+        let Some(report) = events
+            .shell_overlay_reports
+            .get(&output)
+            .copied()
+            .filter(|report| {
+                report.compatible && report.rendering && !report.requires_client_sampling
+            })
+        else {
+            continue;
+        };
+        let Some(active_key) = (match events.direct_scanout.state(output.0) {
+            direct_scanout::PromotionState::Promoted { active, .. } => Some(active),
+            _ => None,
+        }) else {
+            continue;
+        };
+        if active_key.certificate_epoch != report.certificate_epoch {
+            continue;
+        }
+        let Some(client_framebuffer) = events
+            .direct_leases
+            .get(&output)
+            .and_then(|leases| leases.active.as_ref())
+            .map(|lease| lease.framebuffer.handle())
+        else {
+            continue;
+        };
+        let Some(mut frame) = events
+            .direct_overlays
+            .get_mut(&output)
+            .and_then(|state| state.ready.take())
+        else {
+            continue;
+        };
+        frame.shell_revision = report.shell_revision;
+        let format = swapchain.buffers[frame.index].format();
+        let supports = scanout
+            .shell_overlay
+            .as_ref()
+            .is_some_and(|plane| plane.supports(format));
+        let overlay = if swapchain.code == Fourcc::Argb8888 && supports {
+            shell_overlay_state(
+                scanout,
+                swapchain.buffers[frame.index].framebuffer(),
+                report,
+                frame.fence.as_ref().map(AsFd::as_fd),
+            )
+        } else {
+            Err("Flutter atlas format/modifier is not accepted by the overlay plane".into())
+        };
+        let (overlay_state, visible) = match overlay {
+            Ok(state) => state,
+            Err(error) => {
+                runtime.release_output(frame.index)?;
+                warn!(?output, %error, "shell overlay capability rejected; preparing composition fallback");
+                let actions = events.direct_scanout.machine(output.0).advance(
+                    direct_scanout::PromotionEvent::Invalidated(
+                        direct_scanout::InvalidationCause::TestOnlyFailed,
+                    ),
+                    Instant::now(),
+                );
+                apply_direct_actions(drm, scanouts, scheduler, events, output, actions)?;
+                continue;
+            }
+        };
+        let primary_fence = (!visible)
+            .then(|| frame.fence.as_ref().map(AsFd::as_fd))
+            .flatten();
+        let states = vec![
+            direct_plane_state_with_fence(scanout, client_framebuffer, primary_fence),
+            overlay_state,
+        ];
+        if let Err(error) = scanout.surface.test_state(states.clone(), false) {
+            runtime.release_output(frame.index)?;
+            warn!(?output, %error, "shell overlay TEST_ONLY rejected; preparing composition fallback");
+            let actions = events.direct_scanout.machine(output.0).advance(
+                direct_scanout::PromotionEvent::Invalidated(
+                    direct_scanout::InvalidationCause::TestOnlyFailed,
+                ),
+                Instant::now(),
+            );
+            apply_direct_actions(drm, scanouts, scheduler, events, output, actions)?;
+            continue;
+        }
+        match scanout.surface.page_flip(states, true) {
+            Ok(()) => {
+                events.pending.insert(scanout.output.crtc);
+                events.direct_overlays.entry(output).or_default().submitted =
+                    Some(SubmittedDirectOverlay { frame, visible });
+                if let Some(frontend) = events.wayland.as_mut() {
+                    frontend.outputs_submitted(&[(output, scanout.output.vrr_enabled)])?;
+                }
+                debug!(
+                    ?output,
+                    visible,
+                    shell_revision = report.shell_revision,
+                    "submitted atomic client-primary plus shell-overlay scene"
+                );
+            }
+            Err(error) => {
+                runtime.release_output(frame.index)?;
+                debug!(?output, %error, "shell overlay commit busy or rejected; retaining direct primary");
+            }
+        }
+    }
+    Ok(())
+}
+
+#[cfg(feature = "flutter")]
+fn handle_direct_overlay_page_flip(
+    runtime: &flutter_runtime::FlutterRuntime,
+    scheduler: &mut output_scheduler::OutputScheduler,
+    scanouts: &[Scanout],
+    events: &mut RuntimeState,
+) -> Result<(), Box<dyn Error>> {
+    let outputs = events
+        .direct_overlays
+        .iter()
+        .filter_map(|(output, state)| state.submitted.is_some().then_some(*output))
+        .collect::<Vec<_>>();
+    for output in outputs {
+        let Some(scanout) = scanouts.iter().find(|scanout| scanout.output.id == output) else {
+            continue;
+        };
+        let Some(position) = events
+            .completed_page_flips
+            .iter()
+            .position(|completion| completion.crtc == scanout.output.crtc)
+        else {
+            continue;
+        };
+        let completion = events
+            .completed_page_flips
+            .remove(position)
+            .expect("located shell overlay page-flip completion");
+        events.pending.remove(&completion.crtc);
+        let state = events.direct_overlays.entry(output).or_default();
+        let submitted = state
+            .submitted
+            .take()
+            .expect("located submitted shell overlay frame");
+        if let Some(previous) = state.active_index.take() {
+            runtime.release_output(previous)?;
+        }
+        if submitted.visible {
+            state.active_index = Some(submitted.frame.index);
+        } else {
+            runtime.release_output(submitted.frame.index)?;
+        }
+        scheduler.set_direct_overlay_active(output, submitted.visible);
+        // The scheduler excludes an overlay-owned output from the ordinary
+        // atlas lane; the client primary remains owned by the direct machine.
+        // This bit is cleared on the next invisible overlay commit.
+        if let Some(frontend) = events.wayland.as_mut() {
+            frontend.outputs_presented(&[PresentedOutput {
+                id: output,
+                observed_at: completion.observed_at,
+                presented_at: completion.presented_at,
+                sequence: completion.sequence,
+            }])?;
+        }
+        info!(
+            ?output,
+            visible = submitted.visible,
+            shell_revision = submitted.frame.shell_revision,
+            "shell overlay page flip completed"
+        );
+    }
+    Ok(())
+}
+
+#[cfg(feature = "flutter")]
+fn release_direct_overlay_output(
+    runtime: &flutter_runtime::FlutterRuntime,
+    scheduler: &mut output_scheduler::OutputScheduler,
+    events: &mut RuntimeState,
+    output: OutputId,
+) -> Result<(), Box<dyn Error>> {
+    let Some(state) = events.direct_overlays.remove(&output) else {
+        scheduler.set_direct_overlay_active(output, false);
+        return Ok(());
+    };
+    let mut indices = Vec::with_capacity(3);
+    if let Some(frame) = state.ready {
+        indices.push(frame.index);
+    }
+    if let Some(submitted) = state.submitted {
+        indices.push(submitted.frame.index);
+    }
+    if let Some(active) = state.active_index {
+        indices.push(active);
+    }
+    indices.sort_unstable();
+    indices.dedup();
+    for index in indices {
+        runtime.release_output(index)?;
+    }
+    scheduler.set_direct_overlay_active(output, false);
+    Ok(())
 }
 
 #[cfg(feature = "flutter")]
@@ -4607,8 +5104,9 @@ fn observe_direct_candidate(
 #[cfg(feature = "flutter")]
 fn service_direct_scanout(
     drm: &DrmDevice,
-    runtime: &flutter_runtime::FlutterRuntime,
+    runtime: &mut flutter_runtime::FlutterRuntime,
     scanouts: &[Scanout],
+    swapchain: &AtlasSwapchain,
     scheduler: &mut output_scheduler::OutputScheduler,
     events: &mut RuntimeState,
 ) -> Result<(), Box<dyn Error>> {
@@ -4749,10 +5247,58 @@ fn service_direct_scanout(
         frontend.set_promoted_surface(suppressed);
         events.scene_sync.mark_dirty();
     }
+    reconcile_shell_render_modes(runtime, scanouts, swapchain, events);
     if render_audit_enabled() {
         audit_direct_scanout(events, now);
     }
     Ok(())
+}
+
+#[cfg(feature = "flutter")]
+fn reconcile_shell_render_modes(
+    runtime: &mut flutter_runtime::FlutterRuntime,
+    scanouts: &[Scanout],
+    swapchain: &AtlasSwapchain,
+    events: &mut RuntimeState,
+) {
+    for scanout in scanouts.iter().filter(|scanout| scanout.powered) {
+        let output = scanout.output.id;
+        let overlay_enabled = swapchain.code == Fourcc::Argb8888
+            && scanout
+                .shell_overlay
+                .as_ref()
+                .is_some_and(|plane| plane.supports(swapchain.buffers[swapchain.current].format()))
+            && matches!(
+                events.direct_scanout.state(output.0),
+                direct_scanout::PromotionState::Promoted { .. }
+            );
+        if events.shell_overlay_render_outputs.contains(&output) == overlay_enabled {
+            continue;
+        }
+        let generation = events.shell_render_generation.wrapping_add(1).max(1);
+        let mode = wire::ShellRenderMode {
+            generation,
+            output_id: match i64::try_from(output.0) {
+                Ok(output_id) => output_id,
+                Err(error) => {
+                    warn!(?output, %error, "shell render mode output cannot cross the wire");
+                    continue;
+                }
+            },
+            overlay_enabled,
+        };
+        if let Err(error) = runtime.send_shell_render_mode(mode) {
+            warn!(?output, overlay_enabled, %error, "could not synchronize Flutter shell render mode");
+            continue;
+        }
+        events.shell_render_generation = generation;
+        if overlay_enabled {
+            events.shell_overlay_render_outputs.insert(output);
+        } else {
+            events.shell_overlay_render_outputs.remove(&output);
+        }
+        events.scene_sync.mark_dirty();
+    }
 }
 
 /// Transition log for the Direct Scanout audit.
@@ -5208,6 +5754,7 @@ fn handle_direct_page_flip(
 #[cfg(feature = "flutter")]
 fn handle_direct_fallback_presentation(
     drm: &DrmDevice,
+    runtime: &flutter_runtime::FlutterRuntime,
     scheduler: &mut output_scheduler::OutputScheduler,
     scanouts: &[Scanout],
     presented: &[OutputId],
@@ -5224,6 +5771,7 @@ fn handle_direct_fallback_presentation(
         .collect::<Vec<_>>();
     for output in awaiting {
         let output = OutputId(output);
+        release_direct_overlay_output(runtime, scheduler, events, output)?;
         let actions = events
             .direct_scanout
             .machine(output.0)
@@ -5251,6 +5799,7 @@ fn handle_direct_fallback_presentation(
 #[cfg(feature = "flutter")]
 fn reset_direct_scanout(
     drm: &DrmDevice,
+    runtime: &flutter_runtime::FlutterRuntime,
     scheduler: &mut output_scheduler::OutputScheduler,
     scanouts: &[Scanout],
     events: &mut RuntimeState,
@@ -5260,7 +5809,7 @@ fn reset_direct_scanout(
         .direct_scanout
         .outputs_holding_client_scanout()
         .count();
-    if holding == 0 && events.direct_leases.is_empty() {
+    if holding == 0 && events.direct_leases.is_empty() && events.direct_overlays.is_empty() {
         events.direct_arm_watch.clear();
         return Ok(());
     }
@@ -5271,6 +5820,9 @@ fn reset_direct_scanout(
     for output in events.direct_leases.keys().copied().collect::<Vec<_>>() {
         scheduler.set_direct_output(output, false);
         events.direct_scanout.forget_output(output.0);
+    }
+    for output in events.direct_overlays.keys().copied().collect::<Vec<_>>() {
+        release_direct_overlay_output(runtime, scheduler, events, output)?;
     }
     events.direct_leases.clear();
     events.direct_arm_watch.clear();
@@ -6149,7 +6701,7 @@ fn apply_hotplug_topology(
     let linear_render_targets = flutter_launcher
         .as_deref()
         .is_some_and(FlutterLauncher::uses_offscreen_blit);
-    let atlas_modifiers = match shared_atlas_modifiers(
+    let (atlas_code, atlas_modifiers) = match shared_atlas_format(
         reconciliation.scanouts(),
         renderer.egl_context().dmabuf_render_formats(),
     ) {
@@ -6166,6 +6718,7 @@ fn apply_hotplug_topology(
         pool_length,
         &atlas_modifiers,
         linear_render_targets,
+        atlas_code,
     ) {
         Ok(staged) => staged,
         Err(error) => {
@@ -6478,6 +7031,7 @@ fn reconcile_scanouts<'a>(
                 .unwrap_or(output.mode);
             let surface = drm.create_surface(output.crtc, output.mode, &[output.connector])?;
             stage_output_vrr(&surface, output)?;
+            let shell_overlay = select_shell_overlay_plane(drm, &surface)?;
             let plane_properties = AtlasPlaneProperties::load(drm, surface.plane())?;
             created.insert(
                 desired_index,
@@ -6485,6 +7039,7 @@ fn reconcile_scanouts<'a>(
                     output: output.clone(),
                     surface,
                     plane_properties,
+                    shell_overlay,
                     source_rect: *source_rect,
                     original_mode,
                     powered: scanouts

@@ -83,6 +83,18 @@ class DenialBrightnessState {
   final double level;
 }
 
+class DenialShellRenderMode {
+  const DenialShellRenderMode({
+    required this.generation,
+    required this.outputId,
+    required this.overlayEnabled,
+  });
+
+  final int generation;
+  final int outputId;
+  final bool overlayEnabled;
+}
+
 class DenialTextInputState {
   const DenialTextInputState({
     required this.active,
@@ -201,6 +213,8 @@ class DenialBridge {
       StreamController<DenialShortcutConfiguration>.broadcast(sync: true);
   final StreamController<DenialTextInputState> _textInputStates =
       StreamController<DenialTextInputState>.broadcast(sync: true);
+  final StreamController<DenialShellRenderMode> _shellRenderModes =
+      StreamController<DenialShellRenderMode>.broadcast(sync: true);
   final wire.DenialWireCodec _wireCodec = wire.DenialWireCodec();
   final DenialUiDevelopmentProtocol _uiDevelopmentProtocol =
       DenialUiDevelopmentProtocol();
@@ -230,6 +244,8 @@ class DenialBridge {
   Stream<DenialShortcutConfiguration> get shortcutConfigurations =>
       _shortcutConfigurations.stream;
   Stream<DenialTextInputState> get textInputStates => _textInputStates.stream;
+  Stream<DenialShellRenderMode> get shellRenderModes =>
+      _shellRenderModes.stream;
 
   void start({
     required VoidCallback onWindowsChanged,
@@ -331,6 +347,7 @@ class DenialBridge {
     unawaited(_inputDeviceCapabilities.close());
     unawaited(_shortcutConfigurations.close());
     unawaited(_textInputStates.close());
+    unawaited(_shellRenderModes.close());
   }
 
   Future<DenialWindowSnapshot> listWindows(List<DenialWindow> fallback) {
@@ -666,7 +683,9 @@ class DenialBridge {
     return true;
   }
 
-  bool publishCompositionCertificate(wire.DenialCompositionCertificate certificate) {
+  bool publishCompositionCertificate(
+    wire.DenialCompositionCertificate certificate,
+  ) {
     final bytes = _wireCodec.encodeCompositionCertificate(certificate);
     if (bytes == null) {
       return false;
@@ -1478,6 +1497,19 @@ class DenialBridge {
         }
       } else if (payload is wire.SettingsResponse) {
         _handleSettingsResponse(decoded.requestId, payload);
+      } else if (payload is wire.ShellRenderMode) {
+        if (payload.protocolVersion == wire.denialWireVersion &&
+            payload.generation > 0 &&
+            payload.outputId >= 0 &&
+            !_shellRenderModes.isClosed) {
+          _shellRenderModes.add(
+            DenialShellRenderMode(
+              generation: payload.generation,
+              outputId: payload.outputId,
+              overlayEnabled: payload.overlayEnabled,
+            ),
+          );
+        }
       }
     } on Object {
       _wireCodec.rejectedStructuredMessages += 1;

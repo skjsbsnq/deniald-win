@@ -8,11 +8,12 @@ use denial_core::topology::OutputId;
 use denial_core::volition::{
     self, CommitId, FramebufferSet, PlaneCommit, PlaneProperties, Submission, Volition,
 };
-use smithay::backend::drm::DrmDevice;
+use smithay::backend::drm::{DrmDevice, PlaneConfig, PlaneState};
 use smithay::backend::renderer::gles::GlesRenderer;
 use smithay::output::Mode as OutputMode;
 use smithay::reexports::calloop::channel::SyncSender as EventSender;
 use smithay::reexports::drm::control::framebuffer;
+use smithay::utils::{Buffer, Physical, Rectangle};
 use tracing::info;
 
 use super::flutter_runtime::{FlutterRuntime, ReadyFrame};
@@ -254,6 +255,39 @@ fn plane_commit(scanout: &Scanout) -> Result<PlaneCommit, Box<dyn Error>> {
         },
         scanout.source_rect,
     ))
+}
+
+fn atlas_plane_state<'a>(
+    scanout: &Scanout,
+    framebuffer: framebuffer::Handle,
+    fence: Option<std::os::fd::BorrowedFd<'a>>,
+) -> PlaneState<'a> {
+    let (width, height) = scanout.output.mode.size();
+    PlaneState {
+        handle: scanout.surface.plane(),
+        config: Some(PlaneConfig {
+            src: Rectangle::<f64, Buffer>::new(
+                (
+                    f64::from(scanout.source_rect.x),
+                    f64::from(scanout.source_rect.y),
+                )
+                    .into(),
+                (
+                    f64::from(scanout.source_rect.width),
+                    f64::from(scanout.source_rect.height),
+                )
+                    .into(),
+            ),
+            dst: Rectangle::<i32, Physical>::from_size(
+                (i32::from(width), i32::from(height)).into(),
+            ),
+            transform: super::smithay_output_transform(scanout.output.transform),
+            alpha: scanout.plane_properties.smithay_opaque_alpha,
+            damage_clips: None,
+            fb: framebuffer,
+            fence,
+        }),
+    }
 }
 
 fn refresh_interval(scanout: &Scanout) -> Duration {
@@ -593,6 +627,7 @@ pub(super) struct OutputScheduler {
     latest_index: usize,
     presented_frames: u64,
     direct_outputs: HashSet<OutputId>,
+    active_overlay_outputs: HashSet<OutputId>,
 }
 
 impl OutputScheduler {
@@ -679,6 +714,7 @@ impl OutputScheduler {
             latest_index: initial_index,
             presented_frames: 0,
             direct_outputs: HashSet::new(),
+            active_overlay_outputs: HashSet::new(),
         })
     }
 
@@ -687,6 +723,14 @@ impl OutputScheduler {
             self.direct_outputs.insert(output);
         } else {
             self.direct_outputs.remove(&output);
+        }
+    }
+
+    pub(super) fn set_direct_overlay_active(&mut self, output: OutputId, active: bool) {
+        if active {
+            self.active_overlay_outputs.insert(output);
+        } else {
+            self.active_overlay_outputs.remove(&output);
         }
     }
 
@@ -932,6 +976,45 @@ impl OutputScheduler {
                 continue;
             }
             let framebuffer = frame.scene.primary.framebuffer;
+            if self.active_overlay_outputs.contains(&scanout.output.id) {
+                let Some(overlay) = scanout.shell_overlay.as_ref() else {
+                    return Err("an active shell overlay disappeared before fallback".into());
+                };
+                let fence = ready_fences[frame_index].fence.as_ref().map(AsFd::as_fd);
+                let states = vec![
+                    atlas_plane_state(scanout, framebuffer, fence),
+                    PlaneState {
+                        handle: overlay.info.handle,
+                        config: None,
+                    },
+                ];
+                scanout.surface.test_state(states.clone(), false).map_err(|error| {
+                    format!(
+                        "KMS rejected atomic atlas fallback plus overlay unbind for {}: {error}",
+                        scanout.output.name
+                    )
+                })?;
+                scanout.surface.page_flip(states, true).map_err(|error| {
+                    format!(
+                        "KMS rejected real atlas fallback plus overlay unbind for {}: {error}",
+                        scanout.output.name
+                    )
+                })?;
+                let submitted_at = Instant::now();
+                pipeline.next_presentation_at = submitted_at + pipeline.refresh_interval;
+                events.pending.insert(scanout.output.crtc);
+                let mut frame = pipeline.ready.take().expect("checked ready output frame");
+                frame.submitted_at = submitted_at;
+                pipeline.submitted.push_back(frame);
+                if let Some(audit) = audit.as_mut() {
+                    audit.record_real_submission(pipeline_index, frame_index, false);
+                }
+                ready_fences[frame_index].release_user()?;
+                self.active_overlay_outputs.remove(&scanout.output.id);
+                self.submitted_outputs
+                    .push((scanout.output.id, scanout.output.vrr_enabled));
+                continue;
+            }
             if volition_lookahead {
                 let commit = CommitId {
                     stream: pipeline_index,

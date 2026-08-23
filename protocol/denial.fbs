@@ -228,6 +228,20 @@ table CompositionCertificate {
   color_class:CompositionColorClass = Unknown;
   reason_flags:uint;
   engine_generation:ulong;
+  // P8-09 overlay contract. Older senders leave these at their conservative
+  // defaults, which keeps direct scanout on the composed fallback path.
+  shell_damage:WireRect;
+  shell_visible_bounds:WireRect;
+  shell_revision:ulong;
+  overlay_compatible:bool;
+  overlay_rendering:bool;
+}
+
+table ShellRenderMode {
+  protocol_version:ushort = 1;
+  generation:ulong;
+  output_id:long;
+  overlay_enabled:bool;
 }
 
 // InputLayout.flags:
@@ -643,7 +657,8 @@ union Payload {
   SettingsRequest,
   SettingsResponse,
   TextInputState,
-  CompositionCertificate
+  CompositionCertificate,
+  ShellRenderMode
 }
 
 table Envelope {

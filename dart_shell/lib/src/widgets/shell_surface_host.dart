@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../input/shell_interaction_registry.dart';
+import '../input/shell_visual_registry.dart';
 import '../theme/motion.dart';
 import '../theme/tokens.dart';
 
@@ -335,7 +336,17 @@ class _ManagedShellSurfaceLayerState
                 ),
                 ScaleTransition(
                   scale: _scale,
-                  child: surface.builder(context, handle),
+                  child: ShellVisualRegion(
+                    debugLabel: surface.debugLabel,
+                    revision: Object.hash(surface.id, surface.closing),
+                    active: !surface.closing,
+                    // Managed surfaces may contain a backdrop filter or a
+                    // full-scene scrim. Keep them on the conservative
+                    // composition path until a child publishes a narrower
+                    // non-sampling visual region.
+                    requiresClientSampling: true,
+                    child: surface.builder(context, handle),
+                  ),
                 ),
               ],
             ),

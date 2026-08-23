@@ -47,6 +47,8 @@ pub(super) enum FrameAction {
 pub(super) struct FrameScheduler {
     outputs: OutputClocks,
     waiting_for_flutter: Option<FrameTick>,
+    work_output: Option<OutputId>,
+    work_aware: bool,
 }
 
 impl FrameScheduler {
@@ -54,6 +56,8 @@ impl FrameScheduler {
         Self {
             outputs: OutputClocks::new(scanouts, now),
             waiting_for_flutter: None,
+            work_output: None,
+            work_aware: false,
         }
     }
 
@@ -72,15 +76,41 @@ impl FrameScheduler {
         self.outputs.observe_presentation(presentation);
     }
 
+    /// Selects the output whose shell damage owns the next Flutter frame.
+    /// Direct client page flips never set this bit, so a fast game cannot
+    /// pull an idle shell on another output up to its refresh rate.
+    pub(super) fn set_work_output(&mut self, output: Option<OutputId>) {
+        self.work_output = output;
+    }
+
+    pub(super) fn set_work_aware(&mut self, enabled: bool) {
+        self.work_aware = enabled;
+        if !enabled {
+            self.work_output = None;
+        }
+    }
+
     pub(super) fn step(&mut self, now: Instant, pending: PendingFrame) -> FrameAction {
         let render_tick = self.outputs.advance(now);
+        let work_tick = self.work_output.and_then(|output| {
+            self.outputs
+                .ticks()
+                .iter()
+                .copied()
+                .find(|tick| tick.output == output)
+        });
+        let authorized_tick = if self.work_aware {
+            work_tick
+        } else {
+            render_tick
+        };
         if let Some(waiting_tick) = self.waiting_for_flutter {
             // AwaitVSync is asynchronous. If Flutter returns its baton after
             // one or more display edges, authorize it against the newest
             // edge instead of feeding Dart an old animation timestamp. The
             // imported texture already contains its latest contents, so the
             // physical authorization must be a latest-value mailbox too.
-            let authorized_tick = render_tick.unwrap_or(waiting_tick);
+            let authorized_tick = authorized_tick.unwrap_or(waiting_tick);
             self.waiting_for_flutter = Some(authorized_tick);
             if pending.flutter_requested {
                 self.waiting_for_flutter = None;
@@ -89,7 +119,7 @@ impl FrameScheduler {
             return FrameAction::Skip;
         }
 
-        let Some(authorized_tick) = render_tick else {
+        let Some(authorized_tick) = authorized_tick else {
             return FrameAction::Skip;
         };
         if !pending.producer_available || !pending.has_work() {
@@ -116,10 +146,15 @@ impl FrameScheduler {
     }
 
     pub(super) fn render_interval(&self) -> Option<Duration> {
+        let selected_output = if self.work_aware {
+            self.work_output
+        } else {
+            self.outputs.render_output
+        };
         self.outputs
             .clocks
             .iter()
-            .find(|clock| Some(clock.source.output) == self.outputs.render_output)
+            .find(|clock| Some(clock.source.output) == selected_output)
             .map(|clock| clock.interval)
     }
 }
@@ -414,6 +449,8 @@ mod tests {
                 render_output: Some(render_output),
             },
             waiting_for_flutter: None,
+            work_output: None,
+            work_aware: false,
         }
     }
 
@@ -573,6 +610,50 @@ mod tests {
 
         assert_eq!(fast_ticks, 5);
         assert_eq!(slow_ticks, 3);
+    }
+
+    #[test]
+    fn work_aware_clock_ignores_an_idle_faster_direct_output() {
+        let now = Instant::now();
+        let mut scheduler = mixed_scheduler(now);
+        scheduler.set_work_aware(true);
+        scheduler.set_work_output(Some(SLOW_OUTPUT));
+
+        let first = scheduler.step(now, pending(true, false, true));
+        assert!(matches!(first, FrameAction::Render(tick) if tick.output == SLOW_OUTPUT));
+
+        let fast_only = scheduler.step(now + FAST_INTERVAL, pending(true, false, true));
+        assert_eq!(fast_only, FrameAction::Skip);
+        assert_eq!(scheduler.output_ticks().len(), 1);
+        assert_eq!(scheduler.output_ticks()[0].output, FAST_OUTPUT);
+
+        let slow_deadline = scheduler.step(now + INTERVAL, pending(true, false, true));
+        assert!(matches!(slow_deadline, FrameAction::Render(tick) if tick.output == SLOW_OUTPUT));
+        assert_eq!(scheduler.render_interval(), Some(INTERVAL));
+    }
+
+    #[test]
+    fn work_aware_clock_needs_damage_but_not_a_game_presentation() {
+        let now = Instant::now();
+        let mut scheduler = mixed_scheduler(now);
+        scheduler.set_work_aware(true);
+        scheduler.set_work_output(Some(SLOW_OUTPUT));
+
+        assert_eq!(
+            scheduler.step(now, pending(false, false, true)),
+            FrameAction::Skip,
+            "an idle overlay must not render merely because its clock ticked"
+        );
+        assert_eq!(
+            scheduler.step(now + INTERVAL, pending(true, false, true)),
+            FrameAction::Render(FrameTick {
+                output: SLOW_OUTPUT,
+                interval: INTERVAL,
+                observed_at: now + INTERVAL,
+                presented_at: None,
+            }),
+            "synthetic output deadline must service UI even when the game is stalled"
+        );
     }
 
     #[test]

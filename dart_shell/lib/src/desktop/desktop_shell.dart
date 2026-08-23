@@ -15,6 +15,7 @@ import '../launcher/widgets/home_tiles.dart';
 import '../local_apps/local_flutter_application.dart';
 import '../local_apps/local_flutter_window_host.dart';
 import '../input/shell_interaction_registry.dart';
+import '../input/shell_visual_registry.dart';
 import '../localization/denial_localizations.dart';
 import '../models/display_layout.dart';
 import '../models/denial_window.dart';
@@ -39,6 +40,7 @@ import '../state/fcitx5.dart';
 import '../state/quick_settings.dart';
 import '../state/screenshot_selection.dart';
 import '../state/shell_controller.dart';
+import '../state/shell_render_mode.dart';
 import '../theme/motion.dart';
 import '../theme/shell_theme.dart';
 import '../theme/tokens.dart';
@@ -764,6 +766,11 @@ class _DesktopShellState extends ConsumerState<DesktopShell> {
             : null);
     final shellOutput = displayLayout?.systemBarOutput;
     final mainOutput = displayLayout?.mainOutput;
+    final overlayRendering =
+        mainOutput != null &&
+        ref
+            .watch(shellRenderModeProvider)
+            .overlayEnabledFor(mainOutput.monitorId);
     final wallpaperSelectorVisible = ref.watch(
       wallpaperControllerProvider.select((state) => state.selectorVisible),
     );
@@ -771,7 +778,7 @@ class _DesktopShellState extends ConsumerState<DesktopShell> {
     return DefaultTextStyle(
       style: ShellText.base,
       child: ColoredBox(
-        color: ShellColors.background,
+        color: overlayRendering ? Colors.transparent : ShellColors.background,
         child: LayoutBuilder(
           builder: (context, constraints) => _DesktopScene(
             viewSize: constraints.biggest,
@@ -786,6 +793,7 @@ class _DesktopShellState extends ConsumerState<DesktopShell> {
             wallpaperSelectorVisible: wallpaperSelectorVisible,
             shellOutputRect: shellOutput?.logicalRect,
             mainOutputRect: mainOutput?.logicalRect,
+            overlayRendering: overlayRendering,
             applicationSearchFocusNode: _applicationSearchFocusNode,
             onOpenLauncher: _openLauncher,
             onToggleLauncher: _toggleLauncher,
@@ -1133,6 +1141,7 @@ class _DesktopScene extends ConsumerStatefulWidget {
     required this.wallpaperSelectorVisible,
     required this.shellOutputRect,
     required this.mainOutputRect,
+    required this.overlayRendering,
     required this.applicationSearchFocusNode,
     required this.onOpenLauncher,
     required this.onToggleLauncher,
@@ -1171,6 +1180,7 @@ class _DesktopScene extends ConsumerStatefulWidget {
   final bool wallpaperSelectorVisible;
   final Rect? shellOutputRect;
   final Rect? mainOutputRect;
+  final bool overlayRendering;
   final FocusNode applicationSearchFocusNode;
   final VoidCallback onOpenLauncher;
   final VoidCallback onToggleLauncher;
@@ -1280,6 +1290,7 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
     final wallpaperSelectorVisible = widget.wallpaperSelectorVisible;
     final shellOutputRect = widget.shellOutputRect;
     final mainOutputRect = widget.mainOutputRect;
+    final overlayRendering = widget.overlayRendering;
     final applicationSearchFocusNode = widget.applicationSearchFocusNode;
     final onOpenLauncher = widget.onOpenLauncher;
     final onToggleLauncher = widget.onToggleLauncher;
@@ -1414,7 +1425,7 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
     return Stack(
       fit: StackFit.expand,
       children: [
-        const ShellWallpaper(),
+        if (!overlayRendering) const ShellWallpaper(),
         Positioned.fill(
           child: IgnorePointer(
             ignoring: wallpaperSelectorVisible,
@@ -1425,26 +1436,28 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  _DesktopWidgetCanvas(
-                    widgets: homeLayout.widgets,
-                    frames: homeLayout.widgetFrames,
-                  ),
-                  ..._buildDesktopWindowLayers(
-                    placements: placements,
-                    windowsById: windowsById,
-                    desktop: desktop,
-                    desktopPlane: true,
-                    desktopWidgetFrames: homeLayout.windowFrames,
-                    switcher: windowSwitcher,
-                    switcherStageBounds: switcherStageBounds,
-                    topZ: topZ,
-                    reduceMotion: reduceMotion,
-                    onActivateWindow: onActivateWindow,
-                    onBeginOverviewDrag: onBeginOverviewDrag,
-                    onUpdateOverviewDrag: onUpdateOverviewDrag,
-                    onEndOverviewDrag: onEndOverviewDrag,
-                    onCancelOverviewDrag: onCancelOverviewDrag,
-                  ),
+                  if (!overlayRendering)
+                    _DesktopWidgetCanvas(
+                      widgets: homeLayout.widgets,
+                      frames: homeLayout.widgetFrames,
+                    ),
+                  if (!overlayRendering)
+                    ..._buildDesktopWindowLayers(
+                      placements: placements,
+                      windowsById: windowsById,
+                      desktop: desktop,
+                      desktopPlane: true,
+                      desktopWidgetFrames: homeLayout.windowFrames,
+                      switcher: windowSwitcher,
+                      switcherStageBounds: switcherStageBounds,
+                      topZ: topZ,
+                      reduceMotion: reduceMotion,
+                      onActivateWindow: onActivateWindow,
+                      onBeginOverviewDrag: onBeginOverviewDrag,
+                      onUpdateOverviewDrag: onUpdateOverviewDrag,
+                      onEndOverviewDrag: onEndOverviewDrag,
+                      onCancelOverviewDrag: onCancelOverviewDrag,
+                    ),
                   Positioned.fill(
                     child: ShellInputRegion(
                       debugLabel: 'Desktop overview',
@@ -1461,28 +1474,32 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
                       onTap: onOverviewBarrierTap,
                     ),
                   ),
-                  if (windowSwitcher != null)
+                  if (!overlayRendering && windowSwitcher != null)
                     DesktopWindowSwitcherBackdrop(
                       switcher: windowSwitcher,
                       bounds: switcherStageBounds,
                     ),
-                  ..._buildDesktopWindowLayers(
-                    placements: placements,
-                    windowsById: windowsById,
-                    desktop: desktop,
-                    desktopPlane: false,
-                    desktopWidgetFrames: homeLayout.windowFrames,
-                    switcher: windowSwitcher,
-                    switcherStageBounds: switcherStageBounds,
-                    topZ: topZ,
-                    reduceMotion: reduceMotion,
-                    onActivateWindow: onActivateWindow,
-                    onBeginOverviewDrag: onBeginOverviewDrag,
-                    onUpdateOverviewDrag: onUpdateOverviewDrag,
-                    onEndOverviewDrag: onEndOverviewDrag,
-                    onCancelOverviewDrag: onCancelOverviewDrag,
-                  ),
-                  for (final closing in _closingWindows.values)
+                  if (!overlayRendering)
+                    ..._buildDesktopWindowLayers(
+                      placements: placements,
+                      windowsById: windowsById,
+                      desktop: desktop,
+                      desktopPlane: false,
+                      desktopWidgetFrames: homeLayout.windowFrames,
+                      switcher: windowSwitcher,
+                      switcherStageBounds: switcherStageBounds,
+                      topZ: topZ,
+                      reduceMotion: reduceMotion,
+                      onActivateWindow: onActivateWindow,
+                      onBeginOverviewDrag: onBeginOverviewDrag,
+                      onUpdateOverviewDrag: onUpdateOverviewDrag,
+                      onEndOverviewDrag: onEndOverviewDrag,
+                      onCancelOverviewDrag: onCancelOverviewDrag,
+                    ),
+                  for (final closing
+                      in overlayRendering
+                          ? const <_ClosingDesktopWindow>[]
+                          : _closingWindows.values)
                     Positioned.fromRect(
                       key: ValueKey<String>(
                         'desktop-closing-window-${closing.id}',
@@ -1493,7 +1510,7 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
                         onCompleted: () => _completeCloseAnimation(closing.id),
                       ),
                     ),
-                  if (windowSwitcher != null)
+                  if (!overlayRendering && windowSwitcher != null)
                     DesktopWindowSwitcherLayer(
                       key: ValueKey<String>(
                         'desktop-window-switcher-${windowSwitcher.sessionId}',
@@ -1519,12 +1536,19 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
                     Positioned.fromRect(
                       key: ValueKey<String>('system-bar-${bar.monitorId}'),
                       rect: bar.rect,
-                      child: DesktopSystemBar(
-                        side: bar.side,
-                        monitorId: bar.monitorId,
-                        onToggleLauncher: onToggleLauncher,
-                        onToggleDashboard: onToggleDashboard,
-                        onToggleCalendar: onToggleCalendar,
+                      child: ShellVisualRegion(
+                        debugLabel: 'Desktop system bar (${bar.monitorId})',
+                        revision: Object.hash(bar.rect, bar.side),
+                        requiresClientSampling:
+                            ShellTheme.of(context).backdropBlurEnabled &&
+                            ShellTheme.of(context).backdropBlurSigma > 0,
+                        child: DesktopSystemBar(
+                          side: bar.side,
+                          monitorId: bar.monitorId,
+                          onToggleLauncher: onToggleLauncher,
+                          onToggleDashboard: onToggleDashboard,
+                          onToggleCalendar: onToggleCalendar,
+                        ),
                       ),
                     ),
                   if (!launcherRect.isEmpty)
@@ -1627,7 +1651,10 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
                         ),
                       ),
                     ),
-                  for (final popup in inputMethodPopups)
+                  for (final popup
+                      in overlayRendering
+                          ? const <DenialWindow>[]
+                          : inputMethodPopups)
                     if (popup.geometry case final geometry?)
                       Positioned.fromRect(
                         key: ValueKey<String>(
@@ -1646,10 +1673,18 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
                     Positioned(
                       top: 12,
                       right: 12,
-                      child: ShellFrameTimingOverlayStack(
-                        windows: windows,
-                        showImportedTextureCharts:
-                            frameTimingOptions.showImportedTextureCharts,
+                      child: ShellVisualRegion(
+                        debugLabel: 'Desktop frame timing diagnostics',
+                        revision: Object.hash(
+                          frameTimingOptions.showImportedTextureCharts,
+                          windows.length,
+                        ),
+                        requiresClientSampling: true,
+                        child: ShellFrameTimingOverlayStack(
+                          windows: windows,
+                          showImportedTextureCharts:
+                              frameTimingOptions.showImportedTextureCharts,
+                        ),
                       ),
                     ),
                 ],
@@ -1661,12 +1696,12 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
         Positioned.fill(
           child: ShellInputRegion(
             debugLabel: 'Wallpaper selector',
-            active: wallpaperSelectorVisible,
+            active: wallpaperSelectorVisible && !overlayRendering,
             pointerPolicy: ShellPointerPolicy.fullScene,
             keyboardPolicy: ShellKeyboardPolicy.capture,
             compositorPolicy: ShellCompositorPolicy.exclusive,
             child: WallpaperSelectorOverlay(
-              visible: wallpaperSelectorVisible,
+              visible: wallpaperSelectorVisible && !overlayRendering,
               displayRect: mainDisplayRect,
               onDismiss: onCloseWallpaperSelector,
             ),

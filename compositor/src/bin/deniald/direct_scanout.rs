@@ -1588,7 +1588,9 @@ pub(super) fn evaluate_candidate(
     if !certificate.known_opaque {
         return Some(RejectReason::NotOpaque);
     }
-    if !certificate.shell_fully_transparent {
+    if !certificate.shell_fully_transparent
+        && !(certificate.overlay_compatible && certificate.overlay_rendering)
+    {
         return Some(RejectReason::ShellVisible);
     }
     if certificate.requires_client_sampling {
@@ -2262,7 +2264,7 @@ mod tests {
         let mut machine = OutputMachine::default();
         let first = key(9);
 
-        let mut step = |machine: &mut OutputMachine, event, label: &str| {
+        let step = |machine: &mut OutputMachine, event, label: &str| {
             let actions = machine.advance(event, now);
             assert!(
                 !actions.contains(PromotionAction::RetireDirectLeases),
@@ -2759,6 +2761,21 @@ mod tests {
             color_class: super::super::wire::CompositionColorClass::SdrCompatible,
             reason_flags: 0,
             engine_generation: 1,
+            shell_damage: super::super::wire::InputRect {
+                x: 0.0,
+                y: 0.0,
+                width: 0.0,
+                height: 0.0,
+            },
+            shell_visible_bounds: super::super::wire::InputRect {
+                x: 0.0,
+                y: 0.0,
+                width: 0.0,
+                height: 0.0,
+            },
+            shell_revision: 1,
+            overlay_compatible: true,
+            overlay_rendering: false,
         };
         let metadata = CandidateMetadata {
             single_output: true,

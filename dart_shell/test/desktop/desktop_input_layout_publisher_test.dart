@@ -6,6 +6,7 @@ import 'package:denial_dart_shell/src/models/denial_window.dart';
 import 'package:denial_dart_shell/src/models/denial_window_event.dart';
 import 'package:denial_dart_shell/src/models/display_layout.dart';
 import 'package:denial_dart_shell/src/platform/denial_bridge.dart';
+import 'package:denial_dart_shell/src/state/display_layout.dart';
 import 'package:denial_dart_shell/src/state/shell_controller.dart';
 import 'package:denial_dart_shell/src/state/shell_state.dart';
 import 'package:flutter/widgets.dart';
@@ -273,6 +274,7 @@ _pumpPublisher(WidgetTester tester) async {
   final container = ProviderContainer.test(
     overrides: [
       denialBridgeProvider.overrideWithValue(bridge),
+      displayLayoutProvider.overrideWithBuild((ref, controller) => null),
       shellControllerProvider.overrideWithBuild(
         (ref, controller) => ShellState.initial().copyWith(
           windows: <DenialWindow>[_publisherWindow],

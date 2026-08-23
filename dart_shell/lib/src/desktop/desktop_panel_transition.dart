@@ -1,6 +1,7 @@
 import 'package:flutter/widgets.dart';
 
 import '../input/shell_interaction_registry.dart';
+import '../input/shell_visual_registry.dart';
 import '../theme/motion.dart';
 import '../theme/shell_theme.dart';
 import '../widgets/shell_backdrop_blur.dart';
@@ -129,47 +130,56 @@ class _DesktopPanelTransitionState extends State<DesktopPanelTransition>
       keyboardPolicy: widget.visible
           ? widget.keyboardPolicy
           : ShellKeyboardPolicy.none,
-      child: IgnorePointer(
-        ignoring: !widget.visible,
-        child: ExcludeSemantics(
-          excluding: !widget.visible,
-          child: ExcludeFocus(
+      child: ShellVisualRegion(
+        debugLabel: widget.inputDebugLabel,
+        active: widget.visible,
+        revision: widget.visible ? 1 : 0,
+        requiresClientSampling:
+            widget.visible && ShellTheme.of(context).panelOpacity < 1.0,
+        child: IgnorePointer(
+          ignoring: !widget.visible,
+          child: ExcludeSemantics(
             excluding: !widget.visible,
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final direction = widget.entryDirection;
-                final travel = Offset(
-                  direction.dx * (constraints.maxWidth + widget.entryDistance),
-                  direction.dy * (constraints.maxHeight + widget.entryDistance),
-                );
-                return Offstage(
-                  offstage: _offstage,
-                  child: ClipRect(
-                    clipper: _DesktopPanelVisibleClipper(
-                      progress: _progress,
-                      travel: travel,
-                    ),
-                    child: ShellBackdropBlur(
-                      blur: shouldBlurDesktopPanel(
-                        panelOpacity: ShellTheme.of(context).panelOpacity,
+            child: ExcludeFocus(
+              excluding: !widget.visible,
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final direction = widget.entryDirection;
+                  final travel = Offset(
+                    direction.dx *
+                        (constraints.maxWidth + widget.entryDistance),
+                    direction.dy *
+                        (constraints.maxHeight + widget.entryDistance),
+                  );
+                  return Offstage(
+                    offstage: _offstage,
+                    child: ClipRect(
+                      clipper: _DesktopPanelVisibleClipper(
+                        progress: _progress,
+                        travel: travel,
                       ),
-                      borderRadius: BorderRadius.circular(
-                        ShellTheme.of(context).panelRadius,
-                      ),
-                      child: RepaintBoundary(
-                        child: AnimatedBuilder(
-                          animation: _progress,
-                          child: widget.child,
-                          builder: (context, child) => Transform.translate(
-                            offset: travel * (1.0 - _progress.value),
-                            child: child,
+                      child: ShellBackdropBlur(
+                        blur: shouldBlurDesktopPanel(
+                          panelOpacity: ShellTheme.of(context).panelOpacity,
+                        ),
+                        borderRadius: BorderRadius.circular(
+                          ShellTheme.of(context).panelRadius,
+                        ),
+                        child: RepaintBoundary(
+                          child: AnimatedBuilder(
+                            animation: _progress,
+                            child: widget.child,
+                            builder: (context, child) => Transform.translate(
+                              offset: travel * (1.0 - _progress.value),
+                              child: child,
+                            ),
                           ),
                         ),
                       ),
                     ),
-                  ),
-                );
-              },
+                  );
+                },
+              ),
             ),
           ),
         ),

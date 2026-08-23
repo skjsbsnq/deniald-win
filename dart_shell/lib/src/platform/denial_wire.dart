@@ -74,6 +74,11 @@ class DenialCompositionCertificate {
     required this.colorClass,
     required this.reasonFlags,
     required this.engineGeneration,
+    required this.shellDamage,
+    required this.shellVisibleBounds,
+    required this.shellRevision,
+    required this.overlayCompatible,
+    required this.overlayRendering,
   });
 
   final int certificateEpoch;
@@ -101,6 +106,11 @@ class DenialCompositionCertificate {
   final generated.CompositionColorClass colorClass;
   final int reasonFlags;
   final int engineGeneration;
+  final Rect shellDamage;
+  final Rect shellVisibleBounds;
+  final int shellRevision;
+  final bool overlayCompatible;
+  final bool overlayRendering;
 }
 
 enum DenialKeyboardKeyPhase { tap, pressed, released }
@@ -229,7 +239,9 @@ class DenialWireCodec {
     );
   }
 
-  Uint8List? encodeCompositionCertificate(DenialCompositionCertificate certificate) {
+  Uint8List? encodeCompositionCertificate(
+    DenialCompositionCertificate certificate,
+  ) {
     if (certificate.certificateEpoch <= 0 ||
         certificate.layoutEpoch <= 0 ||
         certificate.outputId < 0 ||
@@ -237,11 +249,16 @@ class DenialWireCodec {
         certificate.scale <= 0.0 ||
         !certificate.scale.isFinite ||
         certificate.engineGeneration <= 0 ||
+        certificate.shellRevision < 0 ||
+        !_finiteRect(certificate.shellDamage) ||
+        !_finiteRect(certificate.shellVisibleBounds) ||
+        ((certificate.overlayCompatible || certificate.overlayRendering) &&
+            certificate.shellRevision == 0) ||
         (certificate.requiresClientSampling
             ? !_finiteRect(certificate.sourceRect) ||
-                !_finiteRect(certificate.destinationRect)
+                  !_finiteRect(certificate.destinationRect)
             : !_validRect(certificate.sourceRect) ||
-                !_validRect(certificate.destinationRect)) ||
+                  !_validRect(certificate.destinationRect)) ||
         certificate.outputPixelSize.width <= 0.0 ||
         certificate.outputPixelSize.height <= 0.0) {
       return null;
@@ -277,6 +294,11 @@ class DenialWireCodec {
         colorClass: certificate.colorClass,
         reasonFlags: certificate.reasonFlags,
         engineGeneration: certificate.engineGeneration,
+        shellDamage: _rectBuilder(certificate.shellDamage),
+        shellVisibleBounds: _rectBuilder(certificate.shellVisibleBounds),
+        shellRevision: certificate.shellRevision,
+        overlayCompatible: certificate.overlayCompatible,
+        overlayRendering: certificate.overlayRendering,
       ),
     );
   }

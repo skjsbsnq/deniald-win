@@ -3,6 +3,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../localization/denial_localizations.dart';
+import '../input/shell_visual_registry.dart';
 import '../models/display_layout.dart';
 import '../settings/settings_controller.dart';
 import '../state/display_layout.dart';
@@ -38,20 +39,26 @@ class SystemLevelHudLayer extends ConsumerWidget {
     return Positioned.fromRect(
       rect: rect,
       child: IgnorePointer(
-        child: _SystemLevelHudCard(
-          level: hud.level,
-          visible: hud.visible,
-          icon: isBrightness
-              ? Icons.brightness_6_rounded
-              : _volumeIcon(hud.level),
-          title: isBrightness ? l10n.brightnessTitle : l10n.volumeTitle,
-          detail: isBrightness ? output.name : null,
-          semanticLabel: isBrightness
-              ? l10n.outputBrightnessSemantics(output.name)
-              : l10n.outputVolumeSemantics,
-          inactiveColor: isBrightness
-              ? ShellColors.brightnessTrack
-              : ShellColors.volumeTrack,
+        child: ShellVisualRegion(
+          debugLabel: 'System level HUD',
+          active: hud.visible,
+          revision: hud.revision,
+          requiresClientSampling: ShellTheme.of(context).panelOpacity < 1.0,
+          child: _SystemLevelHudCard(
+            level: hud.level,
+            visible: hud.visible,
+            icon: isBrightness
+                ? Icons.brightness_6_rounded
+                : _volumeIcon(hud.level),
+            title: isBrightness ? l10n.brightnessTitle : l10n.volumeTitle,
+            detail: isBrightness ? output.name : null,
+            semanticLabel: isBrightness
+                ? l10n.outputBrightnessSemantics(output.name)
+                : l10n.outputVolumeSemantics,
+            inactiveColor: isBrightness
+                ? ShellColors.brightnessTrack
+                : ShellColors.volumeTrack,
+          ),
         ),
       ),
     );
