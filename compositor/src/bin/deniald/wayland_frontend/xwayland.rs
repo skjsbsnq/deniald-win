@@ -1019,6 +1019,19 @@ impl XwmHandler for RuntimeState {
         let Some(window) = window_for_x11(self, &window) else {
             return;
         };
+        if let Some(surface) = window.x11_surface()
+            && !x11_window_accepts_activation(surface)
+        {
+            // Menus, combo boxes and tooltips may request an X11 activation
+            // while they are clicked. They are transient interaction surfaces,
+            // not focus owners; honoring this request would move keyboard
+            // focus away from Steam's parent and make the menu close.
+            debug!(
+                window = surface.window_id(),
+                "ignored X11 activation request for a transient popup"
+            );
+            return;
+        }
         if activate_window(self, &window, SERIAL_COUNTER.next_serial()) {
             debug!("honored X11 active-window request");
         }
