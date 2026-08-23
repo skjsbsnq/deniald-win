@@ -972,6 +972,7 @@ struct BufferSlot {
     damage: DamageRegion,
     screenshot_request_id: Option<u64>,
     rendered_at: Option<Instant>,
+    sampled_revisions: Vec<(i64, u64)>,
 }
 
 #[derive(Debug)]
@@ -1015,6 +1016,7 @@ impl BufferBroker {
                 damage: DamageRegion::full(size.width, size.height),
                 screenshot_request_id: None,
                 rendered_at: None,
+                sampled_revisions: Vec::new(),
             })
             .collect::<Vec<_>>();
         if scanning >= slots.len() {
@@ -1090,6 +1092,7 @@ impl BufferBroker {
                 slot.state = BufferState::Free;
                 slot.fence = None;
                 slot.rendered_at = None;
+                slot.sampled_revisions.clear();
                 if self.next_screenshot_request_id.is_none() {
                     self.next_screenshot_request_id = slot.screenshot_request_id.take();
                 } else {
@@ -1114,6 +1117,7 @@ impl BufferBroker {
         slot.state = BufferState::Rendering;
         slot.fence = None;
         slot.screenshot_request_id = self.next_screenshot_request_id.take();
+        slot.sampled_revisions.clear();
         Ok(slot.framebuffer)
     }
 
@@ -1129,7 +1133,7 @@ impl BufferBroker {
         frame_damage: &[sys::FlutterRect],
         fence: Option<OwnedFd>,
     ) -> Option<usize> {
-        self.mark_ready_at(framebuffer, frame_damage, fence, None)
+        self.mark_ready_at(framebuffer, frame_damage, fence, None, Vec::new())
     }
 
     fn mark_ready_at(
@@ -1138,6 +1142,7 @@ impl BufferBroker {
         frame_damage: &[sys::FlutterRect],
         fence: Option<OwnedFd>,
         rendered_at: Option<Instant>,
+        sampled_revisions: Vec<(i64, u64)>,
     ) -> Option<usize> {
         let index = self
             .slots
@@ -1165,6 +1170,7 @@ impl BufferBroker {
         slot.state = BufferState::Ready;
         slot.fence = fence;
         slot.rendered_at = rendered_at;
+        slot.sampled_revisions = sampled_revisions;
         // Only Pending/Scanning buffers have escaped to KMS. A previous Ready
         // frame is still private to this broker and may be replaced by the
         // newer logical frame. The shared GLES command stream orders writes
@@ -1176,6 +1182,7 @@ impl BufferBroker {
                 slot.state = BufferState::Free;
                 slot.fence = None;
                 slot.rendered_at = None;
+                slot.sampled_revisions.clear();
                 slot.screenshot_request_id = None;
             }
         }
@@ -1234,6 +1241,7 @@ impl BufferBroker {
             damage,
             screenshot_request_id,
             rendered_at: self.slots[index].rendered_at.take(),
+            sampled_revisions: std::mem::take(&mut self.slots[index].sampled_revisions),
         })
     }
 
@@ -1263,6 +1271,7 @@ impl BufferBroker {
             slot.fence = None;
             slot.screenshot_request_id = None;
             slot.rendered_at = None;
+            slot.sampled_revisions.clear();
         }
     }
 
@@ -1348,6 +1357,7 @@ pub struct ReadyFrame {
     pub damage: DamageRegion,
     pub screenshot_request_id: Option<u64>,
     pub rendered_at: Option<Instant>,
+    pub sampled_revisions: Vec<(i64, u64)>,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -2427,6 +2437,14 @@ impl SampledBufferHoldBatch {
 
     fn texture_ids(&self) -> impl Iterator<Item = i64> + '_ {
         self.holds.iter().flatten().map(|hold| hold.texture_id)
+    }
+
+    fn revisions(&self) -> Vec<(i64, u64)> {
+        self.holds
+            .iter()
+            .flatten()
+            .map(|hold| (hold.texture_id, hold.generation))
+            .collect()
     }
 
     pub(super) fn materialize_native_releases(
@@ -4202,6 +4220,10 @@ impl OpenGlHandler for FlutterGlHandler {
                 }
             };
             let sampled = self.seal_sampled_buffers();
+            let sampled_revisions = sampled
+                .as_ref()
+                .map(SampledBufferHoldBatch::revisions)
+                .unwrap_or_default();
             if let Some(audit) = &self.render_audit {
                 lock(audit).record_present(
                     frame.frame_damage,
@@ -4232,6 +4254,7 @@ impl OpenGlHandler for FlutterGlHandler {
                 frame.frame_damage,
                 fence,
                 rendered_at,
+                sampled_revisions,
             ) else {
                 error!(
                     framebuffer = frame.framebuffer,
@@ -8357,6 +8380,18 @@ mod tests {
         assert!(covers(&damage, 2.0, 2.0));
         assert!(covers(&damage, 11.0, 11.0));
         assert!(!broker.has_ready_handoff());
+    }
+
+    #[test]
+    fn ready_frame_carries_the_revisions_sampled_into_that_exact_atlas() {
+        let size = PixelSize::new(120, 90);
+        let mut broker = BufferBroker::new([1, 2, 3], 0, size).unwrap();
+        let framebuffer = broker.acquire_for_render().unwrap();
+        broker
+            .mark_ready_at(framebuffer, &[], None, None, vec![(45, 34818), (7, 9)])
+            .unwrap();
+        let ready = broker.take_latest_ready().unwrap();
+        assert_eq!(ready.sampled_revisions, vec![(45, 34818), (7, 9)]);
     }
 
     #[test]

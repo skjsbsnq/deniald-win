@@ -4723,6 +4723,7 @@ fn publish_direct_overlay_ready(
         damage: _,
         screenshot_request_id: _,
         rendered_at: _,
+        sampled_revisions: _,
     } = ready;
     if let Err(error) = runtime.publish_to_outputs(index, 1) {
         runtime.cancel_flip(index);
@@ -5245,7 +5246,7 @@ fn service_direct_scanout(
     let sample_ready = events
         .direct_scanout
         .outputs_awaiting_client_sample()
-        .filter(|(_, surface, revision)| {
+        .filter(|(output, surface, revision)| {
             let sampled = runtime
                 .sampled_client_revision(*surface)
                 .is_some_and(|sampled| sampled >= *revision);
@@ -5253,7 +5254,13 @@ fn service_direct_scanout(
                 .wayland
                 .as_ref()
                 .is_none_or(|frontend| !frontend.surface_exists(*surface));
-            sampled || gone
+            gone || (sampled
+                && scheduler.ready_contains_sample(
+                    OutputId(*output),
+                    *surface,
+                    *revision,
+                    scanouts,
+                ))
         })
         .map(|(output, _, _)| output)
         .collect::<Vec<_>>();
@@ -5668,6 +5675,7 @@ fn apply_direct_actions_with_candidate(
                 events.scene_sync.mark_dirty();
             }
             PromotionAction::RequestFallbackFrame { surface, revision } => {
+                scheduler.set_fallback_preparing(output, true);
                 events.scene_sync.mark_dirty();
                 info!(
                     event = "fallback_armed",
@@ -5682,6 +5690,7 @@ fn apply_direct_actions_with_candidate(
                 // its next ready frame is the single atomic commit that
                 // replaces the client primary (C1 §K4).
                 scheduler.set_direct_output(output, false);
+                scheduler.set_fallback_preparing(output, false);
                 events.scene_sync.mark_dirty();
                 let follow_up = events
                     .direct_scanout

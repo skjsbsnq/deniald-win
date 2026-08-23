@@ -98,6 +98,7 @@ struct OutputFrame {
     scene: OutputPlaneScene,
     screenshot_request_id: Option<u64>,
     submitted_at: Instant,
+    sampled_revisions: Vec<(i64, u64)>,
 }
 
 impl OutputFrame {
@@ -632,6 +633,7 @@ pub(super) struct OutputScheduler {
     latest_index: usize,
     presented_frames: u64,
     direct_outputs: HashSet<OutputId>,
+    fallback_preparing_outputs: HashSet<OutputId>,
     active_overlay_outputs: HashSet<OutputId>,
 }
 
@@ -719,6 +721,7 @@ impl OutputScheduler {
             latest_index: initial_index,
             presented_frames: 0,
             direct_outputs: HashSet::new(),
+            fallback_preparing_outputs: HashSet::new(),
             active_overlay_outputs: HashSet::new(),
         })
     }
@@ -728,7 +731,40 @@ impl OutputScheduler {
             self.direct_outputs.insert(output);
         } else {
             self.direct_outputs.remove(&output);
+            self.fallback_preparing_outputs.remove(&output);
         }
+    }
+
+    pub(super) fn set_fallback_preparing(&mut self, output: OutputId, preparing: bool) {
+        if preparing {
+            self.fallback_preparing_outputs.insert(output);
+        } else {
+            self.fallback_preparing_outputs.remove(&output);
+        }
+    }
+
+    pub(super) fn ready_contains_sample(
+        &self,
+        output: OutputId,
+        surface: u64,
+        revision: u64,
+        scanouts: &[Scanout],
+    ) -> bool {
+        let Ok(texture_id) = i64::try_from(surface) else {
+            return false;
+        };
+        self.pipelines
+            .iter()
+            .find(|pipeline| scanouts[pipeline.scanout_index].output.id == output)
+            .and_then(|pipeline| pipeline.ready.as_ref())
+            .is_some_and(|frame| {
+                frame
+                    .sampled_revisions
+                    .iter()
+                    .any(|(sampled_id, sampled_revision)| {
+                        *sampled_id == texture_id && *sampled_revision >= revision
+                    })
+            })
     }
 
     pub(super) fn set_direct_overlay_active(&mut self, output: OutputId, active: bool) {
@@ -762,6 +798,7 @@ impl OutputScheduler {
             damage,
             screenshot_request_id,
             rendered_at,
+            sampled_revisions,
         } = ready;
         if self
             .ready_fences
@@ -784,11 +821,14 @@ impl OutputScheduler {
                         if pipeline.powering_off {
                             return None;
                         }
-                        if self
-                            .direct_outputs
-                            .contains(&scanouts[pipeline.scanout_index].output.id)
+                        let output = scanouts[pipeline.scanout_index].output.id;
+                        if self.direct_outputs.contains(&output)
+                            && !self.fallback_preparing_outputs.contains(&output)
                         {
                             return None;
+                        }
+                        if self.fallback_preparing_outputs.contains(&output) {
+                            return Some(pipeline_index);
                         }
                         let rect = scanouts[pipeline.scanout_index].source_rect;
                         damage
@@ -849,6 +889,7 @@ impl OutputScheduler {
                 // Reset when the frame actually enters KMS.  Initializing it
                 // here keeps the ownership type total while it is Ready.
                 submitted_at: Instant::now(),
+                sampled_revisions: sampled_revisions.clone(),
             });
         }
         // Every affected plane advertised IN_FENCE_FD before Flutter enabled
