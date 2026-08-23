@@ -15,7 +15,7 @@ use denial_core::topology::OutputId;
 use smithay::backend::allocator::format::FormatSet;
 use smithay::backend::allocator::{Buffer as AllocatorBuffer, Fourcc, dmabuf::Dmabuf};
 use smithay::backend::renderer::gles::{GlesRenderer, GlesTexture};
-use smithay::backend::renderer::{Bind, Blit, ExportMem, Offscreen, TextureFilter};
+use smithay::backend::renderer::{Bind, Blit, ExportMem, Offscreen, Renderer, TextureFilter};
 use smithay::output::Output;
 use smithay::reexports::wayland_protocols_wlr::screencopy::v1::server::{
     zwlr_screencopy_frame_v1::{self, ZwlrScreencopyFrameV1},
@@ -649,6 +649,14 @@ impl WaylandFrontend {
         }
         retained.append(&mut self.screencopy.pending);
         self.screencopy.pending = retained;
+        // Every DMA-BUF destination belongs to a short-lived screencopy
+        // client. GlesRenderer caches imported EGLImages behind WeakDmabuf
+        // keys, but Denial does not run Smithay's normal render-frame cleanup
+        // for this transfer-only path. Prune dead destinations after their
+        // request and wl_buffer references have been released; otherwise one
+        // grim capture leaves roughly one full-output NVIDIA mapping resident
+        // for the compositor's lifetime.
+        renderer.cleanup_texture_cache()?;
         self.display_handle.flush_clients()?;
         Ok(())
     }
