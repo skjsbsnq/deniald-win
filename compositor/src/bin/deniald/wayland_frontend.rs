@@ -124,9 +124,9 @@ use super::window_placement_store::{
 };
 #[cfg(feature = "flutter")]
 use super::wire::{
-    CompositionCertificate, InputLayoutSnapshot, SurfaceLayerDescription, SurfaceRoleDescription,
-    WindowAction, WindowContentKind, WindowDescription, WindowGeometry, WindowOpacityClass,
-    WindowPlacement, WindowPlacementChange, WindowPlacementPhase,
+    CompositionCertificate, InputLayoutSnapshot, InputRect, SurfaceLayerDescription,
+    SurfaceRoleDescription, WindowAction, WindowContentKind, WindowDescription, WindowGeometry,
+    WindowOpacityClass, WindowPlacement, WindowPlacementChange, WindowPlacementPhase,
 };
 
 #[path = "wayland_frontend/clipboard.rs"]
@@ -566,6 +566,26 @@ struct ScanoutFeedback {
     target_device: libc::dev_t,
     tested_formats: FormatSet,
     feedback: DmabufFeedback,
+}
+
+fn certificate_destination_covers_output(
+    destination: InputRect,
+    output: Rectangle<i32, Logical>,
+    scale: f64,
+) -> bool {
+    if !scale.is_finite() || scale <= 0.0 {
+        return false;
+    }
+    // Output logical extents are conservatively rounded to integers for the
+    // Wayland protocol, while the Flutter certificate retains fractional
+    // logical geometry. Permit at most one physical pixel of disagreement at
+    // each edge; a fixed epsilon incorrectly rejected 2560/1.5 = 1706.667
+    // against Wayland's outward-rounded 1707.
+    let tolerance = 1.0 / scale + f64::EPSILON;
+    (destination.x - f64::from(output.loc.x)).abs() <= tolerance
+        && (destination.y - f64::from(output.loc.y)).abs() <= tolerance
+        && (destination.width - f64::from(output.size.w)).abs() <= tolerance
+        && (destination.height - f64::from(output.size.h)).abs() <= tolerance
 }
 
 fn next_tested_scanout_formats(
@@ -4007,10 +4027,8 @@ impl WaylandFrontend {
         }
         let destination = certificate.destination_rect;
         let logical = output.logical_geometry;
-        let covers_output = (destination.x - f64::from(logical.loc.x)).abs() <= 0.01
-            && (destination.y - f64::from(logical.loc.y)).abs() <= 0.01
-            && (destination.width - f64::from(logical.size.w)).abs() <= 0.01
-            && (destination.height - f64::from(logical.size.h)).abs() <= 0.01;
+        let covers_output =
+            certificate_destination_covers_output(destination, logical, certificate.scale);
         let pixel_size_matches =
             (certificate.output_pixel_size.0 - f64::from(output.capture_size.w)).abs() <= 0.01
                 && (certificate.output_pixel_size.1 - f64::from(output.capture_size.h)).abs()
@@ -4802,6 +4820,7 @@ mod tests {
         assert!(!window_expects_sample(true, &visible, 42, &promoted));
     }
 
+    #[cfg(feature = "flutter")]
     #[test]
     fn scanout_feedback_accepts_only_renderer_formats_and_resets_on_epoch_change() {
         let linear = Format {
@@ -4821,6 +4840,32 @@ mod tests {
         let reset =
             next_tested_scanout_formats(&renderer, Some((1, 7, &first)), 2, 7, linear).unwrap();
         assert_eq!(reset.iter().copied().collect::<Vec<_>>(), vec![linear]);
+    }
+
+    #[cfg(feature = "flutter")]
+    #[test]
+    fn fractional_certificate_covers_outward_rounded_wayland_output() {
+        let output = Rectangle::new((0, 0).into(), (1707, 1067).into());
+        assert!(super::certificate_destination_covers_output(
+            InputRect {
+                x: 0.0,
+                y: 0.0,
+                width: 2560.0 / 1.5,
+                height: 1600.0 / 1.5,
+            },
+            output,
+            1.5,
+        ));
+        assert!(!super::certificate_destination_covers_output(
+            InputRect {
+                x: 0.0,
+                y: 0.0,
+                width: 1705.0,
+                height: 1067.0,
+            },
+            output,
+            1.5,
+        ));
     }
 
     #[cfg(feature = "flutter")]
