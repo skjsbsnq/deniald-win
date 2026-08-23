@@ -135,6 +135,10 @@ pub(super) enum InvalidationCause {
     ImportFailed,
     FenceTimeout,
     TestOnlyFailed,
+    /// The CRTC already owned an in-flight request. The arrangement is still
+    /// valid; only this attempt was too early.
+    CommitBusy,
+    /// KMS rejected an arrangement its own `TEST_ONLY` had accepted.
     CommitFailed,
     PageFlipLost,
 }
@@ -156,6 +160,7 @@ impl InvalidationCause {
             Self::ImportFailed => "import_failed",
             Self::FenceTimeout => "fence_timeout",
             Self::TestOnlyFailed => "test_only_failed",
+            Self::CommitBusy => "commit_busy",
             Self::CommitFailed => "commit_failed",
             Self::PageFlipLost => "page_flip_lost",
         }
@@ -169,6 +174,7 @@ impl InvalidationCause {
             Self::ImportFailed
                 | Self::FenceTimeout
                 | Self::TestOnlyFailed
+                | Self::CommitBusy
                 | Self::CommitFailed
                 | Self::PageFlipLost
         )
@@ -891,9 +897,12 @@ impl OutputMachine {
             (PromotionState::Armed(progress), PromotionEvent::CommitBusy)
                 if progress.step == ArmStep::Committing =>
             {
-                // The CRTC is busy with another request. Keep composition and
-                // retry the same arrangement after the backoff.
-                self.abandon_preparation(progress.candidate, InvalidationCause::CommitFailed, now)
+                // The CRTC already owns an in-flight request. That is ordinary
+                // contention with the atlas pipeline, not a broken
+                // arrangement: keep composition, back off, and retry. Treating
+                // it as a probe failure would cost the output its promotion
+                // capability for the rest of the session.
+                self.abandon_preparation(progress.candidate, InvalidationCause::CommitBusy, now)
             }
             (PromotionState::Armed(progress), PromotionEvent::CommitInvalid)
                 if progress.step == ArmStep::Committing =>
@@ -1192,14 +1201,18 @@ impl OutputMachine {
             (ArmStep::Committing, PromotionEvent::CommitAccepted) => {
                 promoted(self, progress, ArmStep::AwaitingFlip)
             }
-            (ArmStep::Committing, PromotionEvent::CommitBusy | PromotionEvent::CommitInvalid) => {
-                self.abandon_replacement(
-                    active,
-                    progress.candidate,
-                    InvalidationCause::CommitFailed,
-                    now,
-                )
-            }
+            (ArmStep::Committing, PromotionEvent::CommitBusy) => self.abandon_replacement(
+                active,
+                progress.candidate,
+                InvalidationCause::CommitBusy,
+                now,
+            ),
+            (ArmStep::Committing, PromotionEvent::CommitInvalid) => self.abandon_replacement(
+                active,
+                progress.candidate,
+                InvalidationCause::CommitFailed,
+                now,
+            ),
             (ArmStep::AwaitingFlip, PromotionEvent::PageFlipCompleted) => {
                 let candidate = progress.candidate;
                 let mut actions = ActionList::default();
@@ -1844,6 +1857,111 @@ mod tests {
         );
         assert_eq!(actions.len(), 0);
         assert_eq!(machine.last_reject(), Some(RejectReason::PromotionDisabled));
+    }
+
+    /// A busy CRTC is contention with the atlas pipeline, not evidence that
+    /// the arrangement is wrong. Real-machine testing found this: entry raced
+    /// an in-flight atlas flip, the output lost its promotion capability, and
+    /// every later attempt in that session was refused.
+    #[test]
+    fn a_busy_crtc_retries_instead_of_disabling_the_output() {
+        let now = base();
+        let mut machine = OutputMachine::default();
+        let candidate = key(9);
+        let arm = |machine: &mut OutputMachine, now| {
+            machine.advance(
+                PromotionEvent::CandidateEligible {
+                    candidate,
+                    atlas_settled: true,
+                },
+                now,
+            );
+            machine.advance(PromotionEvent::ImportSucceeded, now);
+            machine.advance(PromotionEvent::FenceReady, now);
+            machine.advance(PromotionEvent::TestOnlyPassed, now);
+            machine.advance(
+                PromotionEvent::CandidateEligible {
+                    candidate,
+                    atlas_settled: true,
+                },
+                now,
+            );
+        };
+        arm(&mut machine, now);
+        let actions = machine.advance(PromotionEvent::CommitBusy, now);
+        assert!(actions.contains(PromotionAction::ReleasePendingLease));
+        assert!(
+            !actions
+                .iter()
+                .any(|action| matches!(action, PromotionAction::DisablePromotion(_))),
+            "a busy CRTC must not cost the output its promotion capability"
+        );
+        assert_eq!(machine.state(), PromotionState::Composed);
+        assert!(!machine.promotion_disabled());
+
+        // The backoff still applies, and the same arrangement may promote once
+        // it expires.
+        assert_eq!(
+            machine
+                .advance(
+                    PromotionEvent::CandidateEligible {
+                        candidate,
+                        atlas_settled: true,
+                    },
+                    now,
+                )
+                .len(),
+            0
+        );
+        let later = now + BACKOFF_BASE + Duration::from_millis(1);
+        arm(&mut machine, later);
+        machine.advance(PromotionEvent::CommitAccepted, later);
+        machine.advance(PromotionEvent::PageFlipCompleted, later);
+        assert_eq!(
+            machine.state(),
+            PromotionState::Promoted {
+                active: candidate,
+                replacement: None
+            }
+        );
+    }
+
+    /// The replacement path must make the same distinction.
+    #[test]
+    fn a_busy_crtc_during_replacement_keeps_the_active_promotion() {
+        let now = base();
+        let mut machine = OutputMachine::default();
+        let active = key(9);
+        promote(&mut machine, active, now);
+        let next = key(10);
+        machine.advance(
+            PromotionEvent::CandidateEligible {
+                candidate: next,
+                atlas_settled: false,
+            },
+            now,
+        );
+        machine.advance(PromotionEvent::ImportSucceeded, now);
+        machine.advance(PromotionEvent::FenceReady, now);
+        machine.advance(PromotionEvent::TestOnlyPassed, now);
+        machine.advance(
+            PromotionEvent::CandidateEligible {
+                candidate: next,
+                atlas_settled: false,
+            },
+            now,
+        );
+        let actions = machine.advance(PromotionEvent::CommitBusy, now);
+        assert!(actions.contains(PromotionAction::ReleasePendingLease));
+        assert!(!actions.contains(PromotionAction::RetireDirectLeases));
+        assert!(!machine.promotion_disabled());
+        assert_eq!(
+            machine.state(),
+            PromotionState::Promoted {
+                active,
+                replacement: None
+            }
+        );
     }
 
     #[test]
