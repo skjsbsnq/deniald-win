@@ -4578,7 +4578,11 @@ fn service_direct_scanout(
         dma_buf: candidate.dmabuf.num_planes() > 0,
         sync_proven: true,
         certificate_epoch: candidate.certificate.certificate_epoch,
-        visibility_epoch: candidate.certificate.layout_epoch,
+        // Native visibility and the current Wayland buffer revision are
+        // validated independently above. The eligibility token here binds the
+        // candidate to this exact certificate generation; layout_epoch belongs
+        // to Flutter's layout domain and is not the certificate sequence.
+        visibility_epoch: candidate.certificate.certificate_epoch,
         certificate: Some(&candidate.certificate),
         geometry: direct_scanout::CandidateGeometry {
             output_width: u32::from(width),

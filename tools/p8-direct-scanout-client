@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
+PROTOCOL_ROOT="${DENIAL_WAYLAND_PROTOCOL_ROOT:-/usr/share/qt6/wayland/protocols}"
+XDG_SHELL="$PROTOCOL_ROOT/xdg-shell/xdg-shell.xml"
+VIEWPORTER="$PROTOCOL_ROOT/viewporter/viewporter.xml"
+CACHE_ROOT="${XDG_CACHE_HOME:-${HOME:?HOME is required}/.cache}/denial/p8-direct-scanout-client"
+SOURCE="$ROOT/tools/p8-direct-scanout-client.c"
+BINARY="$CACHE_ROOT/p8-direct-scanout-client"
+
+for command in cc pkg-config wayland-scanner; do
+  command -v "$command" >/dev/null 2>&1 || {
+    printf 'p8-direct-scanout-client: missing command: %s\n' "$command" >&2
+    exit 1
+  }
+done
+[[ -r "$XDG_SHELL" ]] || {
+  printf 'p8-direct-scanout-client: missing xdg-shell protocol: %s\n' "$XDG_SHELL" >&2
+  exit 1
+}
+[[ -r "$VIEWPORTER" ]] || {
+  printf 'p8-direct-scanout-client: missing viewporter protocol: %s\n' "$VIEWPORTER" >&2
+  exit 1
+}
+
+mkdir -p -- "$CACHE_ROOT"
+header="$CACHE_ROOT/xdg-shell-client-protocol.h"
+protocol="$CACHE_ROOT/xdg-shell-protocol.c"
+viewporter_header="$CACHE_ROOT/viewporter-client-protocol.h"
+viewporter_protocol="$CACHE_ROOT/viewporter-protocol.c"
+wayland-scanner client-header "$XDG_SHELL" "$header"
+wayland-scanner private-code "$XDG_SHELL" "$protocol"
+wayland-scanner client-header "$VIEWPORTER" "$viewporter_header"
+wayland-scanner private-code "$VIEWPORTER" "$viewporter_protocol"
+
+cc -std=c11 -O2 -Wall -Wextra -Werror \
+  -I"$CACHE_ROOT" \
+  $(pkg-config --cflags wayland-client wayland-egl egl glesv2) \
+  "$SOURCE" "$protocol" "$viewporter_protocol" \
+  -o "$BINARY" \
+  $(pkg-config --libs wayland-client wayland-egl egl glesv2)
+
+exec "$BINARY" "$@"
