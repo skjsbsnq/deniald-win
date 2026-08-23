@@ -757,6 +757,7 @@ class DenialBridge {
     DenialWindow window,
     Rect contentRect, {
     bool exact = false,
+    bool? maximized,
   }) {
     if (window.windowId <= 0 ||
         contentRect.width < 1.0 ||
@@ -774,7 +775,10 @@ class DenialBridge {
         wire.WindowRequestKind.ConfigureWindow,
         windowId: window.windowId,
         geometry: geometry,
-        flags: exact ? 1 : 0,
+        flags:
+            (exact ? 1 : 0) |
+            (maximized == null ? 0 : 2) |
+            (maximized == true ? 4 : 0),
       ),
     );
   }

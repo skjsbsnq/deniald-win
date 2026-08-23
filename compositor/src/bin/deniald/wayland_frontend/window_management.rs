@@ -357,7 +357,10 @@ pub(in super::super) fn apply_window_commands(
                 activate_window(state, &window, SERIAL_COUNTER.next_serial());
             }
             WindowCommand::Configure {
-                geometry, exact, ..
+                geometry,
+                exact,
+                maximized,
+                ..
             } => {
                 let requested_size = Size::<i32, Logical>::from((
                     geometry.width.round() as i32,
@@ -406,7 +409,7 @@ pub(in super::super) fn apply_window_commands(
                         .clamp(f64::from(i32::MIN), f64::from(i32::MAX)) as i32,
                 ));
                 let target = Rectangle::new(target_location, size);
-                let (preserve_client_fullscreen, transferred_shell_restore) = {
+                let preserve_client_fullscreen = {
                     let frontend = state.wayland.as_mut().expect("missing Wayland frontend");
                     let client_fullscreen =
                         window.toplevel().is_some_and(|toplevel| {
@@ -433,7 +436,6 @@ pub(in super::super) fn apply_window_commands(
                             })
                         })
                         .filter(|(source_id, _, destination_id, _, _)| source_id != destination_id);
-                    let mut transferred_shell_restore = false;
                     if let Some((_, source_geometry, _, destination_geometry, destination_output)) =
                         output_transfer
                     {
@@ -450,7 +452,6 @@ pub(in super::super) fn apply_window_commands(
                                 destination_geometry,
                                 destination_bounds,
                             );
-                            transferred_shell_restore = true;
                         }
                         if let Some(restore) = frontend
                             .shell_fullscreen_restore_geometries
@@ -462,11 +463,24 @@ pub(in super::super) fn apply_window_commands(
                                 destination_geometry,
                                 destination_bounds,
                             );
-                            transferred_shell_restore = true;
                         }
                     }
-                    (preserve_client_fullscreen, transferred_shell_restore)
+                    preserve_client_fullscreen
                 };
+                if let Some(maximized) = maximized {
+                    let frontend = state.wayland.as_mut().expect("missing Wayland frontend");
+                    if maximized {
+                        let current = frontend.window_geometry_target(&window);
+                        frontend
+                            .shell_maximize_restore_geometries
+                            .entry(root_surface.id())
+                            .or_insert(current);
+                    } else {
+                        frontend
+                            .shell_maximize_restore_geometries
+                            .remove(&root_surface.id());
+                    }
+                }
                 if !preserve_client_fullscreen {
                     // A different rectangle is a shell-authored move/resize,
                     // so the client protocol must stop constraining geometry.
@@ -492,9 +506,11 @@ pub(in super::super) fn apply_window_commands(
                 }
                 let frontend = state.wayland.as_mut().expect("missing Wayland frontend");
                 frontend.set_window_geometry_target_policy(&window, target, exact);
-                if transferred_shell_restore {
-                    frontend.remember_window_placement(&window);
-                }
+                // Flutter is the authority for shell titlebar move, resize,
+                // maximize and restore operations. Persist the final geometry
+                // and state here, including transitions that never enter a
+                // native compositor grab.
+                frontend.remember_window_placement(&window);
                 state.scene_sync.mark_dirty();
             }
             WindowCommand::CreateLocal { .. } => unreachable!(),

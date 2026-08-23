@@ -2915,6 +2915,17 @@ fn activate_client_route(
         // stealing the keyboard focus from the editor they serve.
         return false;
     };
+    if target_window
+        .x11_surface()
+        .is_some_and(|surface| !x11_route_may_activate(surface.is_override_redirect()))
+    {
+        // X11 override-redirect surfaces are client-owned transient UI such
+        // as Steam menus and avatar popups. They still receive the pointer
+        // event through the route, but must not become the compositor's
+        // activated window: doing so withdraws focus from the parent and
+        // makes clients dismiss the popup on the very click meant to use it.
+        return false;
+    }
     if let Some(manager) = state.native_app_plugins.as_mut()
         && let Err(error) = manager.clear_focus()
     {
@@ -2957,6 +2968,11 @@ fn activate_client_route(
             .push(PendingWindowEvent::Activated(route.region.window_id));
     }
     scene_changed
+}
+
+#[cfg(feature = "flutter")]
+fn x11_route_may_activate(override_redirect: bool) -> bool {
+    !override_redirect
 }
 
 #[cfg(feature = "flutter")]
@@ -3805,6 +3821,12 @@ mod compositor_pointer_binding_tests {
         );
         assert_eq!(super_pointer_action(false, BTN_LEFT), None);
         assert_eq!(super_pointer_action(true, 0x112), None);
+    }
+
+    #[test]
+    fn override_redirect_popup_routes_preserve_parent_activation() {
+        assert!(!x11_route_may_activate(true));
+        assert!(x11_route_may_activate(false));
     }
 
     #[test]

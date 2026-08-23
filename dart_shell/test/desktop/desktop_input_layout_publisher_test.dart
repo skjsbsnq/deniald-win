@@ -142,6 +142,22 @@ void main() {
       expect(harness.bridge.configured, isEmpty);
     });
 
+    testWidgets('maximize state crosses the bridge with final geometry', (
+      tester,
+    ) async {
+      final harness = await _pumpPublisher(tester);
+
+      harness.workspace.toggleMaximized(_objectId);
+      await tester.pump();
+
+      expect(harness.bridge.configuredMaximized, <bool?>[true]);
+
+      harness.workspace.toggleMaximized(_objectId);
+      await tester.pump();
+
+      expect(harness.bridge.configuredMaximized, <bool?>[true, false]);
+    });
+
     testWidgets('publishes an independent certificate for every output', (
       tester,
     ) async {
@@ -355,6 +371,7 @@ final DenialWindow _publisherWindow = DenialWindow(
 
 class _ConfigureBridge extends DenialBridge {
   final List<Rect> configured = <Rect>[];
+  final List<bool?> configuredMaximized = <bool?>[];
   final List<InputLayoutSnapshot> publishedSnapshots = <InputLayoutSnapshot>[];
   final List<DenialCompositionCertificate> certificates =
       <DenialCompositionCertificate>[];
@@ -376,8 +393,10 @@ class _ConfigureBridge extends DenialBridge {
     DenialWindow window,
     Rect contentRect, {
     bool exact = false,
+    bool? maximized,
   }) {
     configured.add(contentRect);
+    configuredMaximized.add(maximized);
   }
 }
 

@@ -156,6 +156,7 @@ pub enum WindowCommand {
         window_id: u64,
         geometry: WindowGeometry,
         exact: bool,
+        maximized: Option<bool>,
     },
 }
 
@@ -1280,6 +1281,8 @@ impl WireBridge {
                             window_id,
                             geometry,
                             exact: request.flags() & 1 != 0,
+                            maximized: (request.flags() & 2 != 0)
+                                .then_some(request.flags() & 4 != 0),
                         }
                     }
                     _ => unreachable!(),
@@ -3166,6 +3169,10 @@ mod tests {
     }
 
     fn exact_window_request(window_id: u64, geometry: fb::WireRect) -> Vec<u8> {
+        configured_window_request(window_id, geometry, 1)
+    }
+
+    fn configured_window_request(window_id: u64, geometry: fb::WireRect, flags: u32) -> Vec<u8> {
         let mut builder = FlatBufferBuilder::new();
         let request = fb::WindowRequest::create(
             &mut builder,
@@ -3173,7 +3180,7 @@ mod tests {
                 kind: fb::WindowRequestKind::ConfigureWindow,
                 window_id,
                 geometry: Some(&geometry),
-                flags: 1,
+                flags,
                 ..Default::default()
             },
         );
@@ -3864,6 +3871,7 @@ mod tests {
                         height: 700.0,
                     },
                     exact: false,
+                    maximized: None,
                 },
             ]
         );
@@ -3878,6 +3886,23 @@ mod tests {
             Some(WindowCommand::Configure {
                 window_id: 43,
                 exact: true,
+                maximized: None,
+                ..
+            })
+        ));
+        bridge
+            .handle(&configured_window_request(
+                43,
+                fb::WireRect::new(0.0, 48.0, 632.0, 1342.0),
+                2 | 4,
+            ))
+            .unwrap();
+        assert!(matches!(
+            bridge.drain_window_commands().next(),
+            Some(WindowCommand::Configure {
+                window_id: 43,
+                exact: false,
+                maximized: Some(true),
                 ..
             })
         ));

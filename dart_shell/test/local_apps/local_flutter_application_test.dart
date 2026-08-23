@@ -237,6 +237,7 @@ class _LauncherBridge extends DenialBridge {
     DenialWindow window,
     Rect contentRect, {
     bool exact = false,
+    bool? maximized,
   }) {
     configuredWindow = window;
     configuredGeometry = contentRect;

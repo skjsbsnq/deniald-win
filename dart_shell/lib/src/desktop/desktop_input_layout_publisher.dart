@@ -527,7 +527,13 @@ class _DesktopInputLayoutPublisherState
     if (configuredGeometry == null) {
       return;
     }
-    ref.read(denialBridgeProvider).configureWindow(window, configuredGeometry);
+    ref
+        .read(denialBridgeProvider)
+        .configureWindow(
+          window,
+          configuredGeometry,
+          maximized: placement.maximized,
+        );
   }
 }
 
