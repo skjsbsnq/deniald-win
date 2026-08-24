@@ -10,6 +10,7 @@ import '../models/denial_window.dart';
 import '../state/desktop_window_switcher.dart';
 import '../state/shell_controller.dart';
 import '../state/shell_render_mode.dart';
+import '../theme/shell_theme.dart';
 import 'desktop_taskbar_preview.dart';
 import 'desktop_visibility.dart';
 import 'desktop_workspace.dart';
@@ -41,6 +42,7 @@ class _DesktopInputLayoutPublisherState
   final Map<int, Rect> _lastShellVisibleBounds = <int, Rect>{};
   final Map<int, int> _lastShellVisualRevision = <int, int>{};
   InputLayoutSnapshot? _lastSnapshot;
+  ShellThemeData? _pendingTheme;
 
   @override
   Widget build(BuildContext context) {
@@ -50,6 +52,7 @@ class _DesktopInputLayoutPublisherState
       ),
     );
     ref.watch(desktopWorkspaceProvider);
+    ref.watch(displayLayoutProvider);
     ref.watch(desktopWindowSwitcherProvider);
     ref.watch(shellInteractionRegistryProvider);
     ref.watch(shellVisualRegistryProvider);
@@ -57,14 +60,21 @@ class _DesktopInputLayoutPublisherState
     ref.watch(
       desktopTaskbarPreviewProvider.select((target) => target?.objectId),
     );
+    final theme = ShellTheme.of(context);
     _schedulePublish(
       MediaQuery.sizeOf(context),
       MediaQuery.devicePixelRatioOf(context),
+      theme,
     );
     return widget.child;
   }
 
-  void _schedulePublish(Size viewSize, double devicePixelRatio) {
+  void _schedulePublish(
+    Size viewSize,
+    double devicePixelRatio,
+    ShellThemeData theme,
+  ) {
+    _pendingTheme = theme;
     if (devicePixelRatio.isFinite &&
         devicePixelRatio > 0.0 &&
         devicePixelRatio != _lastDevicePixelRatio) {
@@ -80,6 +90,8 @@ class _DesktopInputLayoutPublisherState
       if (!mounted) {
         return;
       }
+      final publishTheme = _pendingTheme ?? theme;
+      _pendingTheme = null;
 
       final shell = ref.read(shellControllerProvider);
       final windows = shell.windows;
@@ -97,6 +109,7 @@ class _DesktopInputLayoutPublisherState
         ref.read(desktopWorkspaceProvider),
         ref.read(shellInteractionRegistryProvider),
         shell.windowSnapshotSequence,
+        publishTheme,
       );
     });
   }
@@ -107,6 +120,7 @@ class _DesktopInputLayoutPublisherState
     DesktopWorkspaceState desktop,
     ShellInteractionSnapshot interactions,
     int layoutEpoch,
+    ShellThemeData theme,
   ) {
     if (viewSize.width <= 0.0 || viewSize.height <= 0.0) {
       return;
@@ -121,6 +135,8 @@ class _DesktopInputLayoutPublisherState
         .toList(growable: false);
     final switcher = ref.read(desktopWindowSwitcherProvider);
     final previewTarget = ref.read(desktopTaskbarPreviewProvider);
+    final outputLayout = ref.read(displayLayoutProvider);
+    final visuals = ref.read(shellVisualRegistryProvider);
     final sampledSwitcherIds =
         interactions.capturesFullScene && (switcher?.isSelecting ?? false)
         ? switcher!.objectIds.toSet()
@@ -277,34 +293,52 @@ class _DesktopInputLayoutPublisherState
     final forcedWindowIds = <int>{
       if (previewTarget != null) previewTarget.objectId,
     };
-    // The current wire carries a global canvas, not output-scoped geometry.
-    // A single-output scene can safely use that canvas. With multiple monitor
-    // IDs, output ownership is unknown, so the evaluator must retain all
-    // clients until an output-scoped report is added to the wire.
     final monitorIds = placements
         .map((placement) => placement.monitorId)
         .toSet();
-    final outputRects = monitorIds.length <= 1
-        ? <({int id, Rect rect})>[
-            (id: monitorIds.isEmpty ? -1 : monitorIds.first, rect: canvas),
-          ]
-        : <({int id, Rect rect})>[(id: -1, rect: Rect.zero)];
-    final visibility = <int>{};
-    for (final output in outputRects) {
-      visibility.addAll(
-        computeConservativeVisibleRegions(
-          layoutEpoch: layoutEpoch,
-          outputId: output.id,
-          outputRect: output.rect,
-          placements: placements,
-          windowsById: windowsById,
-          forcedWindowIds: forcedWindowIds,
-          forceAll: interactions.capturesFullScene,
-        ).visibleSurfaceIds,
-      );
-    }
+    final outputRects = desktopVisibilityOutputRects(
+      viewSize: viewSize,
+      monitorIds: monitorIds,
+      configuredOutputs:
+          outputLayout?.outputs.map(
+            (output) => (id: output.monitorId, rect: output.logicalRect),
+          ) ??
+          const <({int id, Rect rect})>[],
+    );
+    final topZ = desktopTopZ(placements, windowsById);
+    final shellTranslucentWindowIds = <int>{
+      for (final placement in placements)
+        if ((placement.z == topZ
+                ? theme.focusedWindowOpacity
+                : theme.unfocusedWindowOpacity) <
+            1.0)
+          placement.objectId,
+    };
+    final forceAll =
+        interactions.capturesFullScene || visuals.requiresClientSampling;
+    final visibility = computeDesktopVisibilitySnapshot(
+      layoutEpoch: layoutEpoch,
+      outputLayoutEpoch: outputLayout?.epoch ?? 0,
+      sceneRevision: desktopVisibilitySceneRevision(
+        placements: placements,
+        windowsById: windowsById,
+        outputRects: outputRects,
+        forcedWindowIds: forcedWindowIds,
+        shellTranslucentWindowIds: shellTranslucentWindowIds,
+        forceAll: forceAll,
+      ),
+      placements: placements,
+      windowsById: windowsById,
+      outputRects: outputRects,
+      forcedWindowIds: forcedWindowIds,
+      shellTranslucentWindowIds: shellTranslucentWindowIds,
+      forceAll: forceAll,
+    );
+    ref.read(desktopVisibilityProvider.notifier).publish(visibility);
+    final visibleSurfaceIds = <int>{...visibility.visibleSurfaceIds};
     for (final popup in inputMethodPopups) {
-      visibility.addAll(popup.visibleSurfaceIds);
+      // Input-method popups are not desktop placements and are always sampled.
+      visibleSurfaceIds.addAll(popup.visibleSurfaceIds);
     }
 
     _configureTracker.retainWindowIds(windowsById.keys.toSet());
@@ -312,7 +346,7 @@ class _DesktopInputLayoutPublisherState
       epoch: _epoch + 1,
       shellRegions: shellRegions,
       windows: inputWindows,
-      visibleSurfaceIds: visibility.toList(growable: false)..sort(),
+      visibleSurfaceIds: visibleSurfaceIds.toList(growable: false)..sort(),
       visibilityEpoch: layoutEpoch,
       keyboardCapture: interactions.capturesKeyboard,
       exclusiveShellMode: interactions.compositorExclusive,

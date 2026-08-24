@@ -75,6 +75,7 @@ import 'desktop_texture_resize.dart';
 import 'desktop_window_coordinator.dart';
 import 'desktop_window_frame_painter.dart';
 import 'desktop_window_render_telemetry.dart';
+import 'desktop_visibility.dart';
 import 'desktop_workspace.dart';
 
 class DesktopShell extends ConsumerStatefulWidget {
@@ -1036,6 +1037,10 @@ List<Widget> _buildDesktopWindowLayers({
   required Rect switcherStageBounds,
   required int topZ,
   required bool reduceMotion,
+  required int layoutEpoch,
+  required int outputLayoutEpoch,
+  required int sceneRevision,
+  required bool forceAll,
   required ValueChanged<DenialWindow> onActivateWindow,
   required ValueChanged<DenialWindow> onBeginOverviewDrag,
   required void Function(DenialWindow window, Offset delta)
@@ -1101,6 +1106,10 @@ List<Widget> _buildDesktopWindowLayers({
         switching: switching,
         motionDuration: motionDuration,
         active: active,
+        layoutEpoch: layoutEpoch,
+        outputLayoutEpoch: outputLayoutEpoch,
+        sceneRevision: sceneRevision,
+        forceAll: forceAll,
         onOverviewTap: () => onActivateWindow(window),
         onOverviewDragStart: () => onBeginOverviewDrag(window),
         onOverviewDragUpdate: (delta) => onUpdateOverviewDrag(window, delta),
@@ -1317,6 +1326,21 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
     final windowsById = <int, DenialWindow>{
       for (final window in windows) window.objectId: window,
     };
+    final layoutEpoch = ref.watch(
+      shellControllerProvider.select((state) => state.windowSnapshotSequence),
+    );
+    final outputLayoutEpoch = displayLayout?.epoch ?? 0;
+    final forceAll = ref.watch(
+      shellInteractionRegistryProvider.select(
+        (snapshot) => snapshot.capturesFullScene,
+      ),
+    );
+    final visualsRequiresClientSampling = ref.watch(
+      shellVisualRegistryProvider.select(
+        (snapshot) => snapshot.requiresClientSampling,
+      ),
+    );
+    final effectiveForceAll = forceAll || visualsRequiresClientSampling;
     final inputMethodPopups = windows
         .where((window) => window.isInputMethodPopup)
         .toList(growable: false);
@@ -1332,6 +1356,59 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
               windowSwitcher,
             ),
           );
+    final visibilityWindowsById = <int, DenialWindow>{
+      for (final window in windows)
+        if (window.isUserApp) window.objectId: window,
+    };
+    final previewTarget = ref.watch(desktopTaskbarPreviewProvider);
+    final sampledSwitcherIds =
+        forceAll && (windowSwitcher?.isSelecting ?? false)
+        ? windowSwitcher!.objectIds.toSet()
+        : const <int>{};
+    final visibilityPlacements =
+        desktop.placements.values
+            .where(
+              (placement) =>
+                  (!placement.minimized ||
+                      desktop.isInOverview(placement.objectId) ||
+                      sampledSwitcherIds.contains(placement.objectId) ||
+                      previewTarget?.objectId == placement.objectId) &&
+                  visibilityWindowsById.containsKey(placement.objectId),
+            )
+            .toList(growable: false)
+          ..sort(
+            (a, b) => compareDesktopWindowStack(a, b, visibilityWindowsById),
+          );
+    final visibilityOutputRects = desktopVisibilityOutputRects(
+      viewSize: viewSize,
+      monitorIds: visibilityPlacements.map((p) => p.monitorId).toSet(),
+      configuredOutputs:
+          displayLayout?.outputs.map(
+            (output) => (id: output.monitorId, rect: output.logicalRect),
+          ) ??
+          const <({int id, Rect rect})>[],
+    );
+    final theme = ShellTheme.of(context);
+    final visibilityTopZ = desktopTopZ(
+      visibilityPlacements,
+      visibilityWindowsById,
+    );
+    final shellTranslucentWindowIds = <int>{
+      for (final placement in visibilityPlacements)
+        if ((placement.z == visibilityTopZ
+                ? theme.focusedWindowOpacity
+                : theme.unfocusedWindowOpacity) <
+            1.0)
+          placement.objectId,
+    };
+    final sceneRevision = desktopVisibilitySceneRevision(
+      placements: visibilityPlacements,
+      windowsById: visibilityWindowsById,
+      outputRects: visibilityOutputRects,
+      forcedWindowIds: {if (previewTarget != null) previewTarget.objectId},
+      shellTranslucentWindowIds: shellTranslucentWindowIds,
+      forceAll: effectiveForceAll,
+    );
     final homeLayout = _layoutDesktopHome(
       viewSize: viewSize,
       displayLayout: displayLayout,
@@ -1452,6 +1529,10 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
                       switcherStageBounds: switcherStageBounds,
                       topZ: topZ,
                       reduceMotion: reduceMotion,
+                      layoutEpoch: layoutEpoch,
+                      outputLayoutEpoch: outputLayoutEpoch,
+                      sceneRevision: sceneRevision,
+                      forceAll: effectiveForceAll,
                       onActivateWindow: onActivateWindow,
                       onBeginOverviewDrag: onBeginOverviewDrag,
                       onUpdateOverviewDrag: onUpdateOverviewDrag,
@@ -1490,6 +1571,10 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
                       switcherStageBounds: switcherStageBounds,
                       topZ: topZ,
                       reduceMotion: reduceMotion,
+                      layoutEpoch: layoutEpoch,
+                      outputLayoutEpoch: outputLayoutEpoch,
+                      sceneRevision: sceneRevision,
+                      forceAll: effectiveForceAll,
                       onActivateWindow: onActivateWindow,
                       onBeginOverviewDrag: onBeginOverviewDrag,
                       onUpdateOverviewDrag: onUpdateOverviewDrag,
@@ -2388,6 +2473,10 @@ class _DesktopWindowFrame extends ConsumerWidget {
     required this.switching,
     required this.motionDuration,
     required this.active,
+    required this.layoutEpoch,
+    required this.outputLayoutEpoch,
+    required this.sceneRevision,
+    required this.forceAll,
     required this.onOverviewTap,
     required this.onOverviewDragStart,
     required this.onOverviewDragUpdate,
@@ -2405,6 +2494,10 @@ class _DesktopWindowFrame extends ConsumerWidget {
   final bool switching;
   final Duration motionDuration;
   final bool active;
+  final int layoutEpoch;
+  final int outputLayoutEpoch;
+  final int sceneRevision;
+  final bool forceAll;
   final VoidCallback onOverviewTap;
   final VoidCallback onOverviewDragStart;
   final ValueChanged<Offset> onOverviewDragUpdate;
@@ -2445,6 +2538,22 @@ class _DesktopWindowFrame extends ConsumerWidget {
             livePlacementFrame: placement.frame,
           )
         : this.frame;
+    final theme = ShellTheme.of(context);
+    final paintClientContent = ref.watch(
+      desktopVisibilityProvider.select(
+        (visibility) => visibility.shouldPaintClientContent(
+          objectId: window.objectId,
+          window: window,
+          placement: placement,
+          layoutEpoch: layoutEpoch,
+          outputLayoutEpoch: outputLayoutEpoch,
+          sceneRevision: sceneRevision,
+          forceAll: forceAll,
+          specialConsumer:
+              desktopWidget || overview || switching || placement.dragging,
+        ),
+      ),
+    );
     DesktopWindowRenderTelemetry.recordWindowBuild(
       windowId: window.objectId,
       textureId: window.textureId,
@@ -2457,7 +2566,6 @@ class _DesktopWindowFrame extends ConsumerWidget {
     final duration = motionDuration;
     final fullscreenVisual = placement.fullscreen && !transformed;
     final drawsServerFrame = !fullscreenVisual && placement.serverSideDecorated;
-    final theme = ShellTheme.of(context);
     final windowRadius = drawsServerFrame ? theme.windowRadius : 0.0;
     final windowOpacity = active
         ? theme.focusedWindowOpacity
@@ -2540,16 +2648,13 @@ class _DesktopWindowFrame extends ConsumerWidget {
                                 // The native client keeps its real geometry
                                 // during overview; only its live texture scales.
                                 padding: drawsServerFrame
-                                    ? EdgeInsets.all(
-                                        placement.frameBorder,
-                                      )
+                                    ? EdgeInsets.all(placement.frameBorder)
                                     : EdgeInsets.zero,
                                 child: placement.decorated
                                     ? Column(
                                         children: [
                                           SizedBox(
-                                            height:
-                                                placement.titlebarHeight,
+                                            height: placement.titlebarHeight,
                                             child: DesktopWindowTitlebar(
                                               window: window,
                                               active: active,
@@ -2625,33 +2730,41 @@ class _DesktopWindowFrame extends ConsumerWidget {
                                             ),
                                           ),
                                           Expanded(
-                                            child: _DesktopWindowContent(
-                                              window: window,
-                                              smooth:
-                                                  transformed ||
-                                                  resizing ||
-                                                  placement.dragging,
-                                              active: active && !minimized,
-                                              localLayoutSize:
-                                                  window.isLocalFlutter
-                                                  ? placement.contentRect.size
-                                                  : null,
-                                            ),
+                                            child: paintClientContent
+                                                ? _DesktopWindowContent(
+                                                    window: window,
+                                                    smooth:
+                                                        transformed ||
+                                                        resizing ||
+                                                        placement.dragging,
+                                                    active:
+                                                        active && !minimized,
+                                                    localLayoutSize:
+                                                        window.isLocalFlutter
+                                                        ? placement
+                                                              .contentRect
+                                                              .size
+                                                        : null,
+                                                  )
+                                                : const SizedBox.expand(),
                                           ),
                                         ],
                                       )
                                     : SizedBox.expand(
-                                        child: _DesktopWindowContent(
-                                          window: window,
-                                          smooth:
-                                              transformed ||
-                                              resizing ||
-                                              placement.dragging,
-                                          active: active && !minimized,
-                                          localLayoutSize: window.isLocalFlutter
-                                              ? placement.contentRect.size
-                                              : null,
-                                        ),
+                                        child: paintClientContent
+                                            ? _DesktopWindowContent(
+                                                window: window,
+                                                smooth:
+                                                    transformed ||
+                                                    resizing ||
+                                                    placement.dragging,
+                                                active: active && !minimized,
+                                                localLayoutSize:
+                                                    window.isLocalFlutter
+                                                    ? placement.contentRect.size
+                                                    : null,
+                                              )
+                                            : const SizedBox.expand(),
                                       ),
                               ),
                             );

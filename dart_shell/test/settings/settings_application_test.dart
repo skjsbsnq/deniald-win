@@ -436,6 +436,55 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('scale dropdown keeps 1.6 selectable once another scale is active', (
+    tester,
+  ) async {
+    final fractional = DenialOutputConfiguration(
+      serial: _outputConfiguration.serial,
+      capabilities: _outputCapabilities,
+      outputs: <DenialOutput>[
+        DenialOutput(
+          name: 'DP-1',
+          description: 'DP-1',
+          connected: true,
+          enabled: true,
+          powered: true,
+          x: 0,
+          y: 0,
+          logicalWidth: 2048,
+          logicalHeight: 1280,
+          scale: 1.25,
+          transform: DenialOutputTransform.normal,
+          adaptiveSync: false,
+          currentMode: _mode1080p120,
+          modes: <DenialOutputMode>[_mode1080p120, _mode1080p60],
+        ),
+      ],
+    );
+    final container = _settingsContainer(outputConfiguration: fractional);
+    addTearDown(container.dispose);
+    await _pumpSettings(tester, container, size: const Size(980, 700));
+
+    tester
+        .widget<SettingsNavigation>(find.byType(SettingsNavigation))
+        .onSelected(SettingsPageId.displays);
+    await tester.pumpAndSettle();
+
+    final scaleDropdown =
+        find.byKey(const ValueKey<String>('DP-1-scale-1.25'));
+    await tester.ensureVisible(scaleDropdown);
+    await tester.pumpAndSettle();
+    await tester.tap(scaleDropdown);
+    await tester.pumpAndSettle();
+
+    // 1.6 is a pixel-perfect scale for a 2560x1600 panel but not a standard
+    // step; it used to be offered only while it was the *current* output
+    // scale. Once 1.25 is active it must still be selectable, or the user
+    // cannot return to 1.6 from the UI without editing outputs.conf.
+    expect(find.text('160%'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('an unselected monitor selects and drags in one gesture', (
     tester,
   ) async {

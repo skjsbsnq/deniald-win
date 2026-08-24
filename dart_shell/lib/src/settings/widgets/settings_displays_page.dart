@@ -1698,6 +1698,13 @@ const _commonScales = <double>[
   1,
   1.25,
   1.5,
+  // 1.6 is not a standard fractional step, but on panels where the native
+  // resolution divides by it exactly (2560x1600 -> 1600x1000 logical) it is
+  // the only scale besides 1.25/2.0 that lands pixel-perfect on both axes. It
+  // used to be offered only while it was the *current* output scale, which
+  // made it vanish from the dropdown the moment the user switched to anything
+  // else. Keep it in the common list so it stays selectable.
+  1.6,
   1.75,
   2,
   2.5,
