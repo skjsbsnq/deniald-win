@@ -1,4 +1,5 @@
 import 'package:denial_dart_shell/src/desktop/desktop_workspace.dart';
+import 'package:denial_dart_shell/src/models/denial_window.dart';
 import 'package:denial_dart_shell/src/widgets/window_surface_tree.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -142,5 +143,64 @@ void main() {
         },
       );
     }
+
+    test('X11 and CSD window mapSurfaceRect preserves 1:1 scale without displacement', () {
+      const window = DenialWindow(
+        objectId: 42,
+        objectKind: 'x11',
+        surfaceId: 42,
+        windowId: 42,
+        textureId: 100,
+        title: 'cc-switch',
+        appId: 'cc-switch',
+        width: 800,
+        height: 600,
+        surfaceX: 0.0,
+        surfaceY: 0.0,
+        surfaceWidth: 800.0,
+        surfaceHeight: 600.0,
+        textureSourceX: 0.0,
+        textureSourceY: 0.0,
+        textureSourceWidth: 800.0,
+        textureSourceHeight: 600.0,
+        geometryX: 100.0,
+        geometryY: 100.0,
+        geometryWidth: 800.0,
+        geometryHeight: 600.0,
+        monitorId: 0,
+        transform: 0,
+        scale120: 120,
+        contentX: 0.0,
+        contentY: 0.0,
+        contentWidth: 800.0,
+        contentHeight: 600.0,
+        surfaceLayers: [
+          DenialSurfaceLayer(
+            surfaceId: 42,
+            parentSurfaceId: 0,
+            popupRootSurfaceId: 0,
+            role: DenialSurfaceRole.root,
+            textureId: 100,
+            width: 800,
+            height: 600,
+            surfaceX: 0.0,
+            surfaceY: 0.0,
+            surfaceWidth: 800.0,
+            surfaceHeight: 600.0,
+            textureSourceX: 0.0,
+            textureSourceY: 0.0,
+            textureSourceWidth: 800.0,
+            textureSourceHeight: 600.0,
+            transform: 0,
+            scale120: 120,
+            compositionOrder: 0,
+          ),
+        ],
+      );
+
+      const targetRect = Rect.fromLTWH(0.0, 0.0, 800.0, 600.0);
+      final mapped = window.mapSurfaceRect(window.surfaceLayers.first, targetRect);
+      expect(mapped, const Rect.fromLTWH(0.0, 0.0, 800.0, 600.0));
+    });
   });
 }

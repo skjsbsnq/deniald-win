@@ -2540,8 +2540,8 @@ class _DesktopWindowFrame extends ConsumerWidget {
                                 // The native client keeps its real geometry
                                 // during overview; only its live texture scales.
                                 padding: drawsServerFrame
-                                    ? const EdgeInsets.all(
-                                        DesktopMetrics.frameBorder,
+                                    ? EdgeInsets.all(
+                                        placement.frameBorder,
                                       )
                                     : EdgeInsets.zero,
                                 child: placement.decorated
@@ -2549,7 +2549,7 @@ class _DesktopWindowFrame extends ConsumerWidget {
                                         children: [
                                           SizedBox(
                                             height:
-                                                DesktopTitlebarMetrics.height,
+                                                placement.titlebarHeight,
                                             child: DesktopWindowTitlebar(
                                               window: window,
                                               active: active,

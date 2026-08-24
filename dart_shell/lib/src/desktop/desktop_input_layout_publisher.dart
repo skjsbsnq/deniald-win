@@ -31,6 +31,7 @@ class _DesktopInputLayoutPublisherState
     extends ConsumerState<DesktopInputLayoutPublisher> {
   final DesktopWindowConfigureTracker _configureTracker =
       DesktopWindowConfigureTracker();
+  double _lastDevicePixelRatio = 1.0;
   bool _scheduled = false;
   int _epoch = 0;
   int _certificateEpoch = 0;
@@ -64,6 +65,12 @@ class _DesktopInputLayoutPublisherState
   }
 
   void _schedulePublish(Size viewSize, double devicePixelRatio) {
+    if (devicePixelRatio.isFinite &&
+        devicePixelRatio > 0.0 &&
+        devicePixelRatio != _lastDevicePixelRatio) {
+      _lastDevicePixelRatio = devicePixelRatio;
+      _configureTracker.clear();
+    }
     if (_scheduled) {
       return;
     }
@@ -543,6 +550,10 @@ class _DesktopInputLayoutPublisherState
 class DesktopWindowConfigureTracker {
   final Map<int, ({int left, int top, int width, int height})> _configured =
       <int, ({int left, int top, int width, int height})>{};
+
+  void clear() {
+    _configured.clear();
+  }
 
   Rect? update(
     int objectId,
