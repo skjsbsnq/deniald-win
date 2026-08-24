@@ -1124,7 +1124,7 @@ impl FlutterLauncher {
         self.replace_factory(requested)
     }
 
-    fn replace_factory(
+    pub(super) fn replace_factory(
         &mut self,
         requested: ui_development::UiRuntimeMode,
     ) -> Result<(), Box<dyn Error>> {

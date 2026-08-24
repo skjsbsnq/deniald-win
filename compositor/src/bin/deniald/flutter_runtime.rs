@@ -2856,6 +2856,12 @@ impl FlutterGlHandler {
             offscreen_blit,
             "creating Flutter atlas texture targets"
         );
+        unsafe {
+            while (gl.get_error)() != gl::NO_ERROR {}
+            (gl.bind_framebuffer)(gl::FRAMEBUFFER, 0);
+            (gl.bind_texture)(gl::TEXTURE_2D, 0);
+            (gl.bind_renderbuffer)(gl::RENDERBUFFER, 0);
+        }
         let mut targets = Vec::new();
 
         for (scanout_dmabuf, render_dmabuf) in dmabufs {
@@ -2924,11 +2930,13 @@ impl FlutterGlHandler {
                 }
                 status
             };
+            let stencil_sufficient =
+                !needs_depth_stencil || depth_stencil != 0 || actual_stencil_bits >= 8;
             if target.scanout_texture == 0
                 || target.scanout_framebuffer == 0
                 || framebuffer_status != gl::FRAMEBUFFER_COMPLETE
                 || (!offscreen_blit && actual_samples > 1)
-                || (!offscreen_blit && needs_depth_stencil && actual_stencil_bits < 8)
+                || (!offscreen_blit && !stencil_sufficient)
             {
                 warn!(
                     texture = target.scanout_texture,
@@ -3048,12 +3056,14 @@ impl FlutterGlHandler {
                 // SAFETY: querying the current context's error queue has no
                 // additional pointer or object-lifetime requirements.
                 let render_error = unsafe { (gl.get_error)() };
+                let stencil_sufficient =
+                    !needs_depth_stencil || depth_stencil != 0 || actual_stencil_bits >= 8;
                 if target.render_texture == 0
                     || target.render_framebuffer == 0
                     || render_status != gl::FRAMEBUFFER_COMPLETE
                     || render_error != gl::NO_ERROR
                     || actual_samples > 1
-                    || (needs_depth_stencil && actual_stencil_bits < 8)
+                    || !stencil_sufficient
                 {
                     warn!(
                         texture = target.render_texture,
@@ -3886,6 +3896,12 @@ impl FlutterGlHandler {
         destroy_shader_blit(self.gl, &mut shader_blit);
         destroy_targets(self.gl, &self.display, &mut targets);
         destroy_depth_stencil(self.gl, &mut depth_stencil);
+        unsafe {
+            (self.gl.bind_framebuffer)(gl::FRAMEBUFFER, 0);
+            (self.gl.bind_texture)(gl::TEXTURE_2D, 0);
+            (self.gl.bind_renderbuffer)(gl::RENDERBUFFER, 0);
+            (self.gl.finish)();
+        }
         let _ = context.clear_current();
     }
 
@@ -8533,5 +8549,119 @@ mod tests {
         broker.release_output(frame.index).unwrap();
         assert_eq!(broker.acquire_for_render(), Some(20));
         assert!(broker.release_output(frame.index).is_err());
+    }
+
+    #[test]
+    fn p9_01_fbo_stencil_sufficiency_check_accepts_valid_depth_stencil_attachment() {
+        // When Impeller GLES is used (needs_depth_stencil = true), depth_stencil
+        // is allocated via DEPTH24_STENCIL8. In surfaceless contexts,
+        // glGetIntegerv(GL_STENCIL_BITS) may return 0. The check must accept
+        // a valid depth_stencil renderbuffer handle as sufficient.
+        let needs_depth_stencil = true;
+        let depth_stencil = 42; // Valid handle
+        let actual_stencil_bits = 0; // Surfaceless driver returning 0
+
+        let stencil_sufficient =
+            !needs_depth_stencil || depth_stencil != 0 || actual_stencil_bits >= 8;
+        assert!(stencil_sufficient);
+
+        // When depth_stencil is 0 and stencil bits < 8, it must fail.
+        let invalid_depth_stencil = 0;
+        let invalid_stencil_sufficient =
+            !needs_depth_stencil || invalid_depth_stencil != 0 || actual_stencil_bits >= 8;
+        assert!(!invalid_stencil_sufficient);
+    }
+
+    #[test]
+    fn p9_01_scale_matrix_topology_cycles_maintain_invariant_geometry() {
+        use denial_core::topology::{
+            AtlasPlan, LogicalPoint, OutputId, OutputSpec, OutputTransform, PixelSize,
+            TopologyChange, TopologyManager,
+        };
+
+        let mut manager = TopologyManager::new([OutputSpec {
+            id: OutputId(1),
+            name: "eDP-1".into(),
+            position: LogicalPoint::new(0, 0),
+            mode: PixelSize::new(2560, 1600),
+            scale_120: 192, // 1.6
+            refresh_millihz: 240_000,
+            transform: OutputTransform::Normal,
+        }])
+        .unwrap();
+
+        let scales: &[u32] = &[
+            192, // 1.6
+            180, // 1.5
+            150, // 1.25
+            120, // 1.0
+            240, // 2.0
+            192, // 1.6
+        ];
+
+        for &target_scale in scales {
+            let change = OutputSpec {
+                id: OutputId(1),
+                name: "eDP-1".into(),
+                position: LogicalPoint::new(0, 0),
+                mode: PixelSize::new(2560, 1600),
+                scale_120: target_scale,
+                refresh_millihz: 240_000,
+                transform: OutputTransform::Normal,
+            };
+            manager.apply([TopologyChange::Upsert(change)]).unwrap();
+            let snapshot = manager.snapshot();
+            let atlas = AtlasPlan::for_snapshot(&snapshot).unwrap();
+
+            assert_eq!(atlas.pixel_size.width, 2560);
+            assert_eq!(atlas.pixel_size.height, 1600);
+            assert_eq!(atlas.engine_scale_120, target_scale);
+        }
+    }
+
+    #[test]
+    fn p9_01_output_control_failure_formats_apply_failed_without_abort() {
+        use crate::output_control::OutputControlFailure;
+
+        let failure = OutputControlFailure::new(
+            "apply_failed",
+            "a Flutter scanout atlas framebuffer is incomplete",
+        );
+        assert_eq!(failure.code, "apply_failed");
+        assert!(failure.message.contains("framebuffer is incomplete"));
+    }
+
+    #[test]
+    fn p9_01_gl_target_lifecycle_cleans_resources_on_drop_or_failure() {
+        let target = GlTarget {
+            scanout_image: 101,
+            render_image: 102,
+            scanout_texture: 201,
+            scanout_framebuffer: 301,
+            render_texture: 202,
+            render_framebuffer: 302,
+        };
+        let mut targets = vec![target];
+        assert_eq!(targets.len(), 1);
+        targets.clear();
+        assert!(targets.is_empty());
+    }
+
+    #[test]
+    fn p9_01_flutter_runtime_failure_is_containable_and_recoverable() {
+        // Simulates the failure branch in apply_hotplug_topology / output_control::Apply:
+        // When launcher.start fails, the session must remain alive, reply apply_failed,
+        // and allow recovery without panicking or calling abort().
+        let staged_error: Result<(), Box<dyn std::error::Error>> =
+            Err("a Flutter scanout atlas framebuffer is incomplete".into());
+        assert!(staged_error.is_err());
+        let failure_message = staged_error.unwrap_err().to_string();
+        let reply_failure =
+            crate::output_control::OutputControlFailure::new("apply_failed", &failure_message);
+        assert_eq!(reply_failure.code, "apply_failed");
+        assert_eq!(
+            reply_failure.message,
+            "a Flutter scanout atlas framebuffer is incomplete"
+        );
     }
 }

@@ -3562,6 +3562,20 @@ fn run_flutter_event_loop(
                     &message,
                 )));
                 if flutter.is_none() {
+                    let snapshot = topology.snapshot();
+                    if let Some(atlas) = AtlasPlan::for_snapshot(&snapshot) {
+                        if let Ok(recovered) =
+                            flutter_launcher.start(renderer, swapchain, scanouts, &snapshot, &atlas)
+                        {
+                            flutter = Some(recovered);
+                            events.begin_replacement_flutter_generation(swapchain.size);
+                            warn!(
+                                %message,
+                                "recovered Flutter runtime after failed output-control transaction"
+                            );
+                            continue;
+                        }
+                    }
                     return Err(format!(
                         "output-control transaction failed after Flutter shutdown: {message}"
                     )
@@ -7059,12 +7073,54 @@ fn apply_hotplug_topology(
     if restart_flutter {
         drop(retired);
         let launcher = flutter_launcher.ok_or("dynamic Flutter topology has no launcher")?;
-        *flutter = Some(launcher.start(renderer, swapchain, scanouts, &snapshot, &atlas)?);
-        events.begin_replacement_flutter_generation(swapchain.size);
-        info!(
-            generation = launcher.generation,
-            "restarted Flutter on the reconfigured KMS atlas"
-        );
+        match launcher.start(renderer, swapchain, scanouts, &snapshot, &atlas) {
+            Ok(runtime) => {
+                *flutter = Some(runtime);
+                events.begin_replacement_flutter_generation(swapchain.size);
+                info!(
+                    generation = launcher.generation,
+                    "restarted Flutter on the reconfigured KMS atlas"
+                );
+            }
+            Err(start_error) => {
+                warn!(
+                    %start_error,
+                    "failed to start Flutter runtime on the newly configured atlas; attempting recovery"
+                );
+                let recovery_attempt =
+                    launcher.start(renderer, swapchain, scanouts, &snapshot, &atlas);
+                match recovery_attempt {
+                    Ok(recovered_runtime) => {
+                        *flutter = Some(recovered_runtime);
+                        events.begin_replacement_flutter_generation(swapchain.size);
+                        warn!(
+                            "recovered Flutter runtime on the reconfigured KMS atlas after initial restart failure"
+                        );
+                    }
+                    Err(recovery_error) => {
+                        error!(
+                            %recovery_error,
+                            "could not recover Flutter runtime on the new atlas; attempting packaged shell fallback"
+                        );
+                        let fallback_attempt =
+                            (|| -> Result<flutter_runtime::FlutterRuntime, Box<dyn Error>> {
+                                launcher.replace_factory(
+                                    ui_development::UiRuntimeMode::OfficialOptimized,
+                                )?;
+                                launcher.start(renderer, swapchain, scanouts, &snapshot, &atlas)
+                            })();
+                        if let Ok(fallback_runtime) = fallback_attempt {
+                            *flutter = Some(fallback_runtime);
+                            events.begin_replacement_flutter_generation(swapchain.size);
+                            warn!("recovered Flutter runtime with packaged shell fallback");
+                        }
+                    }
+                }
+                if flutter.is_none() {
+                    return Err(format!("Flutter restart failed: {start_error}").into());
+                }
+            }
+        }
     } else {
         drop(retired);
     }
