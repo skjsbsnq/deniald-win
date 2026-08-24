@@ -1726,6 +1726,10 @@ pub(super) fn evaluate_candidate(
         || geometry.source_height == 0
         || geometry.destination_width == 0
         || geometry.destination_height == 0
+        || geometry.source_width != geometry.destination_width
+        || geometry.source_height != geometry.destination_height
+        || geometry.destination_width != geometry.output_width
+        || geometry.destination_height != geometry.output_height
     {
         return Some(RejectReason::SizeMismatch);
     }
@@ -2912,12 +2916,20 @@ mod tests {
         };
         assert_eq!(evaluate_candidate(metadata, 9), None);
 
-        let cases: [(fn(&mut CandidateMetadata), RejectReason); 6] = [
+        let cases: [(fn(&mut CandidateMetadata), RejectReason); 8] = [
             (|c| c.single_output = false, RejectReason::MultipleOutputs),
             (|c| c.dma_buf = false, RejectReason::NotDmaBuf),
             (|c| c.sync_proven = false, RejectReason::SyncUnknown),
             (
                 |c| c.geometry.destination_width = 0,
+                RejectReason::SizeMismatch,
+            ),
+            (
+                |c| c.geometry.source_width = 2561,
+                RejectReason::SizeMismatch,
+            ),
+            (
+                |c| c.geometry.destination_width = 2559,
                 RejectReason::SizeMismatch,
             ),
             (

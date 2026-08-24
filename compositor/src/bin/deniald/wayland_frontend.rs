@@ -3401,7 +3401,38 @@ impl WaylandFrontend {
                 );
             }
 
-            for layer in &layers {
+            let output_scale = self
+                .output_for_geometry(geometry)
+                .map(|entry| entry.output.current_scale().fractional_scale())
+                .unwrap_or(1.0);
+            let target_physical_w = (f64::from(content.size.w) * output_scale).round();
+            let target_physical_h = (f64::from(content.size.h) * output_scale).round();
+
+            for layer in &mut layers {
+                if layer.surface_id == stable_id && layer.texture_id > 0 {
+                    let buffer_w = f64::from(layer.width);
+                    let buffer_h = f64::from(layer.height);
+                    if layer.texture_source_x == 0.0
+                        && layer.texture_source_y == 0.0
+                        && (layer.texture_source_width - buffer_w).abs() < 1e-4
+                        && (layer.texture_source_height - buffer_h).abs() < 1e-4
+                    {
+                        if buffer_w >= target_physical_w
+                            && buffer_w - target_physical_w <= 2.0
+                            && target_physical_w > 0.0
+                        {
+                            layer.texture_source_width = target_physical_w;
+                            layer.surface_width = target_physical_w / output_scale;
+                        }
+                        if buffer_h >= target_physical_h
+                            && buffer_h - target_physical_h <= 2.0
+                            && target_physical_h > 0.0
+                        {
+                            layer.texture_source_height = target_physical_h;
+                            layer.surface_height = target_physical_h / output_scale;
+                        }
+                    }
+                }
                 if layer.texture_id > 0 {
                     surface_windows.insert(layer.surface_id, stable_id);
                 }
@@ -3414,13 +3445,14 @@ impl WaylandFrontend {
                 complex_windows.insert(stable_id);
             }
 
-            let root_layer = layers.iter().find(|layer| layer.surface_id == stable_id);
             let fallback_width = u32::try_from(content.size.w)?;
             let fallback_height = u32::try_from(content.size.h)?;
             let (
                 texture_id,
                 root_width,
                 root_height,
+                root_surface_width,
+                root_surface_height,
                 texture_source_x,
                 texture_source_y,
                 texture_source_width,
@@ -3428,20 +3460,41 @@ impl WaylandFrontend {
                 transform,
                 scale_120,
                 opacity,
-            ) = root_layer.map_or((0, 0, 0, 0.0, 0.0, 0.0, 0.0, 0, 120, 1.0), |layer| {
-                (
-                    layer.texture_id,
-                    layer.width,
-                    layer.height,
-                    layer.texture_source_x,
-                    layer.texture_source_y,
-                    layer.texture_source_width,
-                    layer.texture_source_height,
-                    layer.transform,
-                    layer.scale_120,
-                    layer.opacity,
-                )
-            });
+            ) = layers
+                .iter()
+                .find(|layer| layer.surface_id == stable_id)
+                .map_or(
+                    (
+                        0,
+                        0,
+                        0,
+                        f64::from(content.size.w),
+                        f64::from(content.size.h),
+                        0.0,
+                        0.0,
+                        0.0,
+                        0.0,
+                        0,
+                        120,
+                        1.0,
+                    ),
+                    |layer| {
+                        (
+                            layer.texture_id,
+                            layer.width,
+                            layer.height,
+                            layer.surface_width,
+                            layer.surface_height,
+                            layer.texture_source_x,
+                            layer.texture_source_y,
+                            layer.texture_source_width,
+                            layer.texture_source_height,
+                            layer.transform,
+                            layer.scale_120,
+                            layer.opacity,
+                        )
+                    },
+                );
             let width = if root_width > 0 {
                 root_width
             } else {
@@ -3573,8 +3626,8 @@ impl WaylandFrontend {
                 height,
                 surface_x: f64::from(content.loc.x),
                 surface_y: f64::from(content.loc.y),
-                surface_width: f64::from(content.size.w),
-                surface_height: f64::from(content.size.h),
+                surface_width: root_surface_width,
+                surface_height: root_surface_height,
                 texture_source_x,
                 texture_source_y,
                 texture_source_width,
@@ -3588,8 +3641,8 @@ impl WaylandFrontend {
                 scale_120,
                 content_x: f64::from(content.loc.x),
                 content_y: f64::from(content.loc.y),
-                content_width: f64::from(content.size.w),
-                content_height: f64::from(content.size.h),
+                content_width: root_surface_width,
+                content_height: root_surface_height,
                 suppress_animations,
                 server_side_decorated,
                 opacity: opacity * window_opacity,

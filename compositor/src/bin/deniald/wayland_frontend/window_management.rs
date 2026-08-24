@@ -375,10 +375,35 @@ pub(in super::super) fn apply_window_commands(
                 maximized,
                 ..
             } => {
-                let requested_size = Size::<i32, Logical>::from((
-                    geometry.width.round() as i32,
-                    geometry.height.round() as i32,
-                ));
+                let output_scale = state
+                    .wayland
+                    .as_ref()
+                    .and_then(|frontend| {
+                        frontend
+                            .output_for_geometry(Rectangle::new(
+                                Point::from((geometry.x.round() as i32, geometry.y.round() as i32)),
+                                Size::from((
+                                    geometry.width.round() as i32,
+                                    geometry.height.round() as i32,
+                                )),
+                            ))
+                            .map(|entry| entry.output.current_scale().fractional_scale())
+                    })
+                    .unwrap_or(1.0);
+
+                let mut req_w = geometry.width.round() as i32;
+                let mut req_h = geometry.height.round() as i32;
+                if output_scale > 1.0 {
+                    let target_phys_w = (geometry.width * output_scale).round();
+                    let target_phys_h = (geometry.height * output_scale).round();
+                    if (f64::from(req_w) * output_scale).round() < target_phys_w {
+                        req_w = req_w.saturating_add(1);
+                    }
+                    if (f64::from(req_h) * output_scale).round() < target_phys_h {
+                        req_h = req_h.saturating_add(1);
+                    }
+                }
+                let requested_size = Size::<i32, Logical>::from((req_w, req_h));
                 let (minimum, maximum) = if let Some(toplevel) = window.toplevel() {
                     if !exact && toplevel_has_state(toplevel, xdg_toplevel::State::Resizing) {
                         warn!(
@@ -1501,5 +1526,38 @@ mod tests {
             transfer_restore_geometry(restore, source, destination, work_area),
             Rectangle::new(Point::from((3680, 300)), Size::from((800, 600)))
         );
+    }
+
+    #[test]
+    fn fractional_scale_geometry_consistency_and_edge_crop() {
+        let test_scales: [f64; 7] = [1.0, 1.25, 4.0 / 3.0, 1.5, 1.6, 1.75, 2.0];
+        let physical_output: (f64, f64) = (2560.0, 1600.0);
+
+        for scale in test_scales {
+            let logical_w: f64 = physical_output.0 / scale;
+            let logical_h: f64 = physical_output.1 / scale;
+
+            let configure_w = logical_w.round() as i32;
+            let configure_h = logical_h.round() as i32;
+
+            let client_buffer_w = ((f64::from(configure_w)) * scale).ceil() as u32;
+            let client_buffer_h = ((f64::from(configure_h)) * scale).ceil() as u32;
+
+            let overhang_w = f64::from(client_buffer_w) - physical_output.0;
+            let overhang_h = f64::from(client_buffer_h) - physical_output.1;
+
+            assert!(
+                overhang_w >= 0.0 && overhang_w <= 1.0,
+                "scale {} w overhang {}",
+                scale,
+                overhang_w
+            );
+            assert!(
+                overhang_h >= 0.0 && overhang_h <= 1.0,
+                "scale {} h overhang {}",
+                scale,
+                overhang_h
+            );
+        }
     }
 }

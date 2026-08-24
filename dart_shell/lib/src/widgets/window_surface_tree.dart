@@ -84,6 +84,21 @@ FilterQuality _sampledFilterQuality(
   return oneToOne ? requested : FilterQuality.medium;
 }
 
+@visibleForTesting
+FilterQuality sampledFilterQualityForTesting(
+  BuildContext context, {
+  required FilterQuality requested,
+  required Size target,
+  required double sourceWidth,
+  required double sourceHeight,
+}) => _sampledFilterQuality(
+  context,
+  requested: requested,
+  target: target,
+  sourceWidth: sourceWidth,
+  sourceHeight: sourceHeight,
+);
+
 class SurfaceLayerTexture extends StatelessWidget {
   const SurfaceLayerTexture({
     super.key,

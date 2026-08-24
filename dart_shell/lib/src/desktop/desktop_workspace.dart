@@ -445,6 +445,7 @@ class DesktopWindowPlacement {
     bool nativeGrab = false,
     this.restoreFrame,
     this.fullscreenRestoreFrame,
+    this.devicePixelRatio = 1.0,
   }) : resizing = dragging && resizing,
        nativeGrab = dragging && nativeGrab;
 
@@ -460,6 +461,7 @@ class DesktopWindowPlacement {
   final bool dragging;
   final bool resizing;
   final bool shellCorrectedInitialGeometry;
+  final double devicePixelRatio;
 
   /// Whether the compositor, not the shell, authors the frame while [dragging].
   ///
@@ -483,18 +485,47 @@ class DesktopWindowPlacement {
 
   bool get decorated => !fullscreen && serverSideDecorated;
 
-  double get frameBorder => decorated ? DesktopMetrics.frameBorder : 0.0;
+  double get frameBorder {
+    if (!decorated) {
+      return 0.0;
+    }
+    final dpr = devicePixelRatio > 0.0 ? devicePixelRatio : 1.0;
+    return (DesktopMetrics.frameBorder * dpr).roundToDouble() / dpr;
+  }
 
-  double get titlebarHeight => decorated ? DesktopTitlebarMetrics.height : 0.0;
+  double get titlebarHeight {
+    if (!decorated) {
+      return 0.0;
+    }
+    final dpr = devicePixelRatio > 0.0 ? devicePixelRatio : 1.0;
+    return (DesktopTitlebarMetrics.height * dpr).roundToDouble() / dpr;
+  }
 
-  EdgeInsets get frameInsets => EdgeInsets.fromLTRB(
-    frameBorder,
-    frameBorder + titlebarHeight,
-    frameBorder,
-    frameBorder,
-  );
+  EdgeInsets get frameInsets {
+    if (!decorated) {
+      return EdgeInsets.zero;
+    }
+    final dpr = devicePixelRatio > 0.0 ? devicePixelRatio : 1.0;
+    final border = (DesktopMetrics.frameBorder * dpr).roundToDouble() / dpr;
+    final top =
+        ((DesktopMetrics.frameBorder + DesktopTitlebarMetrics.height) * dpr)
+            .roundToDouble() /
+        dpr;
+    return EdgeInsets.fromLTRB(border, top, border, border);
+  }
 
-  Rect get contentRect => frameInsets.deflateRect(frame);
+  Rect get contentRect {
+    if (!decorated) {
+      return frame;
+    }
+    final insets = frameInsets;
+    final dpr = devicePixelRatio > 0.0 ? devicePixelRatio : 1.0;
+    final left = ((frame.left + insets.left) * dpr).roundToDouble() / dpr;
+    final top = ((frame.top + insets.top) * dpr).roundToDouble() / dpr;
+    final right = ((frame.right - insets.right) * dpr).roundToDouble() / dpr;
+    final bottom = ((frame.bottom - insets.bottom) * dpr).roundToDouble() / dpr;
+    return Rect.fromLTRB(left, top, right, bottom);
+  }
 
   DesktopWindowPlacement copyWith({
     Rect? frame,
@@ -513,6 +544,7 @@ class DesktopWindowPlacement {
     bool clearRestoreFrame = false,
     Rect? fullscreenRestoreFrame,
     bool clearFullscreenRestoreFrame = false,
+    double? devicePixelRatio,
   }) {
     return DesktopWindowPlacement(
       objectId: objectId,
@@ -535,6 +567,7 @@ class DesktopWindowPlacement {
       fullscreenRestoreFrame: clearFullscreenRestoreFrame
           ? null
           : fullscreenRestoreFrame ?? this.fullscreenRestoreFrame,
+      devicePixelRatio: devicePixelRatio ?? this.devicePixelRatio,
     );
   }
 }
@@ -839,7 +872,13 @@ class DesktopWorkspaceController extends Notifier<DesktopWorkspaceState> {
     );
     final next = <int, DesktopWindowPlacement>{
       for (final entry in state.placements.entries)
-        if (activeIds.contains(entry.key)) entry.key: entry.value,
+        if (activeIds.contains(entry.key))
+          entry.key: pixelRatioChanged
+              ? entry.value.copyWith(
+                  devicePixelRatio: _devicePixelRatio,
+                  frame: _snapRect(entry.value.frame),
+                )
+              : entry.value,
     };
     var nextZ = state.nextZ;
     var changed = viewMetricsChanged || next.length != state.placements.length;
@@ -866,6 +905,7 @@ class DesktopWorkspaceController extends Notifier<DesktopWorkspaceState> {
           monitorId: window.monitorId,
           serverSideDecorated: window.serverSideDecorated,
           shellCorrectedInitialGeometry: frame != rawFrame,
+          devicePixelRatio: _devicePixelRatio,
         );
         // The compositor does not know about the shell titlebar. Keep the
         // shell frame stable until it echoes this one-time corrected client
@@ -1768,16 +1808,21 @@ class DesktopWorkspaceController extends Notifier<DesktopWorkspaceState> {
     required bool serverSideDecorated,
     bool fullscreen = false,
   }) {
+    final snapped = _snapRect(contentRect);
     if (!serverSideDecorated || fullscreen) {
-      return contentRect;
+      return snapped;
     }
+    final dpr = _devicePixelRatio > 0.0 ? _devicePixelRatio : 1.0;
+    final border = (DesktopMetrics.frameBorder * dpr).roundToDouble() / dpr;
+    final top =
+        ((DesktopMetrics.frameBorder + DesktopTitlebarMetrics.height) * dpr)
+            .roundToDouble() /
+        dpr;
     return Rect.fromLTRB(
-      contentRect.left - DesktopMetrics.frameBorder,
-      contentRect.top -
-          DesktopMetrics.frameBorder -
-          DesktopTitlebarMetrics.height,
-      contentRect.right + DesktopMetrics.frameBorder,
-      contentRect.bottom + DesktopMetrics.frameBorder,
+      snapped.left - border,
+      snapped.top - top,
+      snapped.right + border,
+      snapped.bottom + border,
     );
   }
 
@@ -1908,6 +1953,15 @@ class DesktopWorkspaceController extends Notifier<DesktopWorkspaceState> {
       return origin;
     }
     return value.clamp(low, high).toDouble();
+  }
+
+  Rect _snapRect(Rect rect) {
+    return Rect.fromLTRB(
+      _snapToPixel(rect.left),
+      _snapToPixel(rect.top),
+      _snapToPixel(rect.right),
+      _snapToPixel(rect.bottom),
+    );
   }
 
   Offset _snapOffset(Offset offset) {
