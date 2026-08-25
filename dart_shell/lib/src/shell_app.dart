@@ -70,6 +70,12 @@ final _userAppWindowsProvider = Provider<List<DenialWindow>>((ref) {
   );
 });
 
+/// Whether the compositor programs a KMS cursor plane and the shell must not
+/// paint or schedule a software cursor. Rust only emits on transitions.
+final hardwareCursorActiveProvider = StreamProvider<bool>((ref) {
+  return ref.watch(denialBridgeProvider).cursorRenderModes;
+});
+
 class DenialShellApp extends ConsumerStatefulWidget {
   const DenialShellApp({super.key});
 
@@ -179,11 +185,13 @@ class _DenialShellAppState extends ConsumerState<DenialShellApp> {
     final cursorShapes = bridge.cursorShapes;
     final cursorPositions = bridge.cursorPositions;
     final dragIcons = bridge.dragIcons;
-    final hideCursor = ref.watch(
-      screenshotSelectionProvider.select(
-        (session) => session?.hidesCursor ?? false,
-      ),
-    );
+    final hideCursor =
+        (ref.watch(
+              screenshotSelectionProvider.select(
+                (session) => session?.hidesCursor ?? false,
+              ),
+            ) ||
+            (ref.watch(hardwareCursorActiveProvider).value ?? false));
     final scene = switch (effectiveProfile) {
       ShellProfile.mobile => InputLayoutPublisher(
         child: const Stack(

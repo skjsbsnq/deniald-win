@@ -842,6 +842,13 @@ impl WireBridge {
         Ok(self.outbound_builder.finished_data())
     }
 
+    pub fn encode_cursor_render_mode(&mut self, hardware: bool) -> Result<&[u8], WireError> {
+        let sequence = self.take_sequence();
+        self.outbound_builder.reset();
+        encode_cursor_render_mode(&mut self.outbound_builder, sequence, hardware)?;
+        Ok(self.outbound_builder.finished_data())
+    }
+
     pub fn encode_text_input_state(
         &mut self,
         active: bool,
@@ -2510,6 +2517,26 @@ fn encode_cursor_position(
             sequence,
             request_id: 0,
             payload_type: fb::Payload::CursorPosition,
+            payload: Some(cursor.as_union_value()),
+        },
+    );
+    fb::finish_envelope_buffer(builder, envelope);
+    validate_finished_message(builder)
+}
+
+fn encode_cursor_render_mode(
+    builder: &mut FlatBufferBuilder<'_>,
+    sequence: u64,
+    hardware: bool,
+) -> Result<(), WireError> {
+    let cursor = fb::CursorRenderMode::create(builder, &fb::CursorRenderModeArgs { hardware });
+    let envelope = fb::Envelope::create(
+        builder,
+        &fb::EnvelopeArgs {
+            protocol_version: PROTOCOL_VERSION,
+            sequence,
+            request_id: 0,
+            payload_type: fb::Payload::CursorRenderMode,
             payload: Some(cursor.as_union_value()),
         },
     );
@@ -4739,6 +4766,25 @@ mod tests {
         assert_eq!(envelope.payload_type(), fb::Payload::CursorPosition);
         assert_eq!(cursor.x(), 713.25);
         assert_eq!(cursor.y(), 419.75);
+    }
+
+    #[test]
+    fn encodes_cursor_render_mode_transitions() {
+        let mut bridge = bridge();
+
+        let bytes = bridge.encode_cursor_render_mode(true).unwrap();
+        let envelope = fb::root_as_envelope(bytes).unwrap();
+        let mode = envelope.payload_as_cursor_render_mode().unwrap();
+        assert_eq!(envelope.protocol_version(), PROTOCOL_VERSION);
+        assert_eq!(envelope.sequence(), 1);
+        assert_eq!(envelope.request_id(), 0);
+        assert_eq!(envelope.payload_type(), fb::Payload::CursorRenderMode);
+        assert!(mode.hardware());
+
+        let bytes = bridge.encode_cursor_render_mode(false).unwrap();
+        let envelope = fb::root_as_envelope(bytes).unwrap();
+        assert_eq!(envelope.sequence(), 2);
+        assert!(!envelope.payload_as_cursor_render_mode().unwrap().hardware());
     }
 
     #[test]

@@ -282,6 +282,59 @@ void main() {
         expect(region.bottom, lessThanOrEqualTo(canvas.bottom));
       }
     });
+
+    test('deep stacks stay bounded instead of fragmenting quadratically', () {
+      final stack = <DesktopFrameRing>[
+        for (var index = 0; index < 64; index += 1)
+          ring(
+            Rect.fromLTWH(
+              index * 10.0,
+              index * 5.0,
+              900.0,
+              700.0,
+            ),
+          ),
+      ];
+      final regions = desktopFrameRingRegions(canvas, stack);
+      // The topmost ring is always restored exactly: its titlebar band is
+      // present. The topmost window is the first stack entry at (0, 0); its
+      // titlebar spans y in [0, 35).
+      expect(
+        covers(regions, const Offset(400, 10)),
+        isTrue,
+        reason: 'the topmost window titlebar must remain a shell region',
+      );
+      // With the obstruction cap (32) and fragment cap (256) the pass output
+      // is linear-bounded. A quadratic implementation can exceed this bound
+      // for a 64-window stack.
+      expect(regions.length, lessThanOrEqualTo(64 * 260));
+    });
+  });
+
+  testWidgets('unchanged geometry reuses the visibility snapshot', (
+    tester,
+  ) async {
+    final harness = await _pumpPublisher(tester);
+    final state = tester.state(find.byType(DesktopInputLayoutPublisher));
+    final hitsAfterSetup = (state as dynamic).debugGeometryCacheHits as int;
+
+    // Force a rebuild with identical geometry: the next pass must reuse the
+    // cached shell regions / input windows / visibility snapshot.
+    await tester.pumpWidget(
+      UncontrolledProviderScope(
+        container: harness.container,
+        child: const MediaQuery(
+          data: MediaQueryData(size: _viewSize, devicePixelRatio: 1.0),
+          child: DesktopInputLayoutPublisher(child: SizedBox.expand()),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(
+      (state as dynamic).debugGeometryCacheHits,
+      greaterThan(hitsAfterSetup),
+      reason: 'unchanged geometry must reuse the previous snapshot',
+    );
   });
 }
 

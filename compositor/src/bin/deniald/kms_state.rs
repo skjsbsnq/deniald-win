@@ -484,7 +484,9 @@ pub(super) fn cursor_plane_candidates(
         .collect()
 }
 
-fn discover_plane_capabilities(drm: &DrmDevice) -> Result<Vec<PlaneCapabilities>, Box<dyn Error>> {
+pub(super) fn discover_plane_capabilities(
+    drm: &DrmDevice,
+) -> Result<Vec<PlaneCapabilities>, Box<dyn Error>> {
     let resources = drm.resource_handles()?;
     drm.plane_handles()?
         .into_iter()
@@ -2089,7 +2091,7 @@ where
         .ok_or_else(|| format!("missing atomic property {expected_name}").into())
 }
 
-fn optional_named_property<H>(
+pub(super) fn optional_named_property<H>(
     drm: &DrmDevice,
     object: H,
     expected_name: &str,

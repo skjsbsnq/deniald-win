@@ -452,6 +452,13 @@ pub(super) struct WaylandFrontend {
     /// This bypasses Flutter hit testing while a Wayland client owns input.
     #[cfg(feature = "flutter")]
     pending_cursor_position: Option<(f64, f64)>,
+    /// Whether the KMS cursor plane currently owns the visible cursor. When
+    /// true the Flutter shell must not paint or schedule a software cursor,
+    /// and captures that request overlay_cursor must composite from artwork.
+    #[cfg(feature = "flutter")]
+    hardware_cursor_active: bool,
+    #[cfg(feature = "flutter")]
+    hardware_cursor_role: Option<super::hardware_cursor::CursorRole>,
     #[cfg(feature = "flutter")]
     flutter_touch_slots: HashSet<i32>,
     #[cfg(feature = "flutter")]
@@ -1294,6 +1301,10 @@ impl WaylandFrontend {
             published_cursor_shape: None,
             #[cfg(feature = "flutter")]
             pending_cursor_position: None,
+            #[cfg(feature = "flutter")]
+            hardware_cursor_active: false,
+            #[cfg(feature = "flutter")]
+            hardware_cursor_role: None,
             #[cfg(feature = "flutter")]
             flutter_touch_slots: HashSet::new(),
             #[cfg(feature = "flutter")]
@@ -4253,6 +4264,81 @@ impl WaylandFrontend {
             self.pointer_location.x - self.atlas_origin.x,
             self.pointer_location.y - self.atlas_origin.y,
         )
+    }
+
+    /// Projects the compositor-owned pointer onto the powered logical output
+    /// under it, in physical pixels, for the KMS cursor plane. Returns `None`
+    /// when the pointer is hidden or not over any powered output.
+    #[cfg(feature = "flutter")]
+    pub(super) fn cursor_visual_request(
+        &self,
+    ) -> Option<super::hardware_cursor::CursorVisualRequest> {
+        if !self.pointer_cursor_visible {
+            return None;
+        }
+        let pointer = Point::from((
+            self.pointer_location.x.floor() as i32,
+            self.pointer_location.y.floor() as i32,
+        ));
+        let output = self
+            .outputs
+            .iter()
+            .find(|entry| entry.powered && entry.logical_geometry.contains(pointer))?;
+        let position = (
+            (self.pointer_location.x - f64::from(output.logical_geometry.loc.x)) * self.atlas_scale,
+            (self.pointer_location.y - f64::from(output.logical_geometry.loc.y)) * self.atlas_scale,
+        );
+        Some(super::hardware_cursor::CursorVisualRequest {
+            output_id: output.id,
+            position,
+            scale: self.atlas_scale,
+        })
+    }
+
+    /// Records the render path chosen by the KMS cursor runtime so capture
+    /// paths can decide whether the cursor is already in the atlas.
+    #[cfg(feature = "flutter")]
+    pub(super) fn set_hardware_cursor_state(
+        &mut self,
+        active: bool,
+        role: Option<super::hardware_cursor::CursorRole>,
+    ) {
+        self.hardware_cursor_active = active;
+        self.hardware_cursor_role = role;
+    }
+
+    /// Whether a pending screencopy asks for a DMABUF buffer with the cursor
+    /// overlaid. The GL renderer has no pixel-upload path, so while such a
+    /// request is pending the compositor keeps the cursor in the Flutter
+    /// atlas (software path) instead of programming the KMS plane.
+    #[cfg(feature = "flutter")]
+    pub(super) fn has_dmabuf_overlay_cursor_pending(&self) -> bool {
+        self.screencopy.has_dmabuf_overlay_cursor_pending()
+    }
+
+    /// Hardware cursor state for capture composition. Returns `None` when the
+    /// cursor is software-rendered (already in the atlas) or not visible.
+    #[cfg(feature = "flutter")]
+    pub(super) fn cursor_capture_state(
+        &self,
+    ) -> Option<super::hardware_cursor::CursorCaptureState> {
+        if !self.hardware_cursor_active {
+            return None;
+        }
+        let role = self.hardware_cursor_role?;
+        let request = self.cursor_visual_request()?;
+        let output = self
+            .outputs
+            .iter()
+            .find(|entry| entry.id == request.output_id)?;
+        Some(super::hardware_cursor::CursorCaptureState {
+            role,
+            atlas_position: (
+                f64::from(output.capture_source.loc.x) + request.position.0,
+                f64::from(output.capture_source.loc.y) + request.position.1,
+            ),
+            scale: request.scale,
+        })
     }
 
     fn control_output_under_pointer(&self) -> Option<(&str, i64)> {

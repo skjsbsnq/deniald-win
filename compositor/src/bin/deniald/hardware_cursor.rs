@@ -6,13 +6,21 @@
 //! test-only arrangement transitions to software rendering and is not retried
 //! until the device/output epoch changes.
 
-#![allow(dead_code)]
-
 use std::collections::BTreeSet;
+use std::error::Error;
 use std::io::Cursor;
 use std::sync::OnceLock;
 
-use denial_core::topology::{OutputTransform, PixelSize};
+use denial_core::topology::{OutputId, OutputTransform, PixelSize};
+use smithay::backend::allocator::dumb::DumbBuffer;
+use smithay::backend::allocator::{Allocator, Fourcc, Modifier};
+use smithay::backend::drm::DrmDevice;
+use smithay::reexports::drm::buffer::{Buffer as DrmBuffer, DrmFourcc};
+use smithay::reexports::drm::control::{
+    AtomicCommitFlags, Device as ControlDevice, RawResourceHandle, atomic::AtomicModeReq,
+    framebuffer, plane, property,
+};
+use tracing::{info, warn};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) struct PixelPoint {
@@ -438,6 +446,9 @@ impl CursorState {
     pub(super) fn path(&self) -> CursorRenderPath {
         self.path
     }
+    pub(super) fn tested_epoch(&self) -> Option<u64> {
+        self.tested_epoch
+    }
     pub(super) fn begin_test_only(&mut self, epoch: u64, reason: &str) -> bool {
         if self.tested_epoch == Some(epoch) {
             return false;
@@ -477,6 +488,499 @@ impl CursorState {
     pub(super) fn invalidate_epoch(&mut self) {
         self.tested_epoch = None;
     }
+}
+
+/// Property handles required to program a cursor plane atomically. All
+/// handles are resolved dynamically from the live DRM object, never guessed.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct CursorPlaneProperties {
+    pub(super) fb_id: property::Handle,
+    pub(super) crtc_id: property::Handle,
+    pub(super) src_x: property::Handle,
+    pub(super) src_y: property::Handle,
+    pub(super) src_w: property::Handle,
+    pub(super) src_h: property::Handle,
+    pub(super) crtc_x: property::Handle,
+    pub(super) crtc_y: property::Handle,
+    pub(super) crtc_w: property::Handle,
+    pub(super) crtc_h: property::Handle,
+}
+
+impl CursorPlaneProperties {
+    pub(super) fn load(drm: &DrmDevice, plane: plane::Handle) -> Result<Self, Box<dyn Error>> {
+        let named = |name: &str| -> Result<property::Handle, Box<dyn Error>> {
+            super::kms_state::optional_named_property(drm, plane, name)?
+                .ok_or_else(|| std::io::Error::other(format!("cursor plane lacks {name} property")))
+                .map_err(Into::into)
+        };
+        Ok(Self {
+            fb_id: named("FB_ID")?,
+            crtc_id: named("CRTC_ID")?,
+            src_x: named("SRC_X")?,
+            src_y: named("SRC_Y")?,
+            src_w: named("SRC_W")?,
+            src_h: named("SRC_H")?,
+            crtc_x: named("CRTC_X")?,
+            crtc_y: named("CRTC_Y")?,
+            crtc_w: named("CRTC_W")?,
+            crtc_h: named("CRTC_H")?,
+        })
+    }
+}
+
+/// A live KMS cursor-plane binding: the chosen plane, its atomic property
+/// handles, and the ARGB8888 dumb buffer + framebuffer backing the cursor
+/// image. The buffer is sized to the plane's advertised maximum (bounded by
+/// `CURSOR_MAX_DIMENSION`) and reused across role changes.
+#[derive(Debug)]
+pub(super) struct CursorPlaneBinding {
+    pub(super) crtc: u32,
+    pub(super) plane: plane::Handle,
+    pub(super) properties: CursorPlaneProperties,
+    pub(super) framebuffer: framebuffer::Handle,
+    pub(super) buffer: DumbBuffer,
+    pub(super) buffer_size: PixelSize,
+}
+
+/// A pure geometry mapping from the clipped cursor rectangle to the KMS
+/// cursor-plane source/destination properties. Negative destinations crop the
+/// source; right/bottom overflow crops the destination width/height.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(super) struct CursorPlaneRect {
+    pub(super) src_x: u32,
+    pub(super) src_y: u32,
+    pub(super) src_w: u32,
+    pub(super) src_h: u32,
+    pub(super) crtc_x: u32,
+    pub(super) crtc_y: u32,
+    pub(super) crtc_w: u32,
+    pub(super) crtc_h: u32,
+}
+
+pub(super) fn cursor_plane_rect(
+    geometry: CursorGeometry,
+    output_size: PixelSize,
+) -> CursorPlaneRect {
+    let crop_left = if geometry.destination.x < 0 {
+        geometry
+            .destination
+            .x
+            .unsigned_abs()
+            .min(geometry.size.width)
+    } else {
+        0
+    };
+    let crop_top = if geometry.destination.y < 0 {
+        geometry
+            .destination
+            .y
+            .unsigned_abs()
+            .min(geometry.size.height)
+    } else {
+        0
+    };
+    let crtc_x = geometry.destination.x.max(0) as u32;
+    let crtc_y = geometry.destination.y.max(0) as u32;
+    let available_w = geometry.size.width.saturating_sub(crop_left);
+    let available_h = geometry.size.height.saturating_sub(crop_top);
+    let crtc_w = available_w.min(output_size.width.saturating_sub(crtc_x));
+    let crtc_h = available_h.min(output_size.height.saturating_sub(crtc_y));
+    CursorPlaneRect {
+        src_x: crop_left,
+        src_y: crop_top,
+        src_w: crtc_w,
+        src_h: crtc_h,
+        crtc_x,
+        crtc_y,
+        crtc_w,
+        crtc_h,
+    }
+}
+
+/// The compositor-authoritative cursor visual as projected onto the output
+/// under the pointer. `position` is physical pixels on that output.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct CursorVisualState {
+    pub(super) crtc: u32,
+    pub(super) position: (f64, f64),
+    pub(super) role: Option<CursorRole>,
+    pub(super) visible: bool,
+    pub(super) scale: f64,
+    pub(super) output_size: PixelSize,
+    pub(super) transform: OutputTransform,
+}
+
+/// Request produced by the Wayland frontend: which logical output owns the
+/// pointer, where it is in physical pixels, and the logical->physical scale.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct CursorVisualRequest {
+    pub(super) output_id: OutputId,
+    pub(super) position: (f64, f64),
+    pub(super) scale: f64,
+}
+
+/// Production cursor-plane runtime. It owns the dynamically discovered
+/// candidates, live bindings, and the publish path (hardware vs software).
+/// Any KMS failure at probe, upload, or commit time degrades to software
+/// rendering for the current topology epoch; `invalidate()` re-arms probing
+/// after hotplug/mode/scale/transform changes.
+#[derive(Debug, Default)]
+pub(super) struct CursorPlaneRuntime {
+    state: CursorState,
+    candidates: Vec<CursorPlaneCandidate>,
+    bindings: Vec<CursorPlaneBinding>,
+    epoch: u64,
+    role: Option<CursorRole>,
+    position: Option<(f64, f64)>,
+    visible: bool,
+    published_path: CursorRenderPath,
+}
+
+impl CursorPlaneRuntime {
+    pub(super) fn visible(&self) -> bool {
+        self.state.visible()
+    }
+
+    pub(super) fn role(&self) -> Option<CursorRole> {
+        self.role
+    }
+
+    pub(super) fn position(&self) -> Option<(f64, f64)> {
+        self.position
+    }
+
+    /// Invalidates every cached binding and re-arms plane probing. Call after
+    /// hotplug, mode, scale, transform, or driver-epoch changes.
+    pub(super) fn invalidate(&mut self, drm: &DrmDevice) {
+        self.epoch = self.epoch.wrapping_add(1);
+        self.state.invalidate_epoch();
+        self.drop_bindings(drm);
+        self.role = None;
+        self.position = None;
+        self.visible = false;
+    }
+
+    pub(super) fn failure_reasons(&self) -> Vec<String> {
+        self.state.failure_reasons().map(str::to_owned).collect()
+    }
+
+    pub(super) fn take_path_transition(&mut self) -> Option<CursorRenderPath> {
+        let path = self.state.path();
+        if path == self.published_path {
+            return None;
+        }
+        self.published_path = path;
+        Some(path)
+    }
+
+    fn drop_bindings(&mut self, drm: &DrmDevice) {
+        let count = self.bindings.len();
+        for binding in self.bindings.drain(..) {
+            if let Err(error) = drm.destroy_framebuffer(binding.framebuffer) {
+                warn!(?error, "could not destroy cursor framebuffer");
+            }
+            // The smithay DumbBuffer's Drop destroys the underlying handle.
+        }
+        for _ in 0..count {
+            self.state.retire_buffer();
+        }
+    }
+
+    fn binding_index(&self, crtc: u32) -> Option<usize> {
+        self.bindings
+            .iter()
+            .position(|binding| binding.crtc == crtc)
+    }
+
+    fn refresh_candidates(&mut self, drm: &DrmDevice) {
+        match super::kms_state::discover_plane_capabilities(drm) {
+            Ok(capabilities) => {
+                let max_size =
+                    PixelSize::new(drm.cursor_size().w.max(1), drm.cursor_size().h.max(1));
+                self.candidates =
+                    super::kms_state::cursor_plane_candidates(&capabilities, max_size);
+            }
+            Err(error) => {
+                warn!(%error, "could not refresh cursor plane candidates");
+                self.candidates.clear();
+            }
+        }
+    }
+
+    fn ensure_binding(
+        &mut self,
+        drm: &DrmDevice,
+        visual: &CursorVisualState,
+    ) -> Result<Option<()>, Box<dyn Error>> {
+        if self.binding_index(visual.crtc).is_some() {
+            return Ok(Some(()));
+        }
+        let Some(choice) =
+            select_cursor_plane(&self.candidates, visual.crtc, DrmFourcc::Argb8888 as u32)
+        else {
+            return Ok(None);
+        };
+        let Some(plane) = smithay::reexports::drm::control::from_u32::<plane::Handle>(choice.plane)
+        else {
+            return Ok(None);
+        };
+        let properties = CursorPlaneProperties::load(drm, plane)?;
+        let buffer_size = PixelSize::new(choice.width.max(1), choice.height.max(1));
+        let mut allocator =
+            smithay::backend::allocator::dumb::DumbAllocator::new(drm.device_fd().clone());
+        let buffer = allocator.create_buffer(
+            buffer_size.width,
+            buffer_size.height,
+            Fourcc::Argb8888,
+            &[Modifier::Linear],
+        )?;
+        let framebuffer = smithay::backend::drm::dumb::framebuffer_from_dumb_buffer(
+            drm.device_fd(),
+            &buffer,
+            false,
+        )?;
+        let framebuffer = *framebuffer.as_ref();
+        self.bindings.push(CursorPlaneBinding {
+            crtc: visual.crtc,
+            plane,
+            properties,
+            framebuffer,
+            buffer,
+            buffer_size,
+        });
+        self.state.acquire_buffer();
+        info!(
+            crtc = visual.crtc,
+            plane = u32::from(plane),
+            width = buffer_size.width,
+            height = buffer_size.height,
+            "hardware cursor plane bound"
+        );
+        Ok(Some(()))
+    }
+
+    fn upload_artwork(
+        &self,
+        drm: &DrmDevice,
+        binding: &CursorPlaneBinding,
+        role: CursorRole,
+        scale: f64,
+    ) -> Result<(), Box<dyn Error>> {
+        let artwork = get_artwork(role);
+        let geom_w = (f64::from(artwork.width) * scale).round().max(1.0) as u32;
+        let geom_h = (f64::from(artwork.height) * scale).round().max(1.0) as u32;
+        let fill_w = geom_w.min(binding.buffer_size.width);
+        let fill_h = geom_h.min(binding.buffer_size.height);
+        let pitch = binding.buffer.handle().pitch() as usize;
+        let mut handle = *binding.buffer.handle();
+        let mut mapping = drm.device_fd().map_dumb_buffer(&mut handle)?;
+        let pixels = mapping.as_mut();
+        pixels.fill(0);
+        for dy in 0..fill_h {
+            let sy =
+                ((f64::from(dy) * f64::from(artwork.height)) / f64::from(geom_h)).floor() as u32;
+            let row = dy as usize * pitch;
+            for dx in 0..fill_w {
+                let sx =
+                    ((f64::from(dx) * f64::from(artwork.width)) / f64::from(geom_w)).floor() as u32;
+                let src = (sy as usize * artwork.width as usize + sx as usize) * 4;
+                let dst = row + dx as usize * 4;
+                pixels[dst..dst + 4].copy_from_slice(&artwork.rgba_pixels[src..src + 4]);
+            }
+        }
+        Ok(())
+    }
+
+    fn commit_visible(
+        &self,
+        drm: &DrmDevice,
+        binding: &CursorPlaneBinding,
+        visual: &CursorVisualState,
+        rect: CursorPlaneRect,
+    ) -> Result<(), Box<dyn Error>> {
+        let mut request = AtomicModeReq::new();
+        let plane: RawResourceHandle = binding.plane.into();
+        request.add_raw_property(
+            plane,
+            binding.properties.fb_id,
+            u64::from(u32::from(binding.framebuffer)),
+        );
+        request.add_raw_property(plane, binding.properties.crtc_id, u64::from(visual.crtc));
+        request.add_raw_property(plane, binding.properties.src_x, u64::from(rect.src_x) << 16);
+        request.add_raw_property(plane, binding.properties.src_y, u64::from(rect.src_y) << 16);
+        request.add_raw_property(plane, binding.properties.src_w, u64::from(rect.src_w) << 16);
+        request.add_raw_property(plane, binding.properties.src_h, u64::from(rect.src_h) << 16);
+        request.add_raw_property(plane, binding.properties.crtc_x, u64::from(rect.crtc_x));
+        request.add_raw_property(plane, binding.properties.crtc_y, u64::from(rect.crtc_y));
+        request.add_raw_property(plane, binding.properties.crtc_w, u64::from(rect.crtc_w));
+        request.add_raw_property(plane, binding.properties.crtc_h, u64::from(rect.crtc_h));
+        drm.atomic_commit(AtomicCommitFlags::NONBLOCK, request)?;
+        Ok(())
+    }
+
+    fn hide(&mut self, drm: &DrmDevice) -> Result<(), Box<dyn Error>> {
+        if self.bindings.is_empty() || !self.visible {
+            // Nothing visible on any plane: keep the idle path free of
+            // redundant atomic commits.
+            self.state.set_visible(false);
+            self.role = None;
+            self.position = None;
+            self.visible = false;
+            return Ok(());
+        }
+        let mut request = AtomicModeReq::new();
+        for binding in &self.bindings {
+            let plane: RawResourceHandle = binding.plane.into();
+            request.add_raw_property(plane, binding.properties.fb_id, 0);
+            request.add_raw_property(plane, binding.properties.crtc_id, 0);
+        }
+        drm.atomic_commit(AtomicCommitFlags::NONBLOCK, request)?;
+        self.state.set_visible(false);
+        self.role = None;
+        self.position = None;
+        self.visible = false;
+        Ok(())
+    }
+
+    /// Program the KMS cursor plane for the latest compositor cursor state.
+    /// Returns the active render path; hardware means the shell must not draw
+    /// or schedule a software cursor.
+    pub(super) fn synchronize(
+        &mut self,
+        drm: &DrmDevice,
+        visual: Option<CursorVisualState>,
+    ) -> Result<CursorRenderPath, Box<dyn Error>> {
+        let Some(visual) = visual else {
+            self.hide(drm)?;
+            return Ok(CursorRenderPath::Software);
+        };
+
+        if !visual.visible || visual.role.is_none() {
+            self.hide(drm)?;
+            return Ok(CursorRenderPath::Software);
+        }
+        let role = visual.role.expect("visibility checked above");
+
+        let probed = self.state.tested_epoch() == Some(self.epoch);
+        if !probed {
+            self.state.begin_test_only(self.epoch, "cursor_plane_probe");
+            self.refresh_candidates(drm);
+            match self.ensure_binding(drm, &visual) {
+                Ok(Some(())) => self.state.test_only_succeeded(),
+                Ok(None) => {
+                    self.state.test_only_failed("no_suitable_cursor_plane");
+                    self.hide(drm)?;
+                    return Ok(CursorRenderPath::Software);
+                }
+                Err(error) => {
+                    self.state
+                        .test_only_failed(format!("cursor_plane_probe_failed: {error}"));
+                    self.hide(drm)?;
+                    return Ok(CursorRenderPath::Software);
+                }
+            }
+        }
+
+        if self.state.path() != CursorRenderPath::Hardware {
+            self.hide(drm)?;
+            return Ok(CursorRenderPath::Software);
+        }
+
+        let Some(binding_index) = self.binding_index(visual.crtc) else {
+            self.state.test_only_failed("cursor_binding_lost");
+            self.hide(drm)?;
+            return Ok(CursorRenderPath::Software);
+        };
+
+        // No-op when the pointer has not moved and the role is unchanged.
+        if self.visible && self.role == Some(role) && self.position == Some(visual.position) {
+            return Ok(CursorRenderPath::Hardware);
+        }
+
+        if self.role != Some(role) {
+            let upload_result = {
+                let binding = &self.bindings[binding_index];
+                self.upload_artwork(drm, binding, role, visual.scale)
+            };
+            if let Err(error) = upload_result {
+                self.state
+                    .test_only_failed(format!("cursor_artwork_upload: {error}"));
+                self.hide(drm)?;
+                return Ok(CursorRenderPath::Software);
+            }
+        }
+
+        let artwork = get_artwork(role);
+        let Some(geometry) = geometry(
+            visual.position,
+            artwork.size(),
+            artwork.hotspot,
+            visual.scale,
+            visual.output_size,
+            visual.transform,
+        ) else {
+            self.hide(drm)?;
+            return Ok(CursorRenderPath::Software);
+        };
+        let rect = cursor_plane_rect(geometry, visual.output_size);
+        if rect.crtc_w == 0 || rect.crtc_h == 0 {
+            self.hide(drm)?;
+            return Ok(CursorRenderPath::Software);
+        }
+        let commit_result = {
+            let binding = &self.bindings[binding_index];
+            self.commit_visible(drm, binding, &visual, rect)
+        };
+        if let Err(error) = commit_result {
+            self.state
+                .test_only_failed(format!("cursor_plane_commit: {error}"));
+            self.hide(drm)?;
+            return Ok(CursorRenderPath::Software);
+        }
+
+        self.role = Some(role);
+        self.position = Some(visual.position);
+        self.visible = true;
+        self.state.set_visible(true);
+        Ok(CursorRenderPath::Hardware)
+    }
+}
+
+/// Cursor state needed to composite the hardware cursor into a capture
+/// (screencopy or screenshot). `atlas_position` is the pointer in physical
+/// atlas pixels; captures project it relative to their own source rect.
+#[derive(Clone, Copy, Debug)]
+pub(super) struct CursorCaptureState {
+    pub(super) role: CursorRole,
+    pub(super) atlas_position: (f64, f64),
+    pub(super) scale: f64,
+}
+
+/// Composites the hardware cursor into RGBA capture pixels whose top-left
+/// corresponds to `region_loc` in physical atlas pixels. The destination is
+/// treated as a `Normal` transform so captured pixels match the atlas.
+pub(super) fn composite_cursor_into_capture(
+    dst_pixels: &mut [u8],
+    dst_width: u32,
+    dst_height: u32,
+    dst_stride: usize,
+    cursor: CursorCaptureState,
+    region_loc: (i32, i32),
+) {
+    composite_cursor_to_rgba(
+        dst_pixels,
+        dst_width,
+        dst_height,
+        dst_stride,
+        (
+            cursor.atlas_position.0 - f64::from(region_loc.0),
+            cursor.atlas_position.1 - f64::from(region_loc.1),
+        ),
+        cursor.role,
+        cursor.scale,
+        PixelSize::new(dst_width, dst_height),
+        OutputTransform::Normal,
+    );
 }
 
 /// Composite a cursor onto target pixels (RGBA 8888) with alpha blending
@@ -842,6 +1346,111 @@ mod tests {
         assert_eq!(g_16.size, PixelSize::new(51, 51));
         assert_eq!(g_16.hotspot, PixelPoint { x: 10, y: 3 });
         assert_eq!(g_16.destination, PixelPoint { x: 490, y: 497 });
+    }
+
+    #[test]
+    fn cursor_plane_rect_clips_negative_destinations_by_cropping_source() {
+        let output = PixelSize::new(1920, 1080);
+        // Cursor hotspot at (0,0) with 48x48 artwork: destination is (-48,-48).
+        let geometry = CursorGeometry {
+            destination: PixelPoint { x: -48, y: -48 },
+            size: PixelSize::new(48, 48),
+            hotspot: PixelPoint { x: 0, y: 0 },
+            clipped: true,
+        };
+        let rect = cursor_plane_rect(geometry, output);
+        assert_eq!(rect.src_x, 48);
+        assert_eq!(rect.src_y, 48);
+        assert_eq!(rect.crtc_x, 0);
+        assert_eq!(rect.crtc_y, 0);
+        assert_eq!(rect.src_w, 0);
+        assert_eq!(rect.src_h, 0);
+        assert_eq!(rect.crtc_w, 0);
+        assert_eq!(rect.crtc_h, 0);
+    }
+
+    #[test]
+    fn cursor_plane_rect_clips_right_and_bottom_overflow() {
+        let output = PixelSize::new(100, 100);
+        let geometry = CursorGeometry {
+            destination: PixelPoint { x: 80, y: 90 },
+            size: PixelSize::new(48, 48),
+            hotspot: PixelPoint { x: 0, y: 0 },
+            clipped: true,
+        };
+        let rect = cursor_plane_rect(geometry, output);
+        assert_eq!(rect.src_x, 0);
+        assert_eq!(rect.src_y, 0);
+        assert_eq!(rect.crtc_x, 80);
+        assert_eq!(rect.crtc_y, 90);
+        assert_eq!(rect.crtc_w, 20);
+        assert_eq!(rect.crtc_h, 10);
+        assert_eq!(rect.src_w, 20);
+        assert_eq!(rect.src_h, 10);
+    }
+
+    #[test]
+    fn cursor_plane_rect_preserves_fully_visible_cursor() {
+        let output = PixelSize::new(100, 100);
+        let geometry = CursorGeometry {
+            destination: PixelPoint { x: 10, y: 20 },
+            size: PixelSize::new(32, 32),
+            hotspot: PixelPoint { x: 0, y: 0 },
+            clipped: false,
+        };
+        let rect = cursor_plane_rect(geometry, output);
+        assert_eq!(rect.src_x, 0);
+        assert_eq!(rect.src_y, 0);
+        assert_eq!(rect.src_w, 32);
+        assert_eq!(rect.src_h, 32);
+        assert_eq!(rect.crtc_x, 10);
+        assert_eq!(rect.crtc_y, 20);
+        assert_eq!(rect.crtc_w, 32);
+        assert_eq!(rect.crtc_h, 32);
+    }
+
+    #[test]
+    fn probe_failure_is_sticky_until_epoch_invalidates() {
+        let mut state = CursorState::default();
+        assert!(state.begin_test_only(0, "probe"));
+        assert!(
+            !state.begin_test_only(0, "probe"),
+            "the same topology epoch must not re-probe every frame"
+        );
+        state.test_only_failed("no_suitable_cursor_plane");
+        assert_eq!(state.path(), CursorRenderPath::Software);
+        assert_eq!(state.tested_epoch(), Some(0));
+        state.invalidate_epoch();
+        assert_eq!(state.tested_epoch(), None);
+        assert!(
+            state.begin_test_only(1, "probe"),
+            "a new epoch re-arms probing"
+        );
+    }
+
+    #[test]
+    fn hidden_or_unsupported_shapes_never_enter_hardware_path() {
+        // Policy-level reverse probe: "none" must be treated as hidden and an
+        // unknown shape as software-only.
+        assert_eq!(CursorRole::from_wire("none"), None);
+        assert_eq!(CursorRole::from_wire("hidden"), None);
+        assert_eq!(CursorRole::from_wire("client-surface"), None);
+        assert!(CursorRole::from_wire("default").is_some());
+    }
+
+    #[test]
+    fn reverse_probe_removing_fallback_breaks_policy() {
+        // If a future change removes the software fallback, this test fails:
+        // a failed probe must never leave the path in Hardware.
+        let mut state = CursorState::default();
+        state.begin_test_only(1, "probe");
+        state.test_only_failed("simulated_kms_error");
+        assert_eq!(
+            state.path(),
+            CursorRenderPath::Software,
+            "a failed cursor-plane probe must force software rendering"
+        );
+        assert!(!state.visible());
     }
 
     #[test]

@@ -905,7 +905,8 @@ enum PayloadTypeId {
   SettingsResponse(14),
   TextInputState(15),
   CompositionCertificate(16),
-  ShellRenderMode(17);
+  ShellRenderMode(17),
+  CursorRenderMode(18);
 
   final int value;
   const PayloadTypeId(this.value);
@@ -930,6 +931,7 @@ enum PayloadTypeId {
       case 15: return PayloadTypeId.TextInputState;
       case 16: return PayloadTypeId.CompositionCertificate;
       case 17: return PayloadTypeId.ShellRenderMode;
+      case 18: return PayloadTypeId.CursorRenderMode;
       default: throw StateError('Invalid value $value for bit flag enum');
     }
   }
@@ -938,7 +940,7 @@ enum PayloadTypeId {
       value == null ? null : PayloadTypeId.fromValue(value);
 
   static const int minValue = 0;
-  static const int maxValue = 17;
+  static const int maxValue = 18;
   static const fb.Reader<PayloadTypeId> reader = _PayloadTypeIdReader();
 }
 
@@ -3473,6 +3475,77 @@ class CursorPositionObjectBuilder extends fb.ObjectBuilder {
     return fbBuilder.buffer;
   }
 }
+class CursorRenderMode {
+  CursorRenderMode._(this._bc, this._bcOffset);
+  factory CursorRenderMode(List<int> bytes) {
+    final rootRef = fb.BufferContext.fromBytes(bytes);
+    return reader.read(rootRef, 0);
+  }
+
+  static const fb.Reader<CursorRenderMode> reader = _CursorRenderModeReader();
+
+  final fb.BufferContext _bc;
+  final int _bcOffset;
+
+  bool get hardware => const fb.BoolReader().vTableGet(_bc, _bcOffset, 4, false);
+
+  @override
+  String toString() {
+    return 'CursorRenderMode{hardware: ${hardware}}';
+  }
+}
+
+class _CursorRenderModeReader extends fb.TableReader<CursorRenderMode> {
+  const _CursorRenderModeReader();
+
+  @override
+  CursorRenderMode createObject(fb.BufferContext bc, int offset) => 
+    CursorRenderMode._(bc, offset);
+}
+
+class CursorRenderModeBuilder {
+  CursorRenderModeBuilder(this.fbBuilder);
+
+  final fb.Builder fbBuilder;
+
+  void begin() {
+    fbBuilder.startTable(1);
+  }
+
+  int addHardware(bool? hardware) {
+    fbBuilder.addBool(0, hardware);
+    return fbBuilder.offset;
+  }
+
+  int finish() {
+    return fbBuilder.endTable();
+  }
+}
+
+class CursorRenderModeObjectBuilder extends fb.ObjectBuilder {
+  final bool? _hardware;
+
+  CursorRenderModeObjectBuilder({
+    bool? hardware,
+  })
+      : _hardware = hardware;
+
+  /// Finish building, and store into the [fbBuilder].
+  @override
+  int finish(fb.Builder fbBuilder) {
+    fbBuilder.startTable(1);
+    fbBuilder.addBool(0, _hardware);
+    return fbBuilder.endTable();
+  }
+
+  /// Convenience method to serialize to byte list.
+  @override
+  Uint8List toBytes([String? fileIdentifier]) {
+    final fbBuilder = fb.Builder(deduplicateTables: false);
+    fbBuilder.finish(finish(fbBuilder), fileIdentifier);
+    return fbBuilder.buffer;
+  }
+}
 class TextInputState {
   TextInputState._(this._bc, this._bcOffset);
   factory TextInputState(List<int> bytes) {
@@ -5685,6 +5758,7 @@ class Envelope {
       case 15: return TextInputState.reader.vTableGetNullable(_bc, _bcOffset, 12);
       case 16: return CompositionCertificate.reader.vTableGetNullable(_bc, _bcOffset, 12);
       case 17: return ShellRenderMode.reader.vTableGetNullable(_bc, _bcOffset, 12);
+      case 18: return CursorRenderMode.reader.vTableGetNullable(_bc, _bcOffset, 12);
       default: return null;
     }
   }

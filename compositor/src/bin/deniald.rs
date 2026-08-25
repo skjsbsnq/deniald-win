@@ -1361,6 +1361,8 @@ struct RuntimeState {
     #[cfg(feature = "flutter")]
     touchpad_gestures: touchpad_gestures::TouchpadGestureRecognizer,
     #[cfg(feature = "flutter")]
+    cursor: hardware_cursor::CursorPlaneRuntime,
+    #[cfg(feature = "flutter")]
     touchpad_devices: BTreeMap<String, smithay::reexports::input::Device>,
     #[cfg(feature = "flutter")]
     keyboard_devices: BTreeMap<String, smithay::reexports::input::Device>,
@@ -3657,6 +3659,9 @@ fn run_flutter_event_loop(
         let kms_reconfigure_requested = events.kms_reconfigure_requested;
         events.kms_reconfigure_requested = false;
         if events.topology_dirty || scanout_rebased || kms_reconfigure_requested {
+            // Cursor plane bindings and the tested-epoch gate are tied to the
+            // previous topology; re-probe against the new configuration.
+            events.cursor.invalidate(drm);
             events.topology_dirty = false;
             let outputs = connected_outputs(drm_scanner, drm, max_outputs, &output_configuration)?;
             let now = Instant::now();
@@ -3941,7 +3946,7 @@ fn run_flutter_event_loop(
         synchronize_flutter_scene(runtime, &mut events)?;
         synchronize_flutter_input_layout(runtime, &mut events)?;
         synchronize_flutter_composition_certificate(runtime, &mut events);
-        synchronize_wayland_cursor(runtime, &mut events)?;
+        synchronize_wayland_cursor(runtime, drm, scanouts, &mut events)?;
         service_direct_scanout(
             drm,
             runtime,
@@ -3979,6 +3984,7 @@ fn run_flutter_event_loop(
                     &mut swapchain.buffers[buffer_index].dmabuf,
                     &atlas,
                     request,
+                    screenshot_cursor_state(&events).as_ref(),
                 ) {
                     warn!(%error, "prepared-composition screenshot capture failed");
                 }
@@ -4109,6 +4115,7 @@ fn run_flutter_event_loop(
                                 &mut swapchain.buffers[buffer_index].dmabuf,
                                 &atlas,
                                 request,
+                                screenshot_cursor_state(&events).as_ref(),
                             ) {
                                 warn!(%error, "screenshot capture failed");
                             }
@@ -4135,7 +4142,12 @@ fn run_flutter_event_loop(
             && let Some(manager) = screenshot_manager.as_mut()
             && manager.request_id() == Some(request_id)
         {
-            if let Err(error) = manager.finish_selection(renderer, runtime, request) {
+            if let Err(error) = manager.finish_selection(
+                renderer,
+                runtime,
+                request,
+                screenshot_cursor_state(&events).as_ref(),
+            ) {
                 warn!(%error, request_id, "frozen screenshot capture failed");
             }
             runtime.send_screenshot_action(wire::ShellAction::ScreenshotDone, request_id, None)?;
@@ -4151,15 +4163,19 @@ fn run_flutter_event_loop(
         }
 
         let now = Instant::now();
-        let has_work = runtime.pending_frame().has_work()
-            || events
+        let has_work = has_pending_compositor_work(WorkSignals {
+            pending_frame_work: runtime.pending_frame().has_work(),
+            pending_frame_callbacks: events
                 .wayland
                 .as_ref()
-                .is_some_and(|w| w.has_pending_frame_callbacks())
-            || events.flutter_input.has_pending()
-            || !events.flutter_events.is_empty()
-            || events.topology_recheck_at.is_some()
-            || screenshot_manager.is_some();
+                .is_some_and(|w| w.has_pending_frame_callbacks()),
+            pending_input: events.flutter_input.has_pending(),
+            pending_flutter_events: !events.flutter_events.is_empty(),
+            topology_recheck_pending: events.topology_recheck_at.is_some(),
+            screenshot_session_active: screenshot_manager
+                .as_ref()
+                .is_some_and(screenshot::ScreenshotManager::has_active_work),
+        });
         let mut next_dispatch_timeout =
             frame_scheduler.limit_dispatch_timeout(now, runtime.next_dispatch_timeout(), has_work);
         if drm.is_active() {
@@ -4474,7 +4490,7 @@ fn wait_for_flutter_frame(
         synchronize_flutter_scene(runtime, events)?;
         synchronize_flutter_input_layout(runtime, events)?;
         synchronize_flutter_composition_certificate(runtime, events);
-        synchronize_wayland_cursor(runtime, events)?;
+        synchronize_wayland_cursor(runtime, drm, scanouts, events)?;
         if let Some(index) = runtime.take_ready() {
             return Ok(Some(index));
         }
@@ -6018,9 +6034,43 @@ fn reset_direct_scanout(
     Ok(())
 }
 
+/// Discrete work signals that decide whether the frame clock may relax to the
+/// idle heartbeat. The screenshot manager exists for the whole session, so its
+/// mere presence must never count as work: only an active selection does.
+#[cfg(feature = "flutter")]
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+struct WorkSignals {
+    pending_frame_work: bool,
+    pending_frame_callbacks: bool,
+    pending_input: bool,
+    pending_flutter_events: bool,
+    topology_recheck_pending: bool,
+    screenshot_session_active: bool,
+}
+
+#[cfg(feature = "flutter")]
+fn has_pending_compositor_work(signals: WorkSignals) -> bool {
+    signals.pending_frame_work
+        || signals.pending_frame_callbacks
+        || signals.pending_input
+        || signals.pending_flutter_events
+        || signals.topology_recheck_pending
+        || signals.screenshot_session_active
+}
+
+#[cfg(feature = "flutter")]
+fn screenshot_cursor_state(events: &RuntimeState) -> Option<hardware_cursor::CursorCaptureState> {
+    events
+        .wayland
+        .as_ref()
+        .and_then(wayland_frontend::WaylandFrontend::cursor_capture_state)
+}
+
 #[cfg(feature = "flutter")]
 fn synchronize_wayland_cursor(
     runtime: &mut flutter_runtime::FlutterRuntime,
+    drm: &DrmDevice,
+    scanouts: &[Scanout],
     events: &mut RuntimeState,
 ) -> Result<(), Box<dyn Error>> {
     if let Some(shape) = runtime.take_mouse_cursor_request()
@@ -6034,6 +6084,64 @@ fn synchronize_wayland_cursor(
             frontend.take_cursor_position_update(),
         )
     });
+    let visual = events.wayland.as_ref().and_then(|frontend| {
+        let request = frontend.cursor_visual_request()?;
+        let scanout = scanouts
+            .iter()
+            .find(|scanout| scanout.output.id == request.output_id && scanout.powered)?;
+        let role = shape.and_then(hardware_cursor::CursorRole::from_wire);
+        let visible = shape.map_or(true, |shape| !matches!(shape, "none" | "hidden"));
+        Some(hardware_cursor::CursorVisualState {
+            crtc: u32::from(scanout.output.crtc),
+            position: request.position,
+            role,
+            visible,
+            scale: request.scale,
+            output_size: denial_core::topology::PixelSize::new(
+                scanout.source_rect.width,
+                scanout.source_rect.height,
+            ),
+            transform: scanout.output.transform,
+        })
+    });
+    // A DMABUF screencopy that asks for the cursor cannot be serviced from a
+    // cursor-free atlas (the GL renderer has no pixel-upload path), so the
+    // cursor stays in the Flutter atlas while such a request is pending.
+    let dmabuf_overlay_capture_pending = events
+        .wayland
+        .as_ref()
+        .is_some_and(wayland_frontend::WaylandFrontend::has_dmabuf_overlay_cursor_pending);
+    let visual = if dmabuf_overlay_capture_pending {
+        None
+    } else {
+        visual
+    };
+    let path = events.cursor.synchronize(drm, visual)?;
+    if let Some(transition) = events.cursor.take_path_transition() {
+        if transition == hardware_cursor::CursorRenderPath::Hardware {
+            info!(
+                visible = events.cursor.visible(),
+                role = ?events.cursor.role(),
+                position = ?events.cursor.position(),
+                "hardware cursor plane is now the active cursor render path"
+            );
+        } else {
+            warn!(
+                reasons = ?events.cursor.failure_reasons(),
+                "cursor fell back to the Flutter software render path"
+            );
+        }
+        runtime
+            .send_cursor_render_mode(transition == hardware_cursor::CursorRenderPath::Hardware)?;
+    }
+    if let Some(frontend) = events.wayland.as_mut() {
+        let role = visual.and_then(|visual| visual.role);
+        frontend
+            .set_hardware_cursor_state(path == hardware_cursor::CursorRenderPath::Hardware, role);
+    }
+    if path == hardware_cursor::CursorRenderPath::Hardware {
+        return Ok(());
+    }
     if let Some(shape) = shape {
         runtime.send_cursor_shape(shape)?;
     }
@@ -8551,5 +8659,64 @@ fn smithay_output_transform(transform: OutputTransform) -> Transform {
         OutputTransform::Flipped90 => Transform::Flipped90,
         OutputTransform::Flipped180 => Transform::Flipped180,
         OutputTransform::Flipped270 => Transform::Flipped270,
+    }
+}
+
+#[cfg(all(test, feature = "flutter"))]
+mod work_signal_tests {
+    use super::{WorkSignals, has_pending_compositor_work};
+
+    #[test]
+    fn screenshot_manager_presence_alone_is_not_work() {
+        // P9-05 regression: `screenshot_manager.is_some()` kept the idle
+        // heartbeat branch unreachable for the whole session. The manager is
+        // created once and lives forever, so only an active selection is work.
+        let signals = WorkSignals {
+            screenshot_session_active: false,
+            ..WorkSignals::default()
+        };
+        assert!(!has_pending_compositor_work(signals));
+    }
+
+    #[test]
+    fn any_work_signal_keeps_the_clock_active() {
+        assert!(has_pending_compositor_work(WorkSignals {
+            pending_frame_work: true,
+            ..WorkSignals::default()
+        }));
+        assert!(has_pending_compositor_work(WorkSignals {
+            pending_frame_callbacks: true,
+            ..WorkSignals::default()
+        }));
+        assert!(has_pending_compositor_work(WorkSignals {
+            pending_input: true,
+            ..WorkSignals::default()
+        }));
+        assert!(has_pending_compositor_work(WorkSignals {
+            pending_flutter_events: true,
+            ..WorkSignals::default()
+        }));
+        assert!(has_pending_compositor_work(WorkSignals {
+            topology_recheck_pending: true,
+            ..WorkSignals::default()
+        }));
+        assert!(has_pending_compositor_work(WorkSignals {
+            screenshot_session_active: true,
+            ..WorkSignals::default()
+        }));
+    }
+
+    #[test]
+    fn reverse_probe_screenshot_presence_always_true_fails() {
+        // If someone regresses the call site back to `screenshot_manager.is_some()`,
+        // this assertion still documents the intended contract: presence is not work.
+        let manager_present_but_idle = false;
+        assert_eq!(
+            has_pending_compositor_work(WorkSignals {
+                screenshot_session_active: manager_present_but_idle,
+                ..WorkSignals::default()
+            }),
+            manager_present_but_idle
+        );
     }
 }

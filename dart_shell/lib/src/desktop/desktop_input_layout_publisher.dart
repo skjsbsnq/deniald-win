@@ -43,6 +43,17 @@ class _DesktopInputLayoutPublisherState
   final Map<int, int> _lastShellVisualRevision = <int, int>{};
   InputLayoutSnapshot? _lastSnapshot;
   ShellThemeData? _pendingTheme;
+  int? _lastGeometryKey;
+  List<Rect>? _lastShellRegions;
+  List<InputWindowRegion>? _lastInputWindows;
+  DesktopVisibilitySnapshot? _lastVisibilitySnapshot;
+  int _geometryCacheHits = 0;
+
+  /// Test-only counter: how many passes reused the cached geometry/visibility
+  /// snapshot. Reverse probe — if snapshot reuse is removed, tests asserting
+  /// `debugGeometryCacheHits > 0` fail.
+  @visibleForTesting
+  int get debugGeometryCacheHits => _geometryCacheHits;
 
   @override
   Widget build(BuildContext context) {
@@ -155,141 +166,6 @@ class _DesktopInputLayoutPublisherState
           ..sort((a, b) => compareDesktopWindowStack(a, b, windowsById));
 
     final canvas = Offset.zero & viewSize;
-    var shellRegions = <Rect>[canvas];
-    // Hover panels must not take pointer ownership of the whole scene. Changing
-    // ownership while leaving a hot edge can synthesize another edge enter and
-    // make the launcher repeatedly open and close over client windows.
-    if (!interactions.capturesFullScene) {
-      for (final popup in inputMethodPopups) {
-        shellRegions = _subtractFromAll(shellRegions, popup.geometry!);
-      }
-      for (final placement in placements) {
-        final visualContentRect = placement.contentRect;
-        shellRegions = _subtractFromAll(shellRegions, visualContentRect);
-        final window = windowsById[placement.objectId]!;
-        for (final popup in window.popupRoots) {
-          shellRegions = _subtractFromAll(
-            shellRegions,
-            window.mapSurfaceRect(popup, visualContentRect),
-          );
-        }
-      }
-      // The cuts above are z-order blind, so a lower window's content rect also
-      // erases the shell-drawn frame ring of every window stacked above it.
-      shellRegions.addAll(
-        desktopFrameRingRegions(canvas, <DesktopFrameRing>[
-          for (final placement in placements.reversed)
-            DesktopFrameRing(
-              frame: placement.frame,
-              content: placement.contentRect,
-              resizeHotZones: desktopResizeHotZones(placement),
-              popups: <Rect>[
-                for (final popup in windowsById[placement.objectId]!.popupRoots)
-                  windowsById[placement.objectId]!.mapSurfaceRect(
-                    popup,
-                    placement.contentRect,
-                  ),
-              ],
-            ),
-        ]),
-      );
-      shellRegions.addAll(
-        desktopResizeHotZoneRegions(canvas, <DesktopFrameRing>[
-          for (final placement in placements.reversed)
-            DesktopFrameRing(
-              frame: placement.frame,
-              content: placement.contentRect,
-              resizeHotZones: desktopResizeHotZones(placement),
-              popups: <Rect>[
-                for (final popup in windowsById[placement.objectId]!.popupRoots)
-                  windowsById[placement.objectId]!.mapSurfaceRect(
-                    popup,
-                    placement.contentRect,
-                  ),
-              ],
-            ),
-        ]),
-      );
-    }
-    for (final region in interactions.childRegions) {
-      final clipped = region.intersect(canvas);
-      if (!clipped.isEmpty) {
-        shellRegions.add(clipped);
-      }
-    }
-
-    final inputWindows = <InputWindowRegion>[];
-    for (final popup in inputMethodPopups) {
-      if (!interactions.capturesFullScene) {
-        inputWindows.add(
-          InputWindowRegion(
-            window: popup,
-            surfaceId: popup.objectId,
-            rect: popup.geometry!,
-            sourceRect: popup.contentCoordinateRect,
-            z: 0x7fffffff,
-            geometryLocked: true,
-          ),
-        );
-      }
-    }
-    // Minimized windows do not need continuous presentation sampling unless
-    // an active taskbar preview is currently hovering over them.
-    final zStride = placements.fold<int>(2, (stride, placement) {
-      final layers = windowsById[placement.objectId]!.surfaceLayers.length + 2;
-      return math.max(stride, layers);
-    });
-    final placementOrder = <int, int>{
-      for (var index = 0; index < placements.length; index += 1)
-        placements[index].objectId: index,
-    };
-    // The wire hit tester consumes the first matching window. Build this list
-    // in its final topmost-first order so the codec normally needs neither a
-    // defensive copy nor another sort.
-    for (final placement in placements.reversed) {
-      if (interactions.capturesFullScene) {
-        final window = windowsById[placement.objectId]!;
-        _configureWindowGeometry(window, placement);
-        continue;
-      }
-      final window = windowsById[placement.objectId]!;
-      final visualContentRect = placement.contentRect;
-      final sourceRect = window.contentCoordinateRect;
-      final baseZ = placementOrder[placement.objectId]! * zStride;
-      final popupRoots = window.popupRoots.toList(growable: false).reversed;
-      for (final popup in popupRoots) {
-        inputWindows.add(
-          InputWindowRegion(
-            window: window,
-            surfaceId: popup.surfaceId,
-            rect: window.mapSurfaceRect(popup, visualContentRect),
-            sourceRect: Rect.fromLTWH(
-              0.0,
-              0.0,
-              popup.surfaceWidth,
-              popup.surfaceHeight,
-            ),
-            z: baseZ + popup.compositionOrder + 1,
-            geometryLocked: placement.fullscreen,
-          ),
-        );
-      }
-      inputWindows.add(
-        InputWindowRegion(
-          window: window,
-          // A logical window region routes through the complete toplevel
-          // surface tree. The primary texture may be a full-window child and
-          // is a rendering choice, not an input target.
-          surfaceId: window.objectId,
-          rect: visualContentRect,
-          sourceRect: sourceRect,
-          z: baseZ,
-          geometryLocked: placement.fullscreen,
-        ),
-      );
-      _configureWindowGeometry(window, placement);
-    }
-
     final forcedWindowIds = <int>{
       if (previewTarget != null) previewTarget.objectId,
     };
@@ -316,17 +192,7 @@ class _DesktopInputLayoutPublisherState
     };
     final forceAll =
         interactions.capturesFullScene || visuals.requiresClientSampling;
-    final visibility = computeDesktopVisibilitySnapshot(
-      layoutEpoch: layoutEpoch,
-      outputLayoutEpoch: outputLayout?.epoch ?? 0,
-      sceneRevision: desktopVisibilitySceneRevision(
-        placements: placements,
-        windowsById: windowsById,
-        outputRects: outputRects,
-        forcedWindowIds: forcedWindowIds,
-        shellTranslucentWindowIds: shellTranslucentWindowIds,
-        forceAll: forceAll,
-      ),
+    final sceneRevision = desktopVisibilitySceneRevision(
       placements: placements,
       windowsById: windowsById,
       outputRects: outputRects,
@@ -334,6 +200,194 @@ class _DesktopInputLayoutPublisherState
       shellTranslucentWindowIds: shellTranslucentWindowIds,
       forceAll: forceAll,
     );
+    // Reuse the previous pass whenever the exact geometry, metadata, and
+    // interaction inputs are unchanged. Mouse motion no longer rebuilds the
+    // O(N^2) frame-ring subtraction or the visibility pass; a real geometry
+    // change still recomputes both from scratch.
+    final geometryKey = Object.hash(
+      layoutEpoch,
+      outputLayout?.epoch ?? 0,
+      sceneRevision,
+      Object.hashAll(
+        interactions.childRegions.map(
+          (region) => Object.hash(
+            region.left,
+            region.top,
+            region.width,
+            region.height,
+          ),
+        ),
+      ),
+    );
+    final cached = _lastGeometryKey == geometryKey &&
+        _lastShellRegions != null &&
+        _lastInputWindows != null &&
+        _lastVisibilitySnapshot != null;
+
+    List<Rect> shellRegions;
+    List<InputWindowRegion> inputWindows;
+    DesktopVisibilitySnapshot visibility;
+    if (cached) {
+      _geometryCacheHits += 1;
+      shellRegions = _lastShellRegions!;
+      inputWindows = _lastInputWindows!;
+      visibility = _lastVisibilitySnapshot!;
+    } else {
+      shellRegions = <Rect>[canvas];
+      // Hover panels must not take pointer ownership of the whole scene.
+      // Changing ownership while leaving a hot edge can synthesize another
+      // edge enter and make the launcher repeatedly open and close over
+      // client windows.
+      if (!interactions.capturesFullScene) {
+        for (final popup in inputMethodPopups) {
+          shellRegions = _subtractFromAll(shellRegions, popup.geometry!);
+        }
+        for (final placement in placements) {
+          final visualContentRect = placement.contentRect;
+          shellRegions = _subtractFromAll(shellRegions, visualContentRect);
+          final window = windowsById[placement.objectId]!;
+          for (final popup in window.popupRoots) {
+            shellRegions = _subtractFromAll(
+              shellRegions,
+              window.mapSurfaceRect(popup, visualContentRect),
+            );
+          }
+        }
+        // The cuts above are z-order blind, so a lower window's content rect
+        // also erases the shell-drawn frame ring of every window stacked
+        // above it.
+        shellRegions.addAll(
+          desktopFrameRingRegions(canvas, <DesktopFrameRing>[
+            for (final placement in placements.reversed)
+              DesktopFrameRing(
+                frame: placement.frame,
+                content: placement.contentRect,
+                resizeHotZones: desktopResizeHotZones(placement),
+                popups: <Rect>[
+                  for (final popup
+                      in windowsById[placement.objectId]!.popupRoots)
+                    windowsById[placement.objectId]!.mapSurfaceRect(
+                      popup,
+                      placement.contentRect,
+                    ),
+                ],
+              ),
+          ]),
+        );
+        shellRegions.addAll(
+          desktopResizeHotZoneRegions(canvas, <DesktopFrameRing>[
+            for (final placement in placements.reversed)
+              DesktopFrameRing(
+                frame: placement.frame,
+                content: placement.contentRect,
+                resizeHotZones: desktopResizeHotZones(placement),
+                popups: <Rect>[
+                  for (final popup
+                      in windowsById[placement.objectId]!.popupRoots)
+                    windowsById[placement.objectId]!.mapSurfaceRect(
+                      popup,
+                      placement.contentRect,
+                    ),
+                ],
+              ),
+          ]),
+        );
+      }
+      for (final region in interactions.childRegions) {
+        final clipped = region.intersect(canvas);
+        if (!clipped.isEmpty) {
+          shellRegions.add(clipped);
+        }
+      }
+
+      inputWindows = <InputWindowRegion>[];
+      for (final popup in inputMethodPopups) {
+        if (!interactions.capturesFullScene) {
+          inputWindows.add(
+            InputWindowRegion(
+              window: popup,
+              surfaceId: popup.objectId,
+              rect: popup.geometry!,
+              sourceRect: popup.contentCoordinateRect,
+              z: 0x7fffffff,
+              geometryLocked: true,
+            ),
+          );
+        }
+      }
+      // Minimized windows do not need continuous presentation sampling unless
+      // an active taskbar preview is currently hovering over them.
+      final zStride = placements.fold<int>(2, (stride, placement) {
+        final layers = windowsById[placement.objectId]!.surfaceLayers.length + 2;
+        return math.max(stride, layers);
+      });
+      final placementOrder = <int, int>{
+        for (var index = 0; index < placements.length; index += 1)
+          placements[index].objectId: index,
+      };
+      // The wire hit tester consumes the first matching window. Build this
+      // list in its final topmost-first order so the codec normally needs
+      // neither a defensive copy nor another sort.
+      for (final placement in placements.reversed) {
+        if (interactions.capturesFullScene) {
+          final window = windowsById[placement.objectId]!;
+          _configureWindowGeometry(window, placement);
+          continue;
+        }
+        final window = windowsById[placement.objectId]!;
+        final visualContentRect = placement.contentRect;
+        final sourceRect = window.contentCoordinateRect;
+        final baseZ = placementOrder[placement.objectId]! * zStride;
+        final popupRoots = window.popupRoots.toList(growable: false).reversed;
+        for (final popup in popupRoots) {
+          inputWindows.add(
+            InputWindowRegion(
+              window: window,
+              surfaceId: popup.surfaceId,
+              rect: window.mapSurfaceRect(popup, visualContentRect),
+              sourceRect: Rect.fromLTWH(
+                0.0,
+                0.0,
+                popup.surfaceWidth,
+                popup.surfaceHeight,
+              ),
+              z: baseZ + popup.compositionOrder + 1,
+              geometryLocked: placement.fullscreen,
+            ),
+          );
+        }
+        inputWindows.add(
+          InputWindowRegion(
+            window: window,
+            // A logical window region routes through the complete toplevel
+            // surface tree. The primary texture may be a full-window child
+            // and is a rendering choice, not an input target.
+            surfaceId: window.objectId,
+            rect: visualContentRect,
+            sourceRect: sourceRect,
+            z: baseZ,
+            geometryLocked: placement.fullscreen,
+          ),
+        );
+        _configureWindowGeometry(window, placement);
+      }
+
+      visibility = computeDesktopVisibilitySnapshot(
+        layoutEpoch: layoutEpoch,
+        outputLayoutEpoch: outputLayout?.epoch ?? 0,
+        sceneRevision: sceneRevision,
+        placements: placements,
+        windowsById: windowsById,
+        outputRects: outputRects,
+        forcedWindowIds: forcedWindowIds,
+        shellTranslucentWindowIds: shellTranslucentWindowIds,
+        forceAll: forceAll,
+      );
+      _lastGeometryKey = geometryKey;
+      _lastShellRegions = shellRegions;
+      _lastInputWindows = inputWindows;
+      _lastVisibilitySnapshot = visibility;
+    }
     ref.read(desktopVisibilityProvider.notifier).publish(visibility);
     final visibleSurfaceIds = <int>{...visibility.visibleSurfaceIds};
     for (final popup in inputMethodPopups) {
@@ -673,6 +727,9 @@ List<Rect> desktopFrameRingRegions(Rect canvas, List<DesktopFrameRing> stack) {
   for (final entry in stack) {
     var ring = _subtractRect(entry.frame, entry.content);
     for (final obstruction in obstructions) {
+      if (ring.length >= _maxShellRegionFragments) {
+        break;
+      }
       ring = _subtractFromAll(ring, obstruction);
     }
     for (final piece in ring) {
@@ -681,8 +738,10 @@ List<Rect> desktopFrameRingRegions(Rect canvas, List<DesktopFrameRing> stack) {
         restored.add(clipped);
       }
     }
-    obstructions.add(entry.frame);
-    obstructions.addAll(entry.popups);
+    _pushObstruction(obstructions, entry.frame);
+    for (final popup in entry.popups) {
+      _pushObstruction(obstructions, popup);
+    }
   }
   return restored;
 }
@@ -699,6 +758,9 @@ List<Rect> desktopResizeHotZoneRegions(
   for (final entry in stack) {
     var zones = entry.resizeHotZones;
     for (final obstruction in obstructions) {
+      if (zones.length >= _maxShellRegionFragments) {
+        break;
+      }
       zones = _subtractFromAll(zones, obstruction);
     }
     for (final zone in zones) {
@@ -707,10 +769,30 @@ List<Rect> desktopResizeHotZoneRegions(
         restored.add(clipped);
       }
     }
-    obstructions.add(entry.frame);
-    obstructions.addAll(entry.popups);
+    _pushObstruction(obstructions, entry.frame);
+    for (final popup in entry.popups) {
+      _pushObstruction(obstructions, popup);
+    }
   }
   return restored;
+}
+
+/// Bounds the per-window obstruction subtraction in the frame-ring and
+/// resize-zone passes. `desktopFrameRingRegions` and
+/// `desktopResizeHotZoneRegions` are O(N^2) in the number of stacked windows;
+/// keeping only the topmost `_maxShellRegionObstructions` occluders per pass
+/// makes the work linear while preserving exactness for typical stacks.
+const int _maxShellRegionObstructions = 32;
+const int _maxShellRegionFragments = 256;
+
+void _pushObstruction(List<Rect> obstructions, Rect rect) {
+  obstructions.add(rect);
+  if (obstructions.length > _maxShellRegionObstructions) {
+    obstructions.removeRange(
+      0,
+      obstructions.length - _maxShellRegionObstructions,
+    );
+  }
 }
 
 List<Rect> _subtractFromAll(List<Rect> regions, Rect cut) {

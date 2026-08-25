@@ -6289,6 +6289,17 @@ impl FlutterRuntime {
         Ok(())
     }
 
+    pub fn send_cursor_render_mode(&mut self, hardware: bool) -> Result<(), Box<dyn Error>> {
+        let engine = self
+            .host
+            .as_ref()
+            .expect("Flutter runtime is shutting down")
+            .engine();
+        let update = self.wire.encode_cursor_render_mode(hardware)?;
+        engine.send_platform_message(wire::TO_FLUTTER_CHANNEL, update)?;
+        Ok(())
+    }
+
     pub fn publish_text_input_state(
         &mut self,
         active: bool,

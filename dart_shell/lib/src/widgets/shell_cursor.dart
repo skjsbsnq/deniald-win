@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/gestures.dart' show PointerDeviceKind, PointerExitEvent;
+import 'package:flutter/scheduler.dart' show SchedulerBinding;
 import 'package:flutter/services.dart'
     show MouseCursor, MouseCursorSession, SystemChannels;
 import 'package:flutter/widgets.dart';
@@ -181,6 +182,8 @@ class _ShellCursorHostState extends State<ShellCursorHost> {
   DenialDragIcon? _dragIcon;
   int _frame = 0;
   bool _assetsPrecached = false;
+  Offset? _pendingPosition;
+  bool _positionFrameScheduled = false;
 
   @override
   void initState() {
@@ -286,48 +289,65 @@ class _ShellCursorHostState extends State<ShellCursorHost> {
     setState(() => _dragIcon = icon);
   }
 
-  void _updatePlatformPosition(Offset position) {
+  /// Queues a cursor position and schedules at most one rebuild per frame.
+  /// Bursts of platform pointer updates (Rust CursorPosition) or Flutter
+  /// pointer moves coalesce into a single setState, so mouse motion cannot
+  /// schedule an unbounded number of frames. When [ShellCursorHost.hideCursor]
+  /// is true (hardware cursor or screenshot preparation) no frame is scheduled
+  /// at all; the latest position is retained for a later software handoff.
+  void _queuePosition(Offset position) {
     if (!mounted || !position.dx.isFinite || !position.dy.isFinite) {
       return;
     }
-    final wasHidden = _position == null;
     if (position == _position) {
       return;
     }
+    _pendingPosition = position;
     if (widget.hideCursor && _dragIcon == null) {
+      // Hardware cursor or screenshot preparation: retain the latest position
+      // for a later software handoff without scheduling any Flutter frame.
       _position = position;
       return;
     }
-    setState(() {
-      _position = position;
+    if (_positionFrameScheduled) {
+      return;
+    }
+    _positionFrameScheduled = true;
+    SchedulerBinding.instance.scheduleFrameCallback((_) {
+      _positionFrameScheduled = false;
+      if (!mounted) {
+        return;
+      }
+      final position = _pendingPosition;
+      if (position == null) {
+        return;
+      }
+      _pendingPosition = null;
+      if (position == _position) {
+        return;
+      }
+      final wasHidden = _position == null;
+      setState(() {
+        _position = position;
+        if (wasHidden) {
+          _frame = 0;
+        }
+      });
       if (wasHidden) {
-        _frame = 0;
+        _syncFrameTimer();
       }
     });
-    if (wasHidden) {
-      _syncFrameTimer();
-    }
+  }
+
+  void _updatePlatformPosition(Offset position) {
+    _queuePosition(position);
   }
 
   void _updatePosition(PointerEvent event) {
-    if (event.kind != PointerDeviceKind.mouse ||
-        event.localPosition == _position) {
+    if (event.kind != PointerDeviceKind.mouse) {
       return;
     }
-    final wasHidden = _position == null;
-    if (widget.hideCursor && _dragIcon == null) {
-      _position = event.localPosition;
-      return;
-    }
-    setState(() {
-      _position = event.localPosition;
-      if (wasHidden) {
-        _frame = 0;
-      }
-    });
-    if (wasHidden) {
-      _syncFrameTimer();
-    }
+    _queuePosition(event.localPosition);
   }
 
   void _handleExit(PointerExitEvent event) {

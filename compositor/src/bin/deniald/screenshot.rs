@@ -19,6 +19,7 @@ use tracing::{info, warn};
 use super::clipboard::ClipboardManager;
 use super::flutter_runtime::FlutterRuntime;
 use super::flutter_runtime::system_command::ScreenshotRequest;
+use super::hardware_cursor::{CursorCaptureState, composite_cursor_into_capture};
 use super::kms_state::ScreenshotBuffer;
 
 const MAX_PENDING_SCREENSHOT_WRITES: usize = 2;
@@ -157,6 +158,7 @@ impl ScreenshotManager {
         atlas_buffer: &mut Dmabuf,
         atlas: &AtlasPlan,
         request: ScreenshotRequest,
+        cursor: Option<&CursorCaptureState>,
     ) -> Result<(), Box<dyn Error>> {
         if request.request_id.is_some() {
             return Err(io::Error::other("region capture requires a frozen screenshot").into());
@@ -164,12 +166,22 @@ impl ScreenshotManager {
         let source = project_request(request, atlas)
             .ok_or_else(|| io::Error::other("screenshot region is outside the canvas"))?;
         let atlas_size = atlas_physical_size(atlas)?;
-        let pixels = super::wayland_frontend::copy_atlas_region_to_memory(
+        let mut pixels = super::wayland_frontend::copy_atlas_region_to_memory(
             renderer,
             atlas_buffer,
             atlas_size,
             source,
         )?;
+        if let Some(cursor) = cursor {
+            composite_cursor_into_capture(
+                &mut pixels,
+                u32::try_from(source.size.w)?,
+                u32::try_from(source.size.h)?,
+                usize::try_from(source.size.w)? * BYTES_PER_PIXEL,
+                *cursor,
+                (source.loc.x, source.loc.y),
+            );
+        }
         self.queue_job(ScreenshotJob {
             pixels,
             width: u32::try_from(source.size.w)?,
@@ -182,6 +194,7 @@ impl ScreenshotManager {
         renderer: &mut GlesRenderer,
         runtime: &mut FlutterRuntime,
         request: ScreenshotRequest,
+        cursor: Option<&CursorCaptureState>,
     ) -> Result<bool, Box<dyn Error>> {
         let Some(request_id) = request.request_id.map(|request_id| request_id.get()) else {
             return Ok(false);
@@ -201,12 +214,22 @@ impl ScreenshotManager {
             let source = project_request(request, &selection.atlas).ok_or_else(|| {
                 io::Error::other("screenshot region is outside the frozen canvas")
             })?;
-            let pixels = super::wayland_frontend::copy_atlas_region_to_memory(
+            let mut pixels = super::wayland_frontend::copy_atlas_region_to_memory(
                 renderer,
                 &mut selection.buffer.dmabuf,
                 atlas_physical_size(&selection.atlas)?,
                 source,
             )?;
+            if let Some(cursor) = cursor {
+                composite_cursor_into_capture(
+                    &mut pixels,
+                    u32::try_from(source.size.w)?,
+                    u32::try_from(source.size.h)?,
+                    usize::try_from(source.size.w)? * BYTES_PER_PIXEL,
+                    *cursor,
+                    (source.loc.x, source.loc.y),
+                );
+            }
             self.queue_job(ScreenshotJob {
                 pixels,
                 width: u32::try_from(source.size.w)?,
@@ -254,6 +277,14 @@ impl ScreenshotManager {
         self.selection
             .as_ref()
             .map(|selection| selection.atlas.topology_epoch)
+    }
+
+    /// Whether a screenshot selection is actually in progress. The manager
+    /// lives for the whole session, so `is_some()` on the outer option is not
+    /// a work signal: only an active frozen selection requires the compositor
+    /// to stay at display rate.
+    pub(super) fn has_active_work(&self) -> bool {
+        self.selection.is_some()
     }
 
     fn queue_job(&self, job: ScreenshotJob) -> Result<(), Box<dyn Error>> {
@@ -520,6 +551,32 @@ mod tests {
                 &atlas(),
             )
             .is_none()
+        );
+    }
+}
+
+#[cfg(test)]
+mod work_tests {
+    use super::ScreenshotManager;
+    use crate::clipboard::ClipboardManager;
+
+    #[test]
+    fn idle_manager_without_selection_is_not_compositor_work() {
+        let manager = ScreenshotManager::new(ClipboardManager::default())
+            .expect("screenshot writer thread starts");
+        // P9-05 regression: the outer Option<ScreenshotManager> is Some for the
+        // whole session, but an idle manager must not pin the frame clock.
+        assert!(!manager.has_active_work());
+    }
+
+    #[test]
+    fn reverse_probe_idle_manager_must_stay_false() {
+        let manager = ScreenshotManager::new(ClipboardManager::default())
+            .expect("screenshot writer thread starts");
+        assert!(
+            !manager.has_active_work(),
+            "a live-but-idle screenshot manager is not work; \
+             the call site must use has_active_work() instead of is_some()"
         );
     }
 }

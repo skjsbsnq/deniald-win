@@ -571,6 +571,125 @@ void main() {
       expect((img.image as AssetImage).assetName, contains('normal/00.png'));
     },
   );
+  testWidgets('platform position bursts coalesce into one bounded frame', (
+    tester,
+  ) async {
+    final positions = StreamController<Offset>.broadcast(sync: true);
+    addTearDown(positions.close);
+
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: ShellCursorHost(
+          theme: ShellCursorThemes.bibataModernIce,
+          displayLayout: _cursorLayout(1),
+          platformCursorPositions: positions.stream,
+          child: const SizedBox.expand(),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    var frames = 0;
+    void observeFrame(Duration _) {
+      frames += 1;
+      tester.binding.addPostFrameCallback(observeFrame);
+    }
+
+    tester.binding.addPostFrameCallback(observeFrame);
+
+    for (var index = 0; index < 1000; index += 1) {
+      positions.add(Offset(100.0 + index, 80.0));
+    }
+    expect(
+      tester.binding.hasScheduledFrame,
+      isTrue,
+      reason: 'the first queued position must request one frame',
+    );
+
+    await tester.pump();
+    expect(
+      frames,
+      1,
+      reason: 'a 1000-event burst must coalesce into a single frame',
+    );
+    final positioned = tester.widget<Positioned>(
+      find.ancestor(of: find.byType(Image), matching: find.byType(Positioned)),
+    );
+    expect(positioned.left, 1093, reason: 'cursor lands on the final event');
+    expect(tester.binding.hasScheduledFrame, isFalse);
+  });
+
+  testWidgets('hardware cursor mode schedules no software frames', (
+    tester,
+  ) async {
+    final positions = StreamController<Offset>.broadcast(sync: true);
+    addTearDown(positions.close);
+
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: ShellCursorHost(
+          theme: ShellCursorThemes.bibataModernIce,
+          displayLayout: _cursorLayout(1),
+          platformCursorPositions: positions.stream,
+          hideCursor: true,
+          child: const SizedBox.expand(),
+        ),
+      ),
+    );
+    await tester.pump();
+    expect(find.byType(Image), findsNothing);
+
+    for (var index = 0; index < 1000; index += 1) {
+      positions.add(Offset(100.0 + index, 80.0));
+    }
+    expect(
+      tester.binding.hasScheduledFrame,
+      isFalse,
+      reason: 'hardware cursor motion must never schedule a Flutter frame',
+    );
+    await tester.pump();
+    expect(find.byType(Image), findsNothing);
+  });
+
+  testWidgets('pointer move bursts coalesce into one bounded frame', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      Directionality(
+        textDirection: TextDirection.ltr,
+        child: ShellCursorHost(
+          theme: ShellCursorThemes.bibataModernIce,
+          displayLayout: _cursorLayout(1),
+          child: const SizedBox.expand(),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    var frames = 0;
+    void observeFrame(Duration _) {
+      frames += 1;
+      tester.binding.addPostFrameCallback(observeFrame);
+    }
+
+    final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+    addTearDown(mouse.removePointer);
+    await mouse.addPointer(location: const Offset(50, 50));
+    await tester.pump();
+    frames = 0;
+    tester.binding.addPostFrameCallback(observeFrame);
+    for (var index = 0; index < 200; index += 1) {
+      await mouse.moveTo(Offset(60.0 + index, 50.0));
+    }
+    await tester.pump();
+    expect(
+      frames,
+      1,
+      reason: 'a burst of Flutter pointer moves must coalesce into one frame',
+    );
+  });
 }
 
 const _animatedCursorTestTheme = ShellCursorThemeData(

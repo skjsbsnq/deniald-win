@@ -1841,6 +1841,7 @@ bool _nativePayloadType(generated.PayloadTypeId type) {
       type == generated.PayloadTypeId.ShellAction ||
       type == generated.PayloadTypeId.CursorShape ||
       type == generated.PayloadTypeId.CursorPosition ||
+      type == generated.PayloadTypeId.CursorRenderMode ||
       type == generated.PayloadTypeId.TextInputState ||
       type == generated.PayloadTypeId.DesktopNotificationEvent ||
       type == generated.PayloadTypeId.SettingsResponse;

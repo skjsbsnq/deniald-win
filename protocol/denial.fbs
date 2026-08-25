@@ -458,6 +458,14 @@ table CursorPosition {
   y:double;
 }
 
+// Rust-authoritative cursor render mode. When hardware is true the compositor
+// programs a KMS cursor plane and the shell must neither paint nor schedule a
+// software cursor (including coalesced pointer setState). The message is only
+// sent on transitions, not on every pointer move.
+table CursorRenderMode {
+  hardware:bool;
+}
+
 // Native-authoritative editor and software-keyboard state. An active editor
 // is the protocol-level answer to whether the focused control accepts text;
 // input_panel_visible additionally respects explicit client show/hide hints.
@@ -658,7 +666,8 @@ union Payload {
   SettingsResponse,
   TextInputState,
   CompositionCertificate,
-  ShellRenderMode
+  ShellRenderMode,
+  CursorRenderMode
 }
 
 table Envelope {

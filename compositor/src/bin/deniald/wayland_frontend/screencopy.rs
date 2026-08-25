@@ -11,7 +11,7 @@ use std::io;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
-use denial_core::topology::OutputId;
+use denial_core::topology::{OutputId, OutputTransform, PixelSize};
 use smithay::backend::allocator::format::FormatSet;
 use smithay::backend::allocator::{Buffer as AllocatorBuffer, Fourcc, dmabuf::Dmabuf};
 use smithay::backend::renderer::gles::{GlesRenderer, GlesTexture};
@@ -109,6 +109,15 @@ pub(super) struct ScreencopyManager {
 }
 
 impl ScreencopyManager {
+    /// Whether a pending frame requested a DMABUF buffer with the cursor
+    /// overlaid. The GL renderer cannot upload cursor pixels back into a
+    /// DMABUF, so such requests are served from the software cursor atlas.
+    pub(super) fn has_dmabuf_overlay_cursor_pending(&self) -> bool {
+        self.pending.iter().any(|request| {
+            request.target.overlay_cursor && matches!(request.buffer, PendingBuffer::Dmabuf { .. })
+        })
+    }
+
     pub(super) fn new(display: &DisplayHandle) -> Self {
         Self {
             _global: display
@@ -322,6 +331,7 @@ fn copy_to_shm(
     atlas_size: Size<i32, Physical>,
     target: CaptureTarget,
     buffer: &WlBuffer,
+    cursor: Option<&crate::hardware_cursor::CursorCaptureState>,
 ) -> Result<(), Box<dyn Error>> {
     let source = framebuffer_source_rect(target.source, atlas_size)
         .ok_or_else(|| io::Error::other("capture source is outside the atlas"))?;
@@ -334,7 +344,11 @@ fn copy_to_shm(
             Fourcc::Xrgb8888,
         )?;
         let pixels = renderer.map_texture(&mapping)?;
-        return copy_pixels_to_shm(buffer, pixels, target.size);
+        let mut pixels = pixels.to_vec();
+        if let Some(cursor) = cursor {
+            composite_cursor(cursor, &mut pixels, target, source);
+        }
+        return copy_pixels_to_shm(buffer, &pixels, target.size);
     }
 
     let texture_size: Size<i32, BufferCoords> = (target.size.w, target.size.h).into();
@@ -360,7 +374,46 @@ fn copy_to_shm(
         Fourcc::Xrgb8888,
     )?;
     let pixels = renderer.map_texture(&mapping)?;
-    copy_pixels_to_shm(buffer, pixels, target.size)
+    let mut pixels = pixels.to_vec();
+    if let Some(cursor) = cursor {
+        // Scale the cursor geometry with the capture so a non-1:1 capture
+        // still places it correctly in destination pixel space.
+        let ratio = f64::from(target.size.w) / f64::from(source.size.w.max(1));
+        let mut scaled_cursor = *cursor;
+        scaled_cursor.atlas_position = (
+            (cursor.atlas_position.0 - f64::from(source.loc.x)) * ratio,
+            (cursor.atlas_position.1 - f64::from(source.loc.y)) * ratio,
+        );
+        scaled_cursor.scale *= ratio;
+        crate::hardware_cursor::composite_cursor_to_rgba(
+            &mut pixels,
+            u32::try_from(target.size.w)?,
+            u32::try_from(target.size.h)?,
+            usize::try_from(target.size.w)? * BYTES_PER_PIXEL as usize,
+            scaled_cursor.atlas_position,
+            scaled_cursor.role,
+            scaled_cursor.scale,
+            PixelSize::new(u32::try_from(target.size.w)?, u32::try_from(target.size.h)?),
+            OutputTransform::Normal,
+        );
+    }
+    copy_pixels_to_shm(buffer, &pixels, target.size)
+}
+
+fn composite_cursor(
+    cursor: &crate::hardware_cursor::CursorCaptureState,
+    pixels: &mut [u8],
+    target: CaptureTarget,
+    source: Rectangle<i32, Physical>,
+) {
+    crate::hardware_cursor::composite_cursor_into_capture(
+        pixels,
+        u32::try_from(target.size.w).unwrap_or_default(),
+        u32::try_from(target.size.h).unwrap_or_default(),
+        usize::try_from(target.size.w).unwrap_or_default() * BYTES_PER_PIXEL as usize,
+        *cursor,
+        (source.loc.x, source.loc.y),
+    );
 }
 
 pub(crate) fn copy_atlas_region_to_memory(
@@ -421,6 +474,7 @@ fn copy_to_dmabuf(
     atlas_size: Size<i32, Physical>,
     target: CaptureTarget,
     destination: &mut Dmabuf,
+    _cursor: Option<&crate::hardware_cursor::CursorCaptureState>,
 ) -> Result<(), Box<dyn Error>> {
     let source = framebuffer_source_rect(target.source, atlas_size)
         .ok_or_else(|| io::Error::other("capture source is outside the atlas"))?;
@@ -596,18 +650,35 @@ impl WaylandFrontend {
                 continue;
             }
 
-            // Flutter owns the visible software cursor, so it is already in
-            // the atlas. Keep the request bit for diagnostics until a
-            // cursor-free Flutter layer can be captured independently.
-            let _overlay_cursor = request.target.overlay_cursor;
+            // The software cursor is already in the atlas, so no extra
+            // composition is needed. The hardware cursor is not in the atlas;
+            // when the request asks for overlay_cursor, composite the artwork
+            // into the copied pixels. DMABUF overlay requests force the
+            // software path at synchronize time, so the cursor state here is
+            // normally `None` for DMABUF buffers (defensive no-op otherwise).
+            let overlay_cursor = if request.target.overlay_cursor {
+                self.cursor_capture_state()
+            } else {
+                None
+            };
             let dmabuf = matches!(request.buffer, PendingBuffer::Dmabuf { .. });
             let result = match &mut request.buffer {
-                PendingBuffer::Shm(buffer) => {
-                    copy_to_shm(renderer, atlas, self.atlas_size, request.target, buffer)
-                }
-                PendingBuffer::Dmabuf { dmabuf, .. } => {
-                    copy_to_dmabuf(renderer, atlas, self.atlas_size, request.target, dmabuf)
-                }
+                PendingBuffer::Shm(buffer) => copy_to_shm(
+                    renderer,
+                    atlas,
+                    self.atlas_size,
+                    request.target,
+                    buffer,
+                    overlay_cursor.as_ref(),
+                ),
+                PendingBuffer::Dmabuf { dmabuf, .. } => copy_to_dmabuf(
+                    renderer,
+                    atlas,
+                    self.atlas_size,
+                    request.target,
+                    dmabuf,
+                    overlay_cursor.as_ref(),
+                ),
             };
             request.buffer.release();
             if let Err(error) = result {

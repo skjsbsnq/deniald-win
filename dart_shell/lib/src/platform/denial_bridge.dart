@@ -213,6 +213,8 @@ class DenialBridge {
       StreamController<String>.broadcast(sync: true);
   final StreamController<Offset> _cursorPositions =
       StreamController<Offset>.broadcast(sync: true);
+  final StreamController<bool> _cursorRenderModes =
+      StreamController<bool>.broadcast(sync: true);
   final StreamController<DenialDragIcon?> _dragIcons =
       StreamController<DenialDragIcon?>.broadcast(sync: true);
   final StreamController<DenialAudioState> _audioStates =
@@ -250,6 +252,7 @@ class DenialBridge {
   Stream<DenialShellActionEvent> get shellActions => _shellActions.stream;
   Stream<String> get cursorShapes => _cursorShapes.stream;
   Stream<Offset> get cursorPositions => _cursorPositions.stream;
+  Stream<bool> get cursorRenderModes => _cursorRenderModes.stream;
   Stream<DenialDragIcon?> get dragIcons => _dragIcons.stream;
   Stream<DenialAudioState> get audioStates => _audioStates.stream;
   Stream<List<DenialAudioStream>> get audioStreamStates =>
@@ -362,6 +365,7 @@ class DenialBridge {
     unawaited(_shellActions.close());
     unawaited(_cursorShapes.close());
     unawaited(_cursorPositions.close());
+    unawaited(_cursorRenderModes.close());
     unawaited(_dragIcons.close());
     unawaited(_audioStates.close());
     unawaited(_audioStreamStates.close());
@@ -1525,6 +1529,10 @@ class DenialBridge {
             payload.y.isFinite &&
             !_cursorPositions.isClosed) {
           _cursorPositions.add(Offset(payload.x, payload.y));
+        }
+      } else if (payload is wire.CursorRenderMode) {
+        if (!_cursorRenderModes.isClosed) {
+          _cursorRenderModes.add(payload.hardware);
         }
       } else if (payload is wire.TextInputState) {
         if ((!payload.inputPanelVisible || payload.active) &&
