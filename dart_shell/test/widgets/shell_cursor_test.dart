@@ -456,6 +456,121 @@ void main() {
     await tester.pump();
     expect(find.byType(SurfaceLayerTexture), findsNothing);
   });
+
+  testWidgets(
+    'hardware cursor mode avoids widget rebuild on position stream without drag icon',
+    (tester) async {
+      final positions = StreamController<Offset>.broadcast(sync: true);
+      int buildCount = 0;
+      addTearDown(positions.close);
+
+      await tester.pumpWidget(
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: ShellCursorHost(
+            theme: ShellCursorThemes.bibataModernIce,
+            platformCursorPositions: positions.stream,
+            hideCursor: true,
+            child: Builder(
+              builder: (context) {
+                buildCount++;
+                return const SizedBox.expand();
+              },
+            ),
+          ),
+        ),
+      );
+
+      final initialBuildCount = buildCount;
+      positions.add(const Offset(50, 50));
+      await tester.pump();
+      positions.add(const Offset(60, 70));
+      await tester.pump();
+      positions.add(const Offset(80, 90));
+      await tester.pump();
+
+      // Child widget must not be rebuilt during pure cursor movements when hardware cursor is active
+      expect(buildCount, initialBuildCount);
+      // Software cursor image must not be rendered when hideCursor is true
+      expect(find.byType(Image), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'hardware cursor mode tracks drag icon correctly without showing software cursor',
+    (tester) async {
+      final positions = StreamController<Offset>.broadcast(sync: true);
+      final dragIcons = StreamController<DenialDragIcon?>.broadcast(sync: true);
+      addTearDown(positions.close);
+      addTearDown(dragIcons.close);
+
+      await tester.pumpWidget(
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: ShellCursorHost(
+            theme: ShellCursorThemes.bibataModernIce,
+            platformCursorPositions: positions.stream,
+            platformDragIcons: dragIcons.stream,
+            hideCursor: true,
+            child: const SizedBox.expand(),
+          ),
+        ),
+      );
+
+      positions.add(const Offset(100, 100));
+      dragIcons.add(_dragIcon());
+      await tester.pump();
+
+      // Drag icon should be rendered
+      expect(find.byType(SurfaceLayerTexture), findsOneWidget);
+      // Software cursor must remain hidden
+      expect(find.byType(Image), findsNothing);
+
+      // Move position while dragging
+      positions.add(const Offset(120, 140));
+      await tester.pump();
+
+      final positioned = tester.widget<Positioned>(
+        find.ancestor(
+          of: find.byType(SurfaceLayerTexture),
+          matching: find.byType(Positioned),
+        ).first,
+      );
+      expect(positioned.left, 120 - 12.5);
+      expect(positioned.top, 140 + 8.25);
+    },
+  );
+
+  testWidgets(
+    'software fallback mode renders software cursor on pointer motion',
+    (tester) async {
+      final positions = StreamController<Offset>.broadcast(sync: true);
+      final shapes = StreamController<String>.broadcast(sync: true);
+      addTearDown(positions.close);
+      addTearDown(shapes.close);
+
+      await tester.pumpWidget(
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: ShellCursorHost(
+            theme: ShellCursorThemes.bibataModernIce,
+            platformCursorPositions: positions.stream,
+            platformCursorShapes: shapes.stream,
+            hideCursor: false,
+            child: const SizedBox.expand(),
+          ),
+        ),
+      );
+
+      shapes.add('default');
+      positions.add(const Offset(100, 100));
+      await tester.pump();
+
+      expect(find.byType(Image), findsOneWidget);
+      final img = tester.widget<Image>(find.byType(Image));
+      expect((img.image as AssetImage).assetName, contains('normal/00.png'));
+    },
+  );
 }
 
 const _animatedCursorTestTheme = ShellCursorThemeData(

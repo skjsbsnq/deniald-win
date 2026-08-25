@@ -294,6 +294,10 @@ class _ShellCursorHostState extends State<ShellCursorHost> {
     if (position == _position) {
       return;
     }
+    if (widget.hideCursor && _dragIcon == null) {
+      _position = position;
+      return;
+    }
     setState(() {
       _position = position;
       if (wasHidden) {
@@ -311,6 +315,10 @@ class _ShellCursorHostState extends State<ShellCursorHost> {
       return;
     }
     final wasHidden = _position == null;
+    if (widget.hideCursor && _dragIcon == null) {
+      _position = event.localPosition;
+      return;
+    }
     setState(() {
       _position = event.localPosition;
       if (wasHidden) {
