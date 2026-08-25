@@ -30,12 +30,15 @@ void main() {
     final audioUpdates = StreamController<DenialAudioState>.broadcast(
       sync: true,
     );
+    final keyboardUpdates =
+        StreamController<DenialKeyboardLedState>.broadcast(sync: true);
     final layoutBridge = _LayoutBridge(_dualOutputLayout);
     final container = ProviderContainer.test(
       overrides: [
         systemLevelHudSignalsProvider.overrideWithValue((
           audio: audioUpdates.stream,
           brightness: brightnessUpdates.stream,
+          keyboard: keyboardUpdates.stream,
         )),
         systemLevelHudVisibleDurationProvider.overrideWithValue(
           const Duration(minutes: 1),
@@ -53,6 +56,7 @@ void main() {
       container.dispose();
       await brightnessUpdates.close();
       await audioUpdates.close();
+      await keyboardUpdates.close();
       layoutBridge.dispose();
     }
 

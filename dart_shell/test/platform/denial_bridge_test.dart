@@ -923,6 +923,75 @@ void main() {
     }
   });
 
+  test('audio state decodes the muted byte', () async {
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    final bridge = _startedBridge();
+    final states = <DenialAudioState>[];
+    final subscription = bridge.audioStates.listen(states.add);
+    try {
+      final payload = ByteData(6)
+        ..setUint8(0, 40)
+        ..setUint32(1, 0, Endian.little)
+        ..setUint8(5, 1);
+      await messenger.handlePlatformMessage(
+        'denial/audio_state',
+        payload,
+        null,
+      );
+      expect(states, hasLength(1));
+      expect(states.single.level, 0.40);
+      expect(states.single.muted, isTrue);
+
+      final unmuted = ByteData(6)
+        ..setUint8(0, 40)
+        ..setUint32(1, 0, Endian.little)
+        ..setUint8(5, 0);
+      await messenger.handlePlatformMessage(
+        'denial/audio_state',
+        unmuted,
+        null,
+      );
+      expect(states.last.muted, isFalse);
+    } finally {
+      await subscription.cancel();
+      bridge.dispose();
+    }
+  });
+
+  test('keyboard led state decodes the lock-light bit field', () async {
+    final messenger =
+        TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger;
+    final bridge = _startedBridge();
+    final states = <DenialKeyboardLedState>[];
+    final subscription = bridge.keyboardLedStates.listen(states.add);
+    try {
+      final all = ByteData(1)..setUint8(0, 0x7);
+      await messenger.handlePlatformMessage(
+        'denial/keyboard_led_state',
+        all,
+        null,
+      );
+      expect(states, hasLength(1));
+      expect(states.single.caps, isTrue);
+      expect(states.single.num, isTrue);
+      expect(states.single.scroll, isTrue);
+
+      final capsOnly = ByteData(1)..setUint8(0, 0x1);
+      await messenger.handlePlatformMessage(
+        'denial/keyboard_led_state',
+        capsOnly,
+        null,
+      );
+      expect(states.last.caps, isTrue);
+      expect(states.last.num, isFalse);
+      expect(states.last.scroll, isFalse);
+    } finally {
+      await subscription.cancel();
+      bridge.dispose();
+    }
+  });
+
   test(
     'application audio stream commands use the native audio channel',
     () async {

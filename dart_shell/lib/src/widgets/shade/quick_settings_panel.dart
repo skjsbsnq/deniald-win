@@ -269,7 +269,9 @@ class _ControlContents extends StatelessWidget {
         ),
         const SizedBox(height: 10),
         RangeBar(
-          icon: Icons.volume_up_rounded,
+          icon: quickSettings.muted || quickSettings.volume <= 0.01
+              ? Icons.volume_off_rounded
+              : Icons.volume_up_rounded,
           value: quickSettings.volume,
           activeColor: accent,
           inactiveColor: ShellColors.volumeTrack,

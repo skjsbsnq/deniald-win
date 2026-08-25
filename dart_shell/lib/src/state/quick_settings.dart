@@ -17,6 +17,7 @@ class QuickSettingsState {
   const QuickSettingsState({
     required this.brightness,
     required this.volume,
+    required this.muted,
     required this.rotationLock,
     required this.profile,
     required this.screenshotRunning,
@@ -25,6 +26,7 @@ class QuickSettingsState {
   factory QuickSettingsState.initial() => const QuickSettingsState(
     brightness: 0.72,
     volume: 0.46,
+    muted: false,
     rotationLock: true,
     profile: PowerProfile.balanced,
     screenshotRunning: false,
@@ -32,6 +34,7 @@ class QuickSettingsState {
 
   final double brightness;
   final double volume;
+  final bool muted;
   final bool rotationLock;
   final String profile;
   final bool screenshotRunning;
@@ -39,6 +42,7 @@ class QuickSettingsState {
   QuickSettingsState copyWith({
     double? brightness,
     double? volume,
+    bool? muted,
     bool? rotationLock,
     String? profile,
     bool? screenshotRunning,
@@ -46,6 +50,7 @@ class QuickSettingsState {
     return QuickSettingsState(
       brightness: brightness ?? this.brightness,
       volume: volume ?? this.volume,
+      muted: muted ?? this.muted,
       rotationLock: rotationLock ?? this.rotationLock,
       profile: profile ?? this.profile,
       screenshotRunning: screenshotRunning ?? this.screenshotRunning,
@@ -318,7 +323,12 @@ class QuickSettingsController extends Notifier<QuickSettingsState>
   void _recordVolumeIntent(double value, {bool force = false}) {
     final clamped = value.clamp(0.0, 1.0).toDouble();
     final percent = (clamped * 100).round().clamp(0, 100);
-    state = state.copyWith(volume: clamped);
+    // Raising a level while muted is an explicit request to hear that output;
+    // the native worker unmutes the sink, so mirror that immediately.
+    state = state.copyWith(
+      volume: clamped,
+      muted: clamped > 0.0 ? false : state.muted,
+    );
 
     if (_latestDesiredVolumeSerial != 0 &&
         _latestDesiredVolumePercent == percent) {
@@ -432,7 +442,7 @@ class QuickSettingsController extends Notifier<QuickSettingsState>
     final level = update.level.clamp(0.0, 1.0).toDouble();
     _observedVolumePercent = (level * 100).round().clamp(0, 100);
     if (!_volumeInteracting) {
-      state = state.copyWith(volume: level);
+      state = state.copyWith(volume: level, muted: update.muted);
     }
   }
 

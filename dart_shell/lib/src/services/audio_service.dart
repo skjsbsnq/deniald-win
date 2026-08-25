@@ -8,10 +8,15 @@ final audioServiceProvider = Provider<AudioService>((ref) {
 });
 
 class AudioLevelState {
-  const AudioLevelState({required this.level, required this.requestSerial});
+  const AudioLevelState({
+    required this.level,
+    required this.requestSerial,
+    this.muted = false,
+  });
 
   final double level;
   final int requestSerial;
+  final bool muted;
 }
 
 class AppAudioStream {
@@ -48,8 +53,11 @@ class AudioService {
   Future<double?> readLevel() => _bridge.readAudioLevel();
 
   Stream<AudioLevelState> get states => _bridge.audioStates.map(
-    (state) =>
-        AudioLevelState(level: state.level, requestSerial: state.requestSerial),
+    (state) => AudioLevelState(
+      level: state.level,
+      requestSerial: state.requestSerial,
+      muted: state.muted,
+    ),
   );
 
   Stream<List<AppAudioStream>> get appStreamStates =>

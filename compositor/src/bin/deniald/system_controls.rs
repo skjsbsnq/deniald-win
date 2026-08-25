@@ -52,9 +52,16 @@ pub(super) struct AudioStreamState {
 
 #[derive(Clone, Debug, PartialEq)]
 pub(super) enum SystemControlEvent {
-    AudioLevel { level: f64, request_serial: u32 },
+    AudioLevel {
+        level: f64,
+        request_serial: u32,
+        muted: bool,
+    },
     AudioStreams(Vec<AudioStreamState>),
-    BrightnessLevel { monitor_id: i64, level: f64 },
+    BrightnessLevel {
+        monitor_id: i64,
+        level: f64,
+    },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -1223,12 +1230,12 @@ fn wait_for_success(
     lock_unpoisoned(&query.state).success
 }
 
-fn read_pulse_level(api: &PulseApi, connection: &PulseConnection) -> Option<f64> {
+fn read_pulse_level(api: &PulseApi, connection: &PulseConnection) -> Option<(f64, bool)> {
     let sink = query_default_sink(api, connection)?;
     let state = query_sink(api, connection, &sink)?;
     // SAFETY: state.volume is a complete pa_cvolume copied from libpulse.
     let current = unsafe { (api.cvolume_avg)(&state.volume) } as f64 / 65_536.0;
-    Some(current.clamp(0.0, 1.0))
+    Some((current.clamp(0.0, 1.0), state.muted))
 }
 
 fn set_pulse_level(api: &PulseApi, connection: &PulseConnection, target: f64) -> Option<f64> {
@@ -1522,10 +1529,11 @@ fn run_audio_worker(
             }
         }
         if !operation_failed && state_requested {
-            if let Some(level) = read_pulse_level(&api, active) {
+            if let Some((level, muted)) = read_pulse_level(&api, active) {
                 let _ = events.try_send(SystemControlEvent::AudioLevel {
                     level,
                     request_serial,
+                    muted,
                 });
             } else {
                 operation_failed = true;

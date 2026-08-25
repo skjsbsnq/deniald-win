@@ -3435,7 +3435,7 @@ class DesktopDashboard extends ConsumerWidget {
                       ),
                       const SizedBox(height: 12),
                       RangeBar(
-                        icon: quickSettings.volume <= 0.01
+                        icon: quickSettings.muted || quickSettings.volume <= 0.01
                             ? Icons.volume_off_rounded
                             : Icons.volume_up_rounded,
                         value: quickSettings.volume,

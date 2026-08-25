@@ -49,17 +49,33 @@ class DenialAudioState {
   const DenialAudioState({
     required this.level,
     required this.requestSerial,
+    this.muted = false,
     this.completesRead = false,
   });
 
   final double level;
   final int requestSerial;
 
+  /// Whether the default output sink is muted.
+  final bool muted;
+
   /// Whether this update satisfied an explicit state read from Dart.
   ///
   /// Reconciliation reads update controls but should not look like a fresh
   /// hardware-key interaction to transient shell surfaces.
   final bool completesRead;
+}
+
+class DenialKeyboardLedState {
+  const DenialKeyboardLedState({
+    required this.caps,
+    required this.num,
+    required this.scroll,
+  });
+
+  final bool caps;
+  final bool num;
+  final bool scroll;
 }
 
 class DenialAudioStream {
@@ -130,6 +146,7 @@ class DenialBridge {
   static const String _audioStateChannel = 'denial/audio_state';
   static const String _audioStreamsStateChannel = 'denial/audio_streams_state';
   static const String _brightnessStateChannel = 'denial/brightness_state';
+  static const String _keyboardLedStateChannel = 'denial/keyboard_led_state';
   static final Uint8List _hapticPrewarmPayload = Uint8List.fromList(const <int>[
     0,
   ]);
@@ -166,6 +183,10 @@ class DenialBridge {
       _handleBrightnessStateMessage,
     );
     ServicesBinding.instance.defaultBinaryMessenger.setMessageHandler(
+      _keyboardLedStateChannel,
+      _handleKeyboardLedStateMessage,
+    );
+    ServicesBinding.instance.defaultBinaryMessenger.setMessageHandler(
       denialUiDevelopmentStateChannel,
       _handleUiDevelopmentStateMessage,
     );
@@ -200,6 +221,8 @@ class DenialBridge {
       StreamController<List<DenialAudioStream>>.broadcast(sync: true);
   final StreamController<DenialBrightnessState> _brightnessStates =
       StreamController<DenialBrightnessState>.broadcast(sync: true);
+  final StreamController<DenialKeyboardLedState> _keyboardLedStates =
+      StreamController<DenialKeyboardLedState>.broadcast(sync: true);
   final StreamController<DesktopNotificationEvent> _notificationEvents =
       StreamController<DesktopNotificationEvent>.broadcast(sync: true);
   final StreamController<DenialUiDevelopmentState> _uiDevelopmentStates =
@@ -233,6 +256,8 @@ class DenialBridge {
       _audioStreamStates.stream;
   Stream<DenialBrightnessState> get brightnessStates =>
       _brightnessStates.stream;
+  Stream<DenialKeyboardLedState> get keyboardLedStates =>
+      _keyboardLedStates.stream;
   Stream<DesktopNotificationEvent> get notificationEvents =>
       _notificationEvents.stream;
   Stream<DenialUiDevelopmentState> get uiDevelopmentStates =>
@@ -341,6 +366,7 @@ class DenialBridge {
     unawaited(_audioStates.close());
     unawaited(_audioStreamStates.close());
     unawaited(_brightnessStates.close());
+    unawaited(_keyboardLedStates.close());
     unawaited(_notificationEvents.close());
     unawaited(_uiDevelopmentStates.close());
     unawaited(_keyboardConfigurations.close());
@@ -1323,12 +1349,14 @@ class DenialBridge {
     final requestSerial = data.lengthInBytes >= 5
         ? data.getUint32(1, Endian.little)
         : 0;
+    final muted = data.lengthInBytes >= 6 && data.getUint8(5) != 0;
     final completesRead = _pendingAudioReads.isNotEmpty;
     if (!_audioStates.isClosed) {
       _audioStates.add(
         DenialAudioState(
           level: level,
           requestSerial: requestSerial,
+          muted: muted,
           completesRead: completesRead,
         ),
       );
@@ -1339,6 +1367,23 @@ class DenialBridge {
       if (!completer.isCompleted) {
         completer.complete(level);
       }
+    }
+    return null;
+  }
+
+  Future<ByteData?> _handleKeyboardLedStateMessage(ByteData? data) async {
+    if (data == null || data.lengthInBytes < 1) {
+      return null;
+    }
+    final byte = data.getUint8(0);
+    if (!_keyboardLedStates.isClosed) {
+      _keyboardLedStates.add(
+        DenialKeyboardLedState(
+          caps: (byte & 0x1) != 0,
+          num: (byte & 0x2) != 0,
+          scroll: (byte & 0x4) != 0,
+        ),
+      );
     }
     return null;
   }

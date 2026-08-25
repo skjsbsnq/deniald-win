@@ -1072,6 +1072,12 @@ fn process_input_event(
                     touchpad_presence_changed(previous_count, state.touchpad_devices.len());
             }
         }
+        #[cfg(feature = "flutter")]
+        if Device::has_capability(device, DeviceCapability::Keyboard) {
+            state
+                .keyboard_devices
+                .insert(device.sysname().to_owned(), device.clone());
+        }
     }
 
     if let InputEvent::DeviceRemoved { device } = &event {
@@ -1081,6 +1087,7 @@ fn process_input_event(
             state.touchpad_devices.remove(device.sysname());
             state.input_device_capabilities_changed |=
                 touchpad_presence_changed(previous_count, state.touchpad_devices.len());
+            state.keyboard_devices.remove(device.sysname());
         }
         let reset = InputDeviceReset {
             keyboard: Device::has_capability(device, DeviceCapability::Keyboard),
@@ -1195,6 +1202,18 @@ pub(in super::super) fn install_keyboard_settings(
         frontend.active_keyboard_layout = 0;
         frontend.keyboard_configuration_changed = true;
     }
+    // The freshly installed keymap defines the session's baseline lock-light
+    // state. Push it before any user gesture so the shell treats it as the
+    // starting point rather than a toggle, and so a Caps Lock pressed as the
+    // very first key after login still produces an OSD.
+    let baseline = keyboard.led_state();
+    let baseline_event = super::super::flutter_runtime::KeyboardLedEvent {
+        caps: baseline.caps.unwrap_or(false),
+        num: baseline.num.unwrap_or(false),
+        scroll: baseline.scroll.unwrap_or(false),
+    };
+    state.last_keyboard_led = Some(baseline_event);
+    state.pending_keyboard_led_events.push_back(baseline_event);
     super::input_method::refresh_keyboard_grab(
         state,
         i32::try_from(settings.repeat_rate_hz)?,

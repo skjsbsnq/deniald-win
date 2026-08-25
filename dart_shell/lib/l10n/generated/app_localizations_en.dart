@@ -2605,6 +2605,21 @@ class AppLocalizationsEn extends AppLocalizations {
   String get volumeTitle => 'Volume';
 
   @override
+  String get keyboardCapsLockTitle => 'Caps Lock';
+
+  @override
+  String get keyboardCapsLockOn => 'On';
+
+  @override
+  String get keyboardCapsLockOff => 'Off';
+
+  @override
+  String get keyboardCapsLockOnSemantics => 'Caps Lock on';
+
+  @override
+  String get keyboardCapsLockOffSemantics => 'Caps Lock off';
+
+  @override
   String get wallpaperAlignBottom => 'Bottom';
 
   @override

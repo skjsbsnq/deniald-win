@@ -14,13 +14,17 @@ void main() {
       final audioUpdates = StreamController<DenialAudioState>.broadcast(
         sync: true,
       );
+      final keyboardUpdates =
+          StreamController<DenialKeyboardLedState>.broadcast(sync: true);
       addTearDown(brightnessUpdates.close);
       addTearDown(audioUpdates.close);
+      addTearDown(keyboardUpdates.close);
       final container = ProviderContainer.test(
         overrides: [
           systemLevelHudSignalsProvider.overrideWithValue((
             audio: audioUpdates.stream,
             brightness: brightnessUpdates.stream,
+            keyboard: keyboardUpdates.stream,
           )),
           systemLevelHudVisibleDurationProvider.overrideWithValue(
             const Duration(milliseconds: 30),
@@ -86,6 +90,117 @@ void main() {
         container.read(systemLevelHudProvider)?.revision,
         audioRevision + 1,
       );
+    },
+  );
+
+  test(
+    'a mute toggle presents the audio HUD even when the level is unchanged',
+    () async {
+      final brightnessUpdates =
+          StreamController<DenialBrightnessState>.broadcast(sync: true);
+      final audioUpdates = StreamController<DenialAudioState>.broadcast(
+        sync: true,
+      );
+      final keyboardUpdates =
+          StreamController<DenialKeyboardLedState>.broadcast(sync: true);
+      addTearDown(brightnessUpdates.close);
+      addTearDown(audioUpdates.close);
+      addTearDown(keyboardUpdates.close);
+      final container = ProviderContainer.test(
+        overrides: [
+          systemLevelHudSignalsProvider.overrideWithValue((
+            audio: audioUpdates.stream,
+            brightness: brightnessUpdates.stream,
+            keyboard: keyboardUpdates.stream,
+          )),
+          systemLevelHudVisibleDurationProvider.overrideWithValue(
+            const Duration(minutes: 1),
+          ),
+        ],
+      );
+      container.read(systemLevelHudProvider.notifier);
+
+      // Baseline read establishes the muted state without presenting.
+      audioUpdates.add(
+        const DenialAudioState(
+          level: 0.50,
+          requestSerial: 0,
+          completesRead: true,
+          muted: false,
+        ),
+      );
+      expect(container.read(systemLevelHudProvider), isNull);
+
+      // Same level, muted flips: the HUD must appear.
+      audioUpdates.add(const DenialAudioState(level: 0.50, requestSerial: 0, muted: true));
+      final state = container.read(systemLevelHudProvider);
+      expect(state?.kind, SystemLevelHudKind.audio);
+      expect(state?.visible, isTrue);
+      expect(state?.muted, isTrue);
+      expect(state?.level, 0.50);
+
+      // An identical republish must not rearm the HUD.
+      final revision = state!.revision;
+      audioUpdates.add(const DenialAudioState(level: 0.50, requestSerial: 0, muted: true));
+      expect(container.read(systemLevelHudProvider)?.revision, revision);
+    },
+  );
+
+  test(
+    'a Caps Lock toggle presents the keyboard HUD once per flip',
+    () async {
+      final brightnessUpdates =
+          StreamController<DenialBrightnessState>.broadcast(sync: true);
+      final audioUpdates = StreamController<DenialAudioState>.broadcast(
+        sync: true,
+      );
+      final keyboardUpdates =
+          StreamController<DenialKeyboardLedState>.broadcast(sync: true);
+      addTearDown(brightnessUpdates.close);
+      addTearDown(audioUpdates.close);
+      addTearDown(keyboardUpdates.close);
+      final container = ProviderContainer.test(
+        overrides: [
+          systemLevelHudSignalsProvider.overrideWithValue((
+            audio: audioUpdates.stream,
+            brightness: brightnessUpdates.stream,
+            keyboard: keyboardUpdates.stream,
+          )),
+          systemLevelHudVisibleDurationProvider.overrideWithValue(
+            const Duration(minutes: 1),
+          ),
+        ],
+      );
+      container.read(systemLevelHudProvider.notifier);
+
+      keyboardUpdates.add(
+        const DenialKeyboardLedState(caps: false, num: false, scroll: false),
+      );
+      expect(container.read(systemLevelHudProvider), isNull,
+          reason: 'the initial off state is a baseline, not a gesture');
+
+      keyboardUpdates.add(
+        const DenialKeyboardLedState(caps: true, num: false, scroll: false),
+      );
+      final on = container.read(systemLevelHudProvider);
+      expect(on?.kind, SystemLevelHudKind.keyboard);
+      expect(on?.capsLocked, isTrue);
+      expect(on?.visible, isTrue);
+      final onRevision = on!.revision;
+
+      // Repeated pushes of the same caps state must not re-present.
+      keyboardUpdates.add(
+        const DenialKeyboardLedState(caps: true, num: false, scroll: false),
+      );
+      expect(container.read(systemLevelHudProvider)?.revision, onRevision);
+
+      keyboardUpdates.add(
+        const DenialKeyboardLedState(caps: false, num: true, scroll: false),
+      );
+      final off = container.read(systemLevelHudProvider);
+      expect(off?.kind, SystemLevelHudKind.keyboard);
+      expect(off?.capsLocked, isFalse);
+      expect(off?.revision, onRevision + 1);
     },
   );
 }

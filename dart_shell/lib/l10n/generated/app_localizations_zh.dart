@@ -2489,6 +2489,21 @@ class AppLocalizationsZh extends AppLocalizations {
   String get volumeTitle => '音量';
 
   @override
+  String get keyboardCapsLockTitle => '大写锁定';
+
+  @override
+  String get keyboardCapsLockOn => '已开启';
+
+  @override
+  String get keyboardCapsLockOff => '已关闭';
+
+  @override
+  String get keyboardCapsLockOnSemantics => '大写锁定已开启';
+
+  @override
+  String get keyboardCapsLockOffSemantics => '大写锁定已关闭';
+
+  @override
   String get wallpaperAlignBottom => '底部';
 
   @override

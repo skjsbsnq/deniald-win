@@ -1363,6 +1363,12 @@ struct RuntimeState {
     #[cfg(feature = "flutter")]
     touchpad_devices: BTreeMap<String, smithay::reexports::input::Device>,
     #[cfg(feature = "flutter")]
+    keyboard_devices: BTreeMap<String, smithay::reexports::input::Device>,
+    #[cfg(feature = "flutter")]
+    last_keyboard_led: Option<flutter_runtime::KeyboardLedEvent>,
+    #[cfg(feature = "flutter")]
+    pending_keyboard_led_events: VecDeque<flutter_runtime::KeyboardLedEvent>,
+    #[cfg(feature = "flutter")]
     input_device_capabilities_changed: bool,
     #[cfg(feature = "flutter")]
     pending_window_events: PendingWindowEventQueue,
@@ -3912,6 +3918,7 @@ fn run_flutter_event_loop(
         synchronize_clipboard(runtime, &mut events)?;
         synchronize_system_control_events(runtime, &mut events)?;
         synchronize_notification_events(runtime, &mut events)?;
+        synchronize_keyboard_led_events(runtime, &mut events)?;
         synchronize_shell_keyboard(runtime, &mut events)?;
         synchronize_settings(runtime, &mut events)?;
         synchronize_system_bar_configuration(runtime, &mut events, Some(flutter_launcher));
@@ -4439,6 +4446,7 @@ fn wait_for_flutter_frame(
         synchronize_clipboard(runtime, events)?;
         synchronize_system_control_events(runtime, events)?;
         synchronize_notification_events(runtime, events)?;
+        synchronize_keyboard_led_events(runtime, events)?;
         synchronize_shell_keyboard(runtime, events)?;
         synchronize_settings(runtime, events)?;
         synchronize_system_bar_configuration(runtime, events, flutter_launcher.as_deref_mut());
@@ -6101,7 +6109,6 @@ fn synchronize_notification_events(
     while let Some(event) = events.pending_notification_events.pop_front() {
         runtime.send_notification_event(&event)?;
     }
-
     let commands = runtime.drain_notification_commands().collect::<Vec<_>>();
     if events.secure_session_locked() {
         return Ok(());
@@ -6131,6 +6138,17 @@ fn synchronize_notification_events(
                 "could not queue Flutter notification command"
             );
         }
+    }
+    Ok(())
+}
+
+#[cfg(feature = "flutter")]
+fn synchronize_keyboard_led_events(
+    runtime: &mut flutter_runtime::FlutterRuntime,
+    events: &mut RuntimeState,
+) -> Result<(), Box<dyn Error>> {
+    while let Some(event) = events.pending_keyboard_led_events.pop_front() {
+        runtime.send_keyboard_led_event(&event)?;
     }
     Ok(())
 }

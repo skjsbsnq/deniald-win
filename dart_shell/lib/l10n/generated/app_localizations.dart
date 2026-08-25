@@ -4630,6 +4630,36 @@ abstract class AppLocalizations {
   /// **'Volume'**
   String get volumeTitle;
 
+  /// English UI text for keyboardCapsLockTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Caps Lock'**
+  String get keyboardCapsLockTitle;
+
+  /// English UI text for keyboardCapsLockOn.
+  ///
+  /// In en, this message translates to:
+  /// **'On'**
+  String get keyboardCapsLockOn;
+
+  /// English UI text for keyboardCapsLockOff.
+  ///
+  /// In en, this message translates to:
+  /// **'Off'**
+  String get keyboardCapsLockOff;
+
+  /// English UI text for keyboardCapsLockOnSemantics.
+  ///
+  /// In en, this message translates to:
+  /// **'Caps Lock on'**
+  String get keyboardCapsLockOnSemantics;
+
+  /// English UI text for keyboardCapsLockOffSemantics.
+  ///
+  /// In en, this message translates to:
+  /// **'Caps Lock off'**
+  String get keyboardCapsLockOffSemantics;
+
   /// English UI text for wallpaperAlignBottom.
   ///
   /// In en, this message translates to:

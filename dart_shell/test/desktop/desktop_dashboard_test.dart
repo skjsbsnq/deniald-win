@@ -61,6 +61,19 @@ void main() {
     expect(bars.volume.value, 0.15);
   });
 
+  testWidgets('muted volume shows the mute glyph on the dashboard bar', (
+    tester,
+  ) async {
+    await _pumpDashboard(tester, volume: 0.60, muted: true);
+
+    final bars = tester.widgetList<RangeBar>(find.byType(RangeBar)).toList();
+    expect(bars, hasLength(2));
+    expect(
+      bars.singleWhere((bar) => bar.icon == Icons.volume_off_rounded).value,
+      0.60,
+    );
+  });
+
   testWidgets('power modes card offers the system profile row only', (
     tester,
   ) async {
@@ -167,6 +180,7 @@ Future<void> _pumpDashboard(
   WidgetTester tester, {
   double brightness = 0.8,
   double volume = 0.35,
+  bool muted = false,
   Locale? locale,
 }) async {
   tester.view.physicalSize = _panelSize;
@@ -180,6 +194,7 @@ Future<void> _pumpDashboard(
           (ref, controller) => QuickSettingsState(
             brightness: brightness,
             volume: volume,
+            muted: muted,
             rotationLock: false,
             profile: 'balanced',
             screenshotRunning: false,

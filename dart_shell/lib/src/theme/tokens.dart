@@ -65,6 +65,7 @@ abstract final class ShellColors {
   static const Color sliderIconDark = onAccent;
   static const Color brightnessTrack = surfaceContainerHighest;
   static const Color volumeTrack = surfaceContainerHighest;
+  static const Color keyboardTrack = surfaceContainerHighest;
   static const Color wallpaperEffectTrack = surfaceContainerHighest;
 
   // Gesture pill.

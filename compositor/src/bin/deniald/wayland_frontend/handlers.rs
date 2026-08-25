@@ -955,6 +955,28 @@ impl SeatHandler for RuntimeState {
         }
     }
 
+    fn led_state_changed(
+        &mut self,
+        _seat: &Seat<Self>,
+        led_state: smithay::input::keyboard::LedState,
+    ) {
+        #[cfg(feature = "flutter")]
+        {
+            let event = super::super::flutter_runtime::KeyboardLedEvent {
+                caps: led_state.caps.unwrap_or(false),
+                num: led_state.num.unwrap_or(false),
+                scroll: led_state.scroll.unwrap_or(false),
+            };
+            if self.last_keyboard_led != Some(event) {
+                self.last_keyboard_led = Some(event);
+                self.pending_keyboard_led_events.push_back(event);
+            }
+            for device in self.keyboard_devices.values_mut() {
+                device.led_update(led_state.into());
+            }
+        }
+    }
+
     fn focus_changed(&mut self, seat: &Seat<Self>, focused: Option<&KeyboardFocusTarget>) {
         #[cfg(feature = "flutter")]
         if focused.is_some() {

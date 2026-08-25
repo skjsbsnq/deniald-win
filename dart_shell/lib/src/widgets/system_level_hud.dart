@@ -34,6 +34,7 @@ class SystemLevelHudLayer extends ConsumerWidget {
       return const SizedBox.shrink();
     }
     final isBrightness = hud.kind == SystemLevelHudKind.brightness;
+    final isKeyboard = hud.kind == SystemLevelHudKind.keyboard;
     final l10n = context.l10n;
 
     return Positioned.fromRect(
@@ -49,14 +50,32 @@ class SystemLevelHudLayer extends ConsumerWidget {
             visible: hud.visible,
             icon: isBrightness
                 ? Icons.brightness_6_rounded
-                : _volumeIcon(hud.level),
-            title: isBrightness ? l10n.brightnessTitle : l10n.volumeTitle,
-            detail: isBrightness ? output.name : null,
+                : isKeyboard
+                ? Icons.keyboard_capslock_rounded
+                : _volumeIcon(hud.level, hud.muted),
+            title: isBrightness
+                ? l10n.brightnessTitle
+                : isKeyboard
+                ? l10n.keyboardCapsLockTitle
+                : l10n.volumeTitle,
+            detail: isBrightness
+                ? output.name
+                : isKeyboard
+                ? (hud.capsLocked
+                      ? l10n.keyboardCapsLockOn
+                      : l10n.keyboardCapsLockOff)
+                : null,
             semanticLabel: isBrightness
                 ? l10n.outputBrightnessSemantics(output.name)
+                : isKeyboard
+                ? (hud.capsLocked
+                      ? l10n.keyboardCapsLockOnSemantics
+                      : l10n.keyboardCapsLockOffSemantics)
                 : l10n.outputVolumeSemantics,
             inactiveColor: isBrightness
                 ? ShellColors.brightnessTrack
+                : isKeyboard
+                ? ShellColors.keyboardTrack
                 : ShellColors.volumeTrack,
           ),
         ),
@@ -68,7 +87,8 @@ class SystemLevelHudLayer extends ConsumerWidget {
     if (layout == null || hud == null) {
       return null;
     }
-    if (hud.kind == SystemLevelHudKind.audio) {
+    if (hud.kind == SystemLevelHudKind.audio ||
+        hud.kind == SystemLevelHudKind.keyboard) {
       return layout.mainOutput;
     }
     for (final output in layout.outputs) {
@@ -79,8 +99,8 @@ class SystemLevelHudLayer extends ConsumerWidget {
     return null;
   }
 
-  IconData _volumeIcon(double level) {
-    if (level <= 0.01) {
+  IconData _volumeIcon(double level, bool muted) {
+    if (muted || level <= 0.01) {
       return Icons.volume_off_rounded;
     }
     if (level < 0.5) {

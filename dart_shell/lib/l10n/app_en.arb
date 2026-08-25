@@ -3569,6 +3569,26 @@
   "@volumeTitle": {
     "description": "English UI text for volumeTitle."
   },
+  "keyboardCapsLockTitle": "Caps Lock",
+  "@keyboardCapsLockTitle": {
+    "description": "English UI text for keyboardCapsLockTitle."
+  },
+  "keyboardCapsLockOn": "On",
+  "@keyboardCapsLockOn": {
+    "description": "English UI text for keyboardCapsLockOn."
+  },
+  "keyboardCapsLockOff": "Off",
+  "@keyboardCapsLockOff": {
+    "description": "English UI text for keyboardCapsLockOff."
+  },
+  "keyboardCapsLockOnSemantics": "Caps Lock on",
+  "@keyboardCapsLockOnSemantics": {
+    "description": "English UI text for keyboardCapsLockOnSemantics."
+  },
+  "keyboardCapsLockOffSemantics": "Caps Lock off",
+  "@keyboardCapsLockOffSemantics": {
+    "description": "English UI text for keyboardCapsLockOffSemantics."
+  },
   "wallpaperAlignBottom": "Bottom",
   "@wallpaperAlignBottom": {
     "description": "English UI text for wallpaperAlignBottom."

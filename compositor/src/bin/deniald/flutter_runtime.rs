@@ -77,6 +77,7 @@ const AUDIO_STATE_CHANNEL: &CStr = c"denial/audio_state";
 const AUDIO_STREAMS_STATE_CHANNEL: &CStr = c"denial/audio_streams_state";
 const BRIGHTNESS_CHANNEL: &CStr = c"denial/brightness";
 const BRIGHTNESS_STATE_CHANNEL: &CStr = c"denial/brightness_state";
+const KEYBOARD_LED_STATE_CHANNEL: &CStr = c"denial/keyboard_led_state";
 const WINDOW_CLOSE_COMPLETE_CHANNEL: &CStr = c"denial/window_close_complete";
 const GLFW_MOD_CONTROL: u32 = 0x0002;
 const GLFW_MOD_ALT: u32 = 0x0004;
@@ -111,6 +112,24 @@ const MAX_PENDING_UI_DEVELOPMENT_COMMANDS: usize = 64;
 const WINDOW_CLOSE_LEASE_TIMEOUT: Duration = Duration::from_secs(5);
 const RENDER_AUDIT_INTERVAL: Duration = Duration::from_secs(1);
 const FLUTTER_RESOURCE_CACHE_MAX_BYTES_THRESHOLD: usize = 128 * 1024 * 1024;
+
+/// The current keyboard lock-light state, pushed to the shell so it can mirror
+/// Caps/Num/Scroll lock as an on-screen indicator.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub(super) struct KeyboardLedEvent {
+    pub caps: bool,
+    pub num: bool,
+    pub scroll: bool,
+}
+
+impl KeyboardLedEvent {
+    /// Encodes the three lock lights as a single bit-field byte for the
+    /// shell platform channel: bit 0 = CapsLock, bit 1 = NumLock,
+    /// bit 2 = ScrollLock.
+    pub(super) const fn encode(&self) -> u8 {
+        (self.caps as u8) | ((self.num as u8) << 1) | ((self.scroll as u8) << 2)
+    }
+}
 
 #[derive(Debug)]
 struct RenderDamageAudit {
@@ -6440,10 +6459,9 @@ impl FlutterRuntime {
             super::system_controls::SystemControlEvent::AudioLevel {
                 level,
                 request_serial,
+                muted,
             } => {
-                let mut packet = [0u8; 5];
-                packet[0] = (level.clamp(0.0, 1.0) * 100.0).round() as u8;
-                packet[1..].copy_from_slice(&request_serial.to_le_bytes());
+                let packet = encode_audio_level_packet(*level, *request_serial, *muted);
                 self.host()
                     .engine()
                     .send_platform_message(AUDIO_STATE_CHANNEL, &packet)?;
@@ -6484,6 +6502,19 @@ impl FlutterRuntime {
                     .send_platform_message(BRIGHTNESS_STATE_CHANNEL, &packet)?;
             }
         }
+        Ok(())
+    }
+
+    /// Pushes the keyboard lock-light state to the shell over its dedicated
+    /// platform channel. The packet is a single bit-field byte.
+    pub fn send_keyboard_led_event(
+        &mut self,
+        event: &KeyboardLedEvent,
+    ) -> Result<(), Box<dyn Error>> {
+        let packet = [event.encode()];
+        self.host()
+            .engine()
+            .send_platform_message(KEYBOARD_LED_STATE_CHANNEL, &packet)?;
         Ok(())
     }
 
@@ -6788,6 +6819,17 @@ impl FlutterRuntime {
     }
 }
 
+/// Encodes the shell audio-state platform packet. Layout:
+/// `[0]` level as a 0-100 byte, `[1..5]` request serial (LE),
+/// `[5]` muted flag (0 or 1).
+fn encode_audio_level_packet(level: f64, request_serial: u32, muted: bool) -> [u8; 6] {
+    let mut packet = [0u8; 6];
+    packet[0] = (level.clamp(0.0, 1.0) * 100.0).round() as u8;
+    packet[1..5].copy_from_slice(&request_serial.to_le_bytes());
+    packet[5] = u8::from(muted);
+    packet
+}
+
 fn encode_key_event(event: KeyboardRecord, output: &mut Vec<u8>) {
     let keycode = glfw_keycode(event.keycode);
     let event_type = if event.pressed { "keydown" } else { "keyup" };
@@ -6952,6 +6994,67 @@ mod tests {
         assert!(!producer.recover_no_raster(started_at + Duration::from_millis(16), grace));
         assert!(producer.recover_no_raster(started_at + grace, grace));
         assert!(!producer.is_busy());
+    }
+
+    #[test]
+    fn keyboard_led_event_encodes_a_bit_field_byte() {
+        assert_eq!(
+            KeyboardLedEvent {
+                caps: false,
+                num: false,
+                scroll: false,
+            }
+            .encode(),
+            0b000
+        );
+        assert_eq!(
+            KeyboardLedEvent {
+                caps: true,
+                num: false,
+                scroll: false,
+            }
+            .encode(),
+            0b001
+        );
+        assert_eq!(
+            KeyboardLedEvent {
+                caps: false,
+                num: true,
+                scroll: false,
+            }
+            .encode(),
+            0b010
+        );
+        assert_eq!(
+            KeyboardLedEvent {
+                caps: false,
+                num: false,
+                scroll: true,
+            }
+            .encode(),
+            0b100
+        );
+        assert_eq!(
+            KeyboardLedEvent {
+                caps: true,
+                num: true,
+                scroll: true,
+            }
+            .encode(),
+            0b111
+        );
+    }
+
+    #[test]
+    fn audio_level_packet_places_muted_in_the_last_byte() {
+        let packet = encode_audio_level_packet(0.64, 91, true);
+        assert_eq!(packet.len(), 6);
+        assert_eq!(packet[0], 64);
+        assert_eq!(u32::from_le_bytes(packet[1..5].try_into().unwrap()), 91);
+        assert_eq!(packet[5], 1);
+
+        let unmuted = encode_audio_level_packet(0.64, 0, false);
+        assert_eq!(unmuted[5], 0);
     }
 
     #[test]

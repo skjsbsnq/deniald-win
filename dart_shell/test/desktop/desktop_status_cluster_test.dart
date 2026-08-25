@@ -132,6 +132,11 @@ void main() {
         findsOneWidget,
       );
 
+      // Muted while volume is non-zero still shows the mute icon.
+      await _pumpCluster(tester, volume: 0.60, muted: true);
+      expect(find.byIcon(Icons.volume_off_rounded), findsOneWidget);
+      expect(find.byIcon(Icons.volume_up_rounded), findsNothing);
+
       // Mid volume
       await _pumpCluster(tester, volume: 0.35);
       expect(find.byIcon(Icons.volume_down_rounded), findsOneWidget);
@@ -372,6 +377,7 @@ Future<void> _pumpCluster(
   WidgetTester tester, {
   BatteryStatus battery = const BatteryStatus(capacity: 80, charging: false),
   double volume = 0.5,
+  bool muted = false,
   NetworkManagerSnapshot? networkSnapshot,
   bool horizontal = true,
   VoidCallback? onTap,
@@ -413,6 +419,7 @@ Future<void> _pumpCluster(
           (ref, controller) => QuickSettingsState(
             brightness: 0.8,
             volume: volume,
+            muted: muted,
             rotationLock: false,
             profile: 'balanced',
             screenshotRunning: false,

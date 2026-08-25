@@ -65,13 +65,14 @@ class DesktopStatusCluster extends ConsumerStatefulWidget {
     NetworkConnectivityState state,
   ) => _resolveNetworkSemanticLabel(context, state);
 
-  static IconData resolveVolumeIcon(double volume) =>
-      _resolveVolumeIcon(volume);
+  static IconData resolveVolumeIcon(double volume, bool muted) =>
+      _resolveVolumeIcon(volume, muted);
 
   static String resolveVolumeSemanticLabel(
     BuildContext context,
     double volume,
-  ) => _resolveVolumeSemanticLabel(context, volume);
+    bool muted,
+  ) => _resolveVolumeSemanticLabel(context, volume, muted);
 
   static IconData _resolveNetworkIcon(NetworkConnectivityState state) {
     if (state.initializing) {
@@ -145,8 +146,8 @@ class DesktopStatusCluster extends ConsumerStatefulWidget {
     };
   }
 
-  static IconData _resolveVolumeIcon(double volume) {
-    if (volume <= 0.01) {
+  static IconData _resolveVolumeIcon(double volume, bool muted) {
+    if (muted || volume <= 0.01) {
       return Icons.volume_off_rounded;
     }
     if (volume < 0.5) {
@@ -158,8 +159,9 @@ class DesktopStatusCluster extends ConsumerStatefulWidget {
   static String _resolveVolumeSemanticLabel(
     BuildContext context,
     double volume,
+    bool muted,
   ) {
-    if (volume <= 0.01) {
+    if (muted || volume <= 0.01) {
       return context.l10n.statusVolumeMuted;
     }
     return context.l10n.statusVolumeLevel((volume * 100).round());
@@ -177,6 +179,7 @@ class _DesktopStatusClusterState extends ConsumerState<DesktopStatusCluster> {
     final volume = ref.watch(
       quickSettingsProvider.select((state) => state.volume),
     );
+    final muted = ref.watch(quickSettingsProvider.select((state) => state.muted));
     final battery = ref.watch(batteryProvider);
     final accent = ref.watch(shellAccentProvider);
     final dashboardOpen = ref.watch(
@@ -192,10 +195,11 @@ class _DesktopStatusClusterState extends ConsumerState<DesktopStatusCluster> {
       networkState,
     );
 
-    final volumeIcon = DesktopStatusCluster._resolveVolumeIcon(volume);
+    final volumeIcon = DesktopStatusCluster._resolveVolumeIcon(volume, muted);
     final volumeLabel = DesktopStatusCluster._resolveVolumeSemanticLabel(
       context,
       volume,
+      muted,
     );
 
     final children = <Widget>[
