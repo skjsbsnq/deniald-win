@@ -364,12 +364,10 @@ class _NotificationTransitionState extends State<_NotificationTransition>
           position: _position,
           child: Padding(
             padding: const EdgeInsets.only(bottom: 10),
-            child: RepaintBoundary(
-              child: ShellBackdropBlur(
-                blur: theme.panelOpacity < 1.0,
-                borderRadius: BorderRadius.circular(theme.panelRadius),
-                child: cardRegion,
-              ),
+            child: ShellBackdropBlur(
+              blur: theme.panelOpacity < 1.0,
+              borderRadius: BorderRadius.circular(theme.panelRadius),
+              child: cardRegion,
             ),
           ),
         ),

@@ -73,45 +73,42 @@ void main() {
     },
   );
 
-  test(
-    'mute state follows native events and raising volume unmutes',
-    () async {
-      final bridge = DenialBridge();
-      final audio = _FakeAudioService(bridge);
-      final brightness = _FakeBrightnessService(DenialBridge());
-      addTearDown(audio.dispose);
-      addTearDown(brightness.dispose);
-      final container = ProviderContainer.test(
-        overrides: [
-          brightnessServiceProvider.overrideWithValue(brightness),
-          audioServiceProvider.overrideWithValue(audio),
-          powerProfileServiceProvider.overrideWithValue(
-            const _FakePowerProfileService(),
-          ),
-          systemActionsServiceProvider.overrideWithValue(
-            const _FakeSystemActionsService(),
-          ),
-        ],
-      );
-      final controller = container.read(quickSettingsProvider.notifier);
-      await Future<void>.delayed(Duration.zero);
+  test('mute state follows native events and raising volume unmutes', () async {
+    final bridge = DenialBridge();
+    final audio = _FakeAudioService(bridge);
+    final brightness = _FakeBrightnessService(DenialBridge());
+    addTearDown(audio.dispose);
+    addTearDown(brightness.dispose);
+    final container = ProviderContainer.test(
+      overrides: [
+        brightnessServiceProvider.overrideWithValue(brightness),
+        audioServiceProvider.overrideWithValue(audio),
+        powerProfileServiceProvider.overrideWithValue(
+          const _FakePowerProfileService(),
+        ),
+        systemActionsServiceProvider.overrideWithValue(
+          const _FakeSystemActionsService(),
+        ),
+      ],
+    );
+    final controller = container.read(quickSettingsProvider.notifier);
+    await Future<void>.delayed(Duration.zero);
 
-      expect(container.read(quickSettingsProvider).muted, isFalse);
+    expect(container.read(quickSettingsProvider).muted, isFalse);
 
-      audio.emit(level: 0.40, muted: true);
-      expect(container.read(quickSettingsProvider).muted, isTrue);
-      expect(container.read(quickSettingsProvider).volume, 0.40);
+    audio.emit(level: 0.40, muted: true);
+    expect(container.read(quickSettingsProvider).muted, isTrue);
+    expect(container.read(quickSettingsProvider).volume, 0.40);
 
-      audio.emit(level: 0.40, muted: false);
-      expect(container.read(quickSettingsProvider).muted, isFalse);
+    audio.emit(level: 0.40, muted: false);
+    expect(container.read(quickSettingsProvider).muted, isFalse);
 
-      // Raising the level while muted mirrors the native worker's unmute.
-      audio.emit(level: 0.30, muted: true);
-      expect(container.read(quickSettingsProvider).muted, isTrue);
-      controller.setVolume(0.60);
-      expect(container.read(quickSettingsProvider).muted, isFalse);
-    },
-  );
+    // Raising the level while muted mirrors the native worker's unmute.
+    audio.emit(level: 0.30, muted: true);
+    expect(container.read(quickSettingsProvider).muted, isTrue);
+    controller.setVolume(0.60);
+    expect(container.read(quickSettingsProvider).muted, isFalse);
+  });
 }
 
 class _FakeAudioService extends AudioService {
@@ -133,7 +130,11 @@ class _FakeAudioService extends AudioService {
     writes.add((percent: percent, requestSerial: requestSerial));
   }
 
-  void emit({required double level, int requestSerial = 0, bool muted = false}) {
+  void emit({
+    required double level,
+    int requestSerial = 0,
+    bool muted = false,
+  }) {
     _states.add(
       AudioLevelState(level: level, requestSerial: requestSerial, muted: muted),
     );

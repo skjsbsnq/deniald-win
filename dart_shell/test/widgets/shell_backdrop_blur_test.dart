@@ -80,23 +80,53 @@ void main() {
     expect(find.byType(BackdropFilter), findsNothing);
   });
 
+  testWidgets('known opaque content with borderRadius avoids ClipRRect', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      _BlurHarness(
+        theme: const ShellThemeData(),
+        child: ShellBackdropBlur(
+          blur: false,
+          borderRadius: BorderRadius.circular(18),
+          child: const SizedBox(width: 160, height: 90),
+        ),
+      ),
+    );
+
+    expect(find.byType(BackdropFilter), findsNothing);
+    expect(find.byType(ClipRRect), findsNothing);
+    expect(find.byType(ClipRect), findsNothing);
+    expect(find.byType(RepaintBoundary), findsNothing);
+  });
+
   testWidgets('grouped blur shares the nearest backdrop input', (tester) async {
     await tester.pumpWidget(
       _BlurHarness(
         theme: const ShellThemeData(),
         child: BackdropGroup(
-          child: const ShellBackdropBlur(
-            grouped: true,
-            child: SizedBox(width: 160, height: 90),
+          child: const Row(
+            children: [
+              ShellBackdropBlur(
+                grouped: true,
+                child: SizedBox(width: 80, height: 90),
+              ),
+              ShellBackdropBlur(
+                grouped: true,
+                child: SizedBox(width: 80, height: 90),
+              ),
+            ],
           ),
         ),
       ),
     );
 
-    final renderObject = tester.renderObject<RenderBackdropFilter>(
+    final filters = tester.renderObjectList<RenderBackdropFilter>(
       find.byType(BackdropFilter),
     );
-    expect(renderObject.backdropKey, isNotNull);
+    expect(filters.length, 2);
+    expect(filters.first.backdropKey, isNotNull);
+    expect(filters.last.backdropKey, equals(filters.first.backdropKey));
     expect(
       find.ancestor(
         of: find.byType(BackdropFilter),

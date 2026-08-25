@@ -340,87 +340,85 @@ class _ClipboardTraySurface extends ConsumerWidget {
     final controller = ref.read(clipboardHistoryProvider.notifier);
     final horizontal = !_isVerticalEdge(edge);
 
-    return RepaintBoundary(
-      child: ShellBackdropBlur(
-        borderRadius: radius,
-        child: Material(
-          color: Colors.transparent,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              borderRadius: radius,
-              border: Border(
-                left: edge == ClipboardTrayEdge.right
-                    ? BorderSide(color: accent.outline)
-                    : BorderSide.none,
-                right: edge == ClipboardTrayEdge.left
-                    ? BorderSide(color: accent.outline)
-                    : BorderSide.none,
-                top: edge == ClipboardTrayEdge.bottom
-                    ? BorderSide(color: accent.outline)
-                    : BorderSide.none,
-                bottom: edge == ClipboardTrayEdge.top
-                    ? BorderSide(color: accent.outline)
-                    : BorderSide.none,
-              ),
-              gradient: LinearGradient(
-                begin: _gradientBegin(edge),
-                end: _gradientEnd(edge),
-                colors: [
-                  shellTheme.panelColor(
-                    Color.alphaBlend(
-                      accent.primary.withValues(alpha: 0.14),
-                      ShellColors.surfaceContainerLow,
-                    ),
-                  ),
-                  shellTheme.panelColor(ShellColors.panelBackgroundBottom),
-                ],
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: accent.primary.withValues(alpha: 0.14),
-                  blurRadius: 32,
-                  spreadRadius: -8,
-                ),
-                const BoxShadow(
-                  color: ShellColors.shadow,
-                  blurRadius: 36,
-                  spreadRadius: -12,
-                ),
-              ],
+    return ShellBackdropBlur(
+      borderRadius: radius,
+      child: Material(
+        color: Colors.transparent,
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: radius,
+            border: Border(
+              left: edge == ClipboardTrayEdge.right
+                  ? BorderSide(color: accent.outline)
+                  : BorderSide.none,
+              right: edge == ClipboardTrayEdge.left
+                  ? BorderSide(color: accent.outline)
+                  : BorderSide.none,
+              top: edge == ClipboardTrayEdge.bottom
+                  ? BorderSide(color: accent.outline)
+                  : BorderSide.none,
+              bottom: edge == ClipboardTrayEdge.top
+                  ? BorderSide(color: accent.outline)
+                  : BorderSide.none,
             ),
-            child: Stack(
-              children: [
-                Positioned.fill(
-                  child: Padding(
-                    padding: _clipboardTrayContentPadding(edge),
-                    child: _ClipboardHistoryBody(
-                      horizontal: horizontal,
-                      state: history,
-                      draggedEntryId: draggedEntryId,
-                      onActivate: (entry) async {
-                        if (await controller.activate(entry.id)) {
-                          onClose();
-                        }
-                      },
-                      onDelete: (entry) => controller.delete(entry.id),
-                      onSetPinned: (entry, pinned) =>
-                          controller.setPinned(entry.id, pinned: pinned),
-                      onClearAll: controller.clear,
-                      onEntryDragStart: onEntryDragStart,
-                      onEntryDragUpdate: onEntryDragUpdate,
-                      onEntryDragEnd: onEntryDragEnd,
-                      onRetry: controller.refresh,
-                    ),
+            gradient: LinearGradient(
+              begin: _gradientBegin(edge),
+              end: _gradientEnd(edge),
+              colors: [
+                shellTheme.panelColor(
+                  Color.alphaBlend(
+                    accent.primary.withValues(alpha: 0.14),
+                    ShellColors.surfaceContainerLow,
                   ),
                 ),
-                _ClipboardTrayDragRegion(
-                  edge: edge,
-                  onDragStart: onDragStart,
-                  onDragUpdate: onDragUpdate,
-                  onDragEnd: onDragEnd,
-                ),
+                shellTheme.panelColor(ShellColors.panelBackgroundBottom),
               ],
             ),
+            boxShadow: [
+              BoxShadow(
+                color: accent.primary.withValues(alpha: 0.14),
+                blurRadius: 32,
+                spreadRadius: -8,
+              ),
+              const BoxShadow(
+                color: ShellColors.shadow,
+                blurRadius: 36,
+                spreadRadius: -12,
+              ),
+            ],
+          ),
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: Padding(
+                  padding: _clipboardTrayContentPadding(edge),
+                  child: _ClipboardHistoryBody(
+                    horizontal: horizontal,
+                    state: history,
+                    draggedEntryId: draggedEntryId,
+                    onActivate: (entry) async {
+                      if (await controller.activate(entry.id)) {
+                        onClose();
+                      }
+                    },
+                    onDelete: (entry) => controller.delete(entry.id),
+                    onSetPinned: (entry, pinned) =>
+                        controller.setPinned(entry.id, pinned: pinned),
+                    onClearAll: controller.clear,
+                    onEntryDragStart: onEntryDragStart,
+                    onEntryDragUpdate: onEntryDragUpdate,
+                    onEntryDragEnd: onEntryDragEnd,
+                    onRetry: controller.refresh,
+                  ),
+                ),
+              ),
+              _ClipboardTrayDragRegion(
+                edge: edge,
+                onDragStart: onDragStart,
+                onDragUpdate: onDragUpdate,
+                onDragEnd: onDragEnd,
+              ),
+            ],
           ),
         ),
       ),

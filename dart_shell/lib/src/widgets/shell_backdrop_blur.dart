@@ -61,11 +61,9 @@ class ShellBackdropBlur extends StatelessWidget {
 
     final radius = borderRadius;
     final Widget clipped;
-    if (radius == null) {
-      clipped = enabled
-          ? ClipRect(clipBehavior: Clip.hardEdge, child: filtered)
-          : filtered;
-    } else if (radius == BorderRadius.zero) {
+    if (!enabled) {
+      clipped = filtered;
+    } else if (radius == null || radius == BorderRadius.zero) {
       clipped = ClipRect(clipBehavior: Clip.hardEdge, child: filtered);
     } else {
       clipped = ClipRRect(

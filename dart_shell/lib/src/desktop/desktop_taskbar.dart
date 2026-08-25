@@ -148,29 +148,28 @@ class _TaskbarCard extends StatelessWidget {
     const radius = BorderRadius.all(Radius.circular(999));
     final theme = ShellTheme.of(context);
 
-    return RepaintBoundary(
-      child: ShellBackdropBlur(
-        borderRadius: radius,
-        child: AnimatedContainer(
-          duration: Motion.wallpaperReveal,
-          curve: Motion.standard,
-          padding: horizontal
-              ? const EdgeInsets.symmetric(horizontal: 4.0, vertical: 0.0)
-              : const EdgeInsets.symmetric(horizontal: 0.0, vertical: 4.0),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-              colors: [
-                theme.panelColor(accent.cardFillTop),
-                theme.panelColor(accent.cardFill),
-              ],
-            ),
-            borderRadius: radius,
+    return ShellBackdropBlur(
+      grouped: true,
+      borderRadius: radius,
+      child: AnimatedContainer(
+        duration: Motion.wallpaperReveal,
+        curve: Motion.standard,
+        padding: horizontal
+            ? const EdgeInsets.symmetric(horizontal: 4.0, vertical: 0.0)
+            : const EdgeInsets.symmetric(horizontal: 0.0, vertical: 4.0),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              theme.panelColor(accent.cardFillTop),
+              theme.panelColor(accent.cardFill),
+            ],
           ),
-          alignment: Alignment.center,
-          child: child,
+          borderRadius: radius,
         ),
+        alignment: Alignment.center,
+        child: child,
       ),
     );
   }

@@ -176,12 +176,14 @@ class DesktopSystemBar extends ConsumerWidget {
               horizontal: _cardMargin,
               vertical: _edgePadding,
             ),
-      child: DesktopSystemBarLayout(
-        side: side,
-        leading: clusterLeads ? clusterWidgets : const <Widget>[],
-        center: clusterLeads ? const <Widget>[] : clusterWidgets,
-        trailing: trailingWidgets,
-        gap: _cardGap,
+      child: BackdropGroup(
+        child: DesktopSystemBarLayout(
+          side: side,
+          leading: clusterLeads ? clusterWidgets : const <Widget>[],
+          center: clusterLeads ? const <Widget>[] : clusterWidgets,
+          trailing: trailingWidgets,
+          gap: _cardGap,
+        ),
       ),
     );
   }
@@ -1206,6 +1208,7 @@ class _SystemBarCard extends StatelessWidget {
     const radius = BorderRadius.all(Radius.circular(999));
     final theme = ShellTheme.of(context);
     Widget card = ShellBackdropBlur(
+      grouped: true,
       borderRadius: radius,
       child: AnimatedContainer(
         duration: Motion.wallpaperReveal,

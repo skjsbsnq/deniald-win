@@ -147,11 +147,7 @@ class SystemLevelHudController extends Notifier<SystemLevelHudState?>
     if (previousLevel == level && previousMuted == update.muted) {
       return;
     }
-    _show(
-      kind: SystemLevelHudKind.audio,
-      level: level,
-      muted: update.muted,
-    );
+    _show(kind: SystemLevelHudKind.audio, level: level, muted: update.muted);
   }
 
   void _handleKeyboardLedState(DenialKeyboardLedState update, int generation) {

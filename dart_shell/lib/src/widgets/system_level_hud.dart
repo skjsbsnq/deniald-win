@@ -152,77 +152,75 @@ class _SystemLevelHudCard extends StatelessWidget {
           hidden: !visible,
           label: semanticLabel,
           value: context.l10n.percentValue(percent),
-          child: RepaintBoundary(
-            child: ShellBackdropBlur(
-              blur: theme.panelOpacity < 1.0,
-              borderRadius: BorderRadius.circular(theme.panelRadius),
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: <Color>[
-                      theme.panelColor(ShellColors.panelBackground),
-                      theme.panelColor(ShellColors.panelBackgroundBottom),
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(theme.panelRadius),
-                  border: Border.all(color: ShellColors.hairline),
-                  boxShadow: const <BoxShadow>[
-                    BoxShadow(
-                      color: ShellColors.shadow,
-                      blurRadius: 22,
-                      offset: Offset(0, 8),
-                    ),
+          child: ShellBackdropBlur(
+            blur: theme.panelOpacity < 1.0,
+            borderRadius: BorderRadius.circular(theme.panelRadius),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: <Color>[
+                    theme.panelColor(ShellColors.panelBackground),
+                    theme.panelColor(ShellColors.panelBackgroundBottom),
                   ],
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 18),
-                  child: Row(
-                    children: [
-                      Icon(icon, size: 22, color: theme.accent),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Row(
-                              children: [
-                                Text(title, style: ShellText.cardTitle),
-                                const SizedBox(width: 8),
-                                if (detail case final detail?)
-                                  Expanded(
-                                    child: Text(
-                                      detail,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: ShellText.base.copyWith(
-                                        color: ShellColors.textTertiary,
-                                        fontSize: 11,
-                                      ),
-                                    ),
-                                  )
-                                else
-                                  const Spacer(),
-                                Text(
-                                  context.l10n.percentCompact(percent),
-                                  style: ShellText.base.copyWith(
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 9),
-                            _LevelProgress(
-                              level: level,
-                              inactiveColor: inactiveColor,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
+                borderRadius: BorderRadius.circular(theme.panelRadius),
+                border: Border.all(color: ShellColors.hairline),
+                boxShadow: const <BoxShadow>[
+                  BoxShadow(
+                    color: ShellColors.shadow,
+                    blurRadius: 22,
+                    offset: Offset(0, 8),
                   ),
+                ],
+              ),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 18),
+                child: Row(
+                  children: [
+                    Icon(icon, size: 22, color: theme.accent),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Row(
+                            children: [
+                              Text(title, style: ShellText.cardTitle),
+                              const SizedBox(width: 8),
+                              if (detail case final detail?)
+                                Expanded(
+                                  child: Text(
+                                    detail,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: ShellText.base.copyWith(
+                                      color: ShellColors.textTertiary,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                )
+                              else
+                                const Spacer(),
+                              Text(
+                                context.l10n.percentCompact(percent),
+                                style: ShellText.base.copyWith(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 9),
+                          _LevelProgress(
+                            level: level,
+                            inactiveColor: inactiveColor,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),

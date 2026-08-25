@@ -30,8 +30,9 @@ void main() {
     final audioUpdates = StreamController<DenialAudioState>.broadcast(
       sync: true,
     );
-    final keyboardUpdates =
-        StreamController<DenialKeyboardLedState>.broadcast(sync: true);
+    final keyboardUpdates = StreamController<DenialKeyboardLedState>.broadcast(
+      sync: true,
+    );
     final layoutBridge = _LayoutBridge(_dualOutputLayout);
     final container = ProviderContainer.test(
       overrides: [

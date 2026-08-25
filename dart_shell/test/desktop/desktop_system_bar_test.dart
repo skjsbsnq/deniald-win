@@ -538,6 +538,69 @@ void main() {
       await file.writeAsBytes(bytes!.buffer.asUint8List());
     });
   });
+
+  testWidgets(
+    'system bar pills are wrapped in BackdropGroup and share a single backdrop key',
+    (tester) async {
+      await _pumpBar(
+        tester,
+        cpuUsage: 0.23,
+        showHardwareMeters: true,
+        windows: [_testWindow(1)],
+      );
+
+      expect(find.byType(BackdropGroup), findsOneWidget);
+      final filters = tester.renderObjectList<RenderBackdropFilter>(
+        find.descendant(
+          of: find.byType(DesktopSystemBar),
+          matching: find.byType(BackdropFilter),
+        ),
+      );
+      expect(filters, isNotEmpty);
+      final firstKey = filters.first.backdropKey;
+      expect(firstKey, isNotNull);
+      for (final filter in filters) {
+        expect(filter.backdropKey, equals(firstKey));
+      }
+    },
+  );
+
+  testWidgets(
+    'system bar pills are pairwise disjoint and non-overlapping (Design Contract 4.1)',
+    (tester) async {
+      await _pumpBar(
+        tester,
+        cpuUsage: 0.23,
+        showHardwareMeters: true,
+        windows: [_testWindow(1)],
+      );
+
+      final pillFinders = find.descendant(
+        of: find.byType(DesktopSystemBar),
+        matching: find.byType(ShellBackdropBlur),
+      );
+      final rects = <Rect>[];
+      for (final element in pillFinders.evaluate()) {
+        final renderBox = element.renderObject! as RenderBox;
+        final origin = renderBox.localToGlobal(Offset.zero);
+        rects.add(origin & renderBox.size);
+      }
+
+      expect(rects.length, greaterThanOrEqualTo(4));
+      for (var i = 0; i < rects.length; i++) {
+        for (var j = i + 1; j < rects.length; j++) {
+          final intersection = rects[i].intersect(rects[j]);
+          expect(
+            intersection.isEmpty ||
+                intersection.width <= 0 ||
+                intersection.height <= 0,
+            isTrue,
+            reason: 'Pill $i (${rects[i]}) overlaps with Pill $j (${rects[j]})',
+          );
+        }
+      }
+    },
+  );
 }
 
 const _previewBoundaryKey = Key('system-bar-preview');

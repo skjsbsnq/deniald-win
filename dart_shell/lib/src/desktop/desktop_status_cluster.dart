@@ -179,7 +179,9 @@ class _DesktopStatusClusterState extends ConsumerState<DesktopStatusCluster> {
     final volume = ref.watch(
       quickSettingsProvider.select((state) => state.volume),
     );
-    final muted = ref.watch(quickSettingsProvider.select((state) => state.muted));
+    final muted = ref.watch(
+      quickSettingsProvider.select((state) => state.muted),
+    );
     final battery = ref.watch(batteryProvider);
     final accent = ref.watch(shellAccentProvider);
     final dashboardOpen = ref.watch(
