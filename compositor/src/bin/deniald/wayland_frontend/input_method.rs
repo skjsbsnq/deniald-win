@@ -614,6 +614,14 @@ impl InputMethodManager {
         }
     }
 
+    pub(super) fn has_visible_popups(&self) -> bool {
+        let visible = self
+            .instance
+            .as_ref()
+            .is_some_and(|instance| instance.active && instance.resource.is_alive());
+        visible && self.popups.iter().any(InputMethodPopup::alive)
+    }
+
     fn active_editor_ref(&self) -> Option<&EditorSnapshot> {
         let instance = self
             .instance

@@ -3119,8 +3119,19 @@ fn run_flutter_event_loop(
             if let Some(interval) = frame_scheduler.render_interval() {
                 runtime.update_frame_interval(interval);
             }
-            frame_scheduler.set_work_output(events.flutter_work_output);
-            frame_scheduler.set_work_aware(!events.shell_overlay_render_outputs.is_empty());
+            let mut all_work_outputs = events.shell_overlay_render_outputs.clone();
+            if let Some(flutter_work) = events.flutter_work_output {
+                all_work_outputs.insert(flutter_work);
+            }
+            let work_output = scanouts
+                .iter()
+                .filter(|s| s.powered && all_work_outputs.contains(&s.output.id))
+                .max_by_key(|s| smithay::output::Mode::from(s.output.mode).refresh)
+                .map(|s| s.output.id);
+            let work_aware =
+                work_output.is_some() || !events.shell_overlay_render_outputs.is_empty();
+            frame_scheduler.set_work_output(work_output);
+            frame_scheduler.set_work_aware(work_aware);
             let frame_action = frame_scheduler.step(Instant::now(), runtime.pending_frame());
             match frame_action {
                 frame_scheduler::FrameAction::Skip => {}
@@ -4140,8 +4151,17 @@ fn run_flutter_event_loop(
         }
 
         let now = Instant::now();
+        let has_work = runtime.pending_frame().has_work()
+            || events
+                .wayland
+                .as_ref()
+                .is_some_and(|w| w.has_pending_frame_callbacks())
+            || events.flutter_input.has_pending()
+            || !events.flutter_events.is_empty()
+            || events.topology_recheck_at.is_some()
+            || screenshot_manager.is_some();
         let mut next_dispatch_timeout =
-            frame_scheduler.limit_dispatch_timeout(now, runtime.next_dispatch_timeout());
+            frame_scheduler.limit_dispatch_timeout(now, runtime.next_dispatch_timeout(), has_work);
         if drm.is_active() {
             next_dispatch_timeout =
                 scheduler.limit_presentation_watchdog_timeout(now, next_dispatch_timeout);

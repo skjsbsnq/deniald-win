@@ -305,6 +305,43 @@ pub(super) fn send_surface_frame_callbacks_deduplicated(
     sent
 }
 
+pub(super) fn window_has_frame_callbacks(window: &Window) -> bool {
+    let Some(root) = window.wl_surface() else {
+        return false;
+    };
+    surface_tree_has_frame_callbacks(&root)
+        || PopupManager::popups_for_surface(&root)
+            .any(|(popup, _)| surface_tree_has_frame_callbacks(popup.wl_surface()))
+}
+
+pub(super) fn surface_tree_has_frame_callbacks(root: &WlSurface) -> bool {
+    let has_callbacks = std::cell::Cell::new(false);
+    with_surface_tree_downward(
+        root,
+        (),
+        |_, _, &()| {
+            if has_callbacks.get() {
+                TraversalAction::Break
+            } else {
+                TraversalAction::DoChildren(())
+            }
+        },
+        |_, states, &()| {
+            if !states
+                .cached_state
+                .get::<SurfaceAttributes>()
+                .current()
+                .frame_callbacks
+                .is_empty()
+            {
+                has_callbacks.set(true);
+            }
+        },
+        |_, _, &()| !has_callbacks.get(),
+    );
+    has_callbacks.get()
+}
+
 fn output_refresh(output: &Output, variable_refresh: bool) -> Refresh {
     output.current_mode().map_or(Refresh::Unknown, |mode| {
         refresh_for_mode(mode.refresh, variable_refresh)

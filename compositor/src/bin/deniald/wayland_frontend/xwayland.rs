@@ -330,6 +330,7 @@ fn map_x11_window(state: &mut RuntimeState, surface: X11Surface, override_redire
         frontend
             .space
             .map_element(window.clone(), configured.loc, activates);
+        frontend.space_dirty = true;
         frontend.update_window_output_membership(&window);
         if activates {
             for candidate in frontend.space.elements() {
@@ -748,6 +749,7 @@ impl XwmHandler for RuntimeState {
             frontend
                 .space
                 .map_element(element.clone(), geometry.loc, false);
+            frontend.space_dirty = true;
         } else {
             // ConfigureNotify also follows compositor-issued X11 configures.
             // Feeding that notification back into Space gives the client a

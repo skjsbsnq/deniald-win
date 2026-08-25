@@ -375,6 +375,9 @@ pub(super) struct WaylandFrontend {
     #[cfg(feature = "flutter")]
     output_window_membership: OutputWindowMembership<ObjectId, Window>,
     #[cfg(feature = "flutter")]
+    pending_callback_windows: HashSet<ObjectId>,
+    space_dirty: bool,
+    #[cfg(feature = "flutter")]
     local_windows: LocalFlutterWindows,
     #[cfg(feature = "flutter")]
     pending_shm_snapshots: HashSet<ObjectId>,
@@ -1226,6 +1229,9 @@ impl WaylandFrontend {
             #[cfg(feature = "flutter")]
             output_window_membership: OutputWindowMembership::default(),
             #[cfg(feature = "flutter")]
+            pending_callback_windows: HashSet::new(),
+            space_dirty: true,
+            #[cfg(feature = "flutter")]
             local_windows: LocalFlutterWindows::default(),
             #[cfg(feature = "flutter")]
             pending_shm_snapshots: HashSet::new(),
@@ -1494,6 +1500,20 @@ impl WaylandFrontend {
         OsString::from(format!(":{}", self.xdisplay))
     }
 
+    #[cfg(feature = "flutter")]
+    pub fn has_pending_frame_callbacks(&self) -> bool {
+        !self.pending_callback_windows.is_empty() || self.input_method.has_visible_popups()
+    }
+
+    #[cfg(not(feature = "flutter"))]
+    pub fn has_pending_frame_callbacks(&self) -> bool {
+        true
+    }
+
+    pub(super) fn mark_space_dirty(&mut self) {
+        self.space_dirty = true;
+    }
+
     pub(super) fn window_root_surface(&self, window: &Window) -> Option<WlSurface> {
         window.wl_surface().map(|surface| surface.into_owned())
     }
@@ -1525,6 +1545,7 @@ impl WaylandFrontend {
     /// events in their overlap.
     pub(super) fn raise_window(&mut self, window: &Window, activate: bool) {
         self.space.raise_element(window, activate);
+        self.space_dirty = true;
         let Some(surface) = window.x11_surface().cloned() else {
             return;
         };
@@ -2051,6 +2072,8 @@ impl WaylandFrontend {
     #[cfg(feature = "flutter")]
     pub(super) fn remove_window_output_membership(&mut self, surface: &WlSurface) {
         self.output_window_membership.remove(&surface.id());
+        self.pending_callback_windows.remove(&surface.id());
+        self.space_dirty = true;
     }
 
     pub(super) fn rebuild_window_output_membership(&mut self) {
@@ -2060,6 +2083,7 @@ impl WaylandFrontend {
         for window in windows {
             self.update_window_output_membership(&window);
         }
+        self.mark_space_dirty();
     }
 
     pub(super) fn set_window_geometry_target(
@@ -2086,6 +2110,7 @@ impl WaylandFrontend {
         // here a second time makes the published geometry and native hitboxes
         // diverge, and feeds the offset back into every configure/commit cycle.
         self.space.relocate_element(window, target.loc);
+        self.space_dirty = true;
         if window.geometry().size == target.size {
             // A move needs no client acknowledgement.  Reading the geometry
             // back from Space is already authoritative and avoids retaining a
@@ -4364,7 +4389,10 @@ impl WaylandFrontend {
         if !presented {
             return Ok(());
         }
-        self.space.refresh();
+        if self.space_dirty {
+            self.space.refresh();
+            self.space_dirty = false;
+        }
         self.popups.cleanup();
         self.display_handle.flush_clients()?;
         Ok(())
@@ -4372,20 +4400,28 @@ impl WaylandFrontend {
 
     #[cfg(feature = "flutter")]
     pub fn frame_tick(&mut self, tick: FrameTick) -> Result<(), Box<dyn Error>> {
+        if self.pending_callback_windows.is_empty() && !self.input_method.has_visible_popups() {
+            return Ok(());
+        }
         let callback_time = tick
             .presented_at
             .unwrap_or_else(|| self.presentation.monotonic_now());
         let mut sent = 0usize;
         let mut seen_surfaces = HashSet::new();
         let visibility_epoch = self.input_layout.as_ref().map(|layout| layout.epoch);
+        let mut drained_windows = Vec::new();
         for window in self.output_window_membership.windows(tick.output) {
-            let root = self.window_root_surface(window);
-            let window_id = root.as_ref().and_then(|surface| self.surface_id(surface));
+            let Some(root) = self.window_root_surface(window) else {
+                continue;
+            };
+            if !self.pending_callback_windows.contains(&root.id()) {
+                continue;
+            }
+            let window_id = self.surface_id(&root);
             let policy = frame_callback_policy(
                 self.input_visibility_known,
                 &self.visible_window_ids,
-                root.as_ref()
-                    .is_some_and(|surface| self.minimized_windows.contains(&surface.id())),
+                self.minimized_windows.contains(&root.id()),
                 window_id,
             );
             match policy {
@@ -4409,6 +4445,12 @@ impl WaylandFrontend {
                     );
                 }
             }
+            if !presentation::window_has_frame_callbacks(window) {
+                drained_windows.push(root.id());
+            }
+        }
+        for root_id in drained_windows {
+            self.pending_callback_windows.remove(&root_id);
         }
         let callback_millis = callback_time.as_millis() as u32;
         for popup in self.input_method.visible_popups() {
@@ -4436,7 +4478,10 @@ impl WaylandFrontend {
 
     pub fn after_present(&mut self) -> Result<(), Box<dyn Error>> {
         self.presentation.presented();
-        self.space.refresh();
+        if self.space_dirty {
+            self.space.refresh();
+            self.space_dirty = false;
+        }
         self.popups.cleanup();
         self.display_handle.flush_clients()?;
         Ok(())
@@ -4943,5 +4988,75 @@ mod tests {
         assert_eq!(shell_fullscreen_transition(true, true, true), ExitClient);
         assert_eq!(shell_fullscreen_transition(false, true, true), ExitShell);
         assert_eq!(shell_fullscreen_transition(false, false, false), EnterShell);
+    }
+
+    #[cfg(feature = "flutter")]
+    #[test]
+    fn pending_frame_callback_window_filtering_scales_with_active_callbacks() {
+        use std::collections::HashSet;
+
+        let output = OutputId(1);
+        let mut membership = OutputWindowMembership::<u64, u64>::default();
+        let total_windows = 32u64;
+        for id in 1..=total_windows {
+            membership.update(id, id, Some(output));
+        }
+
+        // Case 1: 0 windows have pending callbacks
+        let pending_callback_windows = HashSet::<u64>::new();
+        let mut visited = 0usize;
+        for window in membership.windows(output) {
+            if pending_callback_windows.contains(window) {
+                visited += 1;
+            }
+        }
+        assert_eq!(visited, 0);
+
+        // Case 2: Only 1 window has pending callback
+        let mut pending_callback_windows = HashSet::from([7u64]);
+        let mut visited = 0usize;
+        for window in membership.windows(output) {
+            if pending_callback_windows.contains(window) {
+                visited += 1;
+            }
+        }
+        assert_eq!(visited, 1);
+
+        // Case 3: After serving callback, window is drained and removed
+        pending_callback_windows.remove(&7);
+        assert!(pending_callback_windows.is_empty());
+    }
+
+    #[cfg(feature = "flutter")]
+    #[test]
+    fn space_dirty_state_gates_presentation_refresh() {
+        let mut space_dirty = true;
+        let mut refresh_count = 0usize;
+
+        // Presentation 1: dirty is true -> perform refresh and clear dirty
+        if space_dirty {
+            refresh_count += 1;
+            space_dirty = false;
+        }
+        assert_eq!(refresh_count, 1);
+        assert!(!space_dirty);
+
+        // Presentation 2: space is clean -> refresh is skipped
+        if space_dirty {
+            refresh_count += 1;
+        }
+        assert_eq!(refresh_count, 1);
+        assert!(!space_dirty);
+
+        // Window move/resize triggers dirty
+        space_dirty = true;
+
+        // Presentation 3: space dirty -> perform refresh
+        if space_dirty {
+            refresh_count += 1;
+            space_dirty = false;
+        }
+        assert_eq!(refresh_count, 2);
+        assert!(!space_dirty);
     }
 }

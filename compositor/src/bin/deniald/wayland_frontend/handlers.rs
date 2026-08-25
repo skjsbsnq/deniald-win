@@ -723,6 +723,12 @@ impl CompositorHandler for RuntimeState {
             frontend.queue_surface_commit(surface, kind);
         }
         #[cfg(feature = "flutter")]
+        if has_frame_callbacks {
+            if let Some(owning) = frontend.owning_toplevel_surface(surface) {
+                frontend.pending_callback_windows.insert(owning.id());
+            }
+        }
+        #[cfg(feature = "flutter")]
         let mut published_surface_commits = None;
         if !synchronized {
             #[cfg(feature = "flutter")]
@@ -764,9 +770,12 @@ impl CompositorHandler for RuntimeState {
                     if previous_target_geometry != current_target_geometry {
                         frontend.update_window_output_membership(&window);
                     }
-                    committed_window_metadata_changed |= previous_content_geometry
-                        != window.geometry()
+                    let changed = previous_content_geometry != window.geometry()
                         || previous_target_geometry != current_target_geometry;
+                    committed_window_metadata_changed |= changed;
+                    if changed {
+                        frontend.space_dirty = true;
+                    }
                 }
                 #[cfg(feature = "flutter")]
                 if let Some(target) = client_sized_target {
@@ -1208,6 +1217,7 @@ impl XdgShellHandler for RuntimeState {
             frontend
                 .space
                 .map_element(window.clone(), (offset, offset), true);
+            frontend.space_dirty = true;
             frontend.update_window_output_membership(&window);
             for candidate in frontend.space.elements() {
                 let changed = candidate.set_activated(candidate == &window);

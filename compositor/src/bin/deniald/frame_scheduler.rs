@@ -23,6 +23,8 @@ pub(super) struct FrameTick {
     pub(super) presented_at: Option<Duration>,
 }
 
+pub(super) const IDLE_HEARTBEAT_TIMEOUT: Duration = Duration::from_millis(100);
+
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
 pub(super) struct PendingFrame {
     pub(super) flutter_requested: bool,
@@ -31,7 +33,7 @@ pub(super) struct PendingFrame {
 }
 
 impl PendingFrame {
-    fn has_work(self) -> bool {
+    pub(super) fn has_work(self) -> bool {
         self.flutter_requested || self.app_textures_updated
     }
 }
@@ -141,8 +143,20 @@ impl FrameScheduler {
         self.waiting_for_flutter = None;
     }
 
-    pub(super) fn limit_dispatch_timeout(&self, now: Instant, timeout: Duration) -> Duration {
-        self.outputs.limit_dispatch_timeout(now, timeout)
+    pub(super) fn limit_dispatch_timeout(
+        &self,
+        now: Instant,
+        timeout: Duration,
+        has_pending_work: bool,
+    ) -> Duration {
+        if self.outputs.has_presented_tick() {
+            return Duration::ZERO;
+        }
+        if has_pending_work || self.waiting_for_flutter.is_some() {
+            self.outputs.limit_dispatch_timeout(now, timeout)
+        } else {
+            timeout.min(IDLE_HEARTBEAT_TIMEOUT)
+        }
     }
 
     pub(super) fn render_interval(&self) -> Option<Duration> {
@@ -238,12 +252,14 @@ impl OutputClocks {
         self.render_output.is_none()
     }
 
-    fn limit_dispatch_timeout(&self, now: Instant, timeout: Duration) -> Duration {
-        if self
-            .clocks
+    fn has_presented_tick(&self) -> bool {
+        self.clocks
             .iter()
             .any(|clock| clock.presented_tick.is_some())
-        {
+    }
+
+    fn limit_dispatch_timeout(&self, now: Instant, timeout: Duration) -> Duration {
+        if self.has_presented_tick() {
             return Duration::ZERO;
         }
         self.clocks.iter().fold(timeout, |timeout, clock| {
@@ -287,12 +303,13 @@ impl DisplayClock {
         }
 
         let observed_at = presentation.observed_at;
-        if self.source.variable_refresh
-            && let Some(sequence) = presentation.sequence
-        {
+        let mut sequence_matched_previous = false;
+        if let Some(sequence) = presentation.sequence {
             if let Some((previous_at, previous_sequence)) = self.last_presentation {
                 let sequence_delta = sequence.wrapping_sub(previous_sequence);
-                if sequence_delta > 0 {
+                if sequence_delta == 0 {
+                    sequence_matched_previous = true;
+                } else if self.source.variable_refresh {
                     if let Some(interval) = measured_interval(
                         previous_at,
                         observed_at,
@@ -305,9 +322,11 @@ impl DisplayClock {
             }
             self.last_presentation = Some((observed_at, sequence));
         }
-        let same_edge = self.last_tick.is_some_and(|last_tick| {
-            observed_at <= last_tick || observed_at.duration_since(last_tick) <= self.interval / 2
-        });
+        let same_edge = sequence_matched_previous
+            || self.last_tick.is_some_and(|last_tick| {
+                observed_at <= last_tick
+                    || observed_at.duration_since(last_tick) <= self.interval / 2
+            });
         let observed_next = observed_at + self.interval;
 
         // A DRM event may reach the compositor after the timer has already
@@ -375,7 +394,11 @@ fn measured_interval(
     let elapsed = observed_at.duration_since(previous_at);
     let nanos = elapsed.as_nanos().checked_div(u128::from(sequence_delta))?;
     let interval = Duration::from_nanos(u64::try_from(nanos).ok()?);
-    let minimum = nominal / 4;
+    // VRR displays have a physical maximum refresh rate bounded by the nominal
+    // interval (with up to 10% tolerance for driver/jitter timing variation).
+    // Clamping to nominal * 9 / 10 prevents anomalous DRM timestamps from
+    // runaway acceleration up to non-physical rates (e.g. 960Hz).
+    let minimum = nominal.saturating_mul(9) / 10;
     let maximum = nominal.saturating_mul(8);
     (interval >= minimum && interval <= maximum).then_some(interval)
 }
@@ -800,5 +823,116 @@ mod tests {
             scheduler.output_ticks()[0].interval,
             Duration::from_millis(12)
         );
+    }
+
+    #[test]
+    fn idle_scheduler_relaxes_poll_timeout_with_bounded_heartbeat() {
+        let now = Instant::now();
+        let mut scheduler = scheduler(now);
+        scheduler.step(now, pending(false, false, true));
+
+        // When completely idle without work, timeout is relaxed to heartbeat (100ms)
+        // rather than nominal interval (10ms).
+        let idle_timeout = scheduler.limit_dispatch_timeout(now, Duration::from_secs(1), false);
+        assert_eq!(idle_timeout, IDLE_HEARTBEAT_TIMEOUT);
+
+        // When work/damage arrives, it immediately clamps to the physical display interval (<=10ms).
+        let active_timeout = scheduler.limit_dispatch_timeout(now, Duration::from_secs(1), true);
+        assert!(active_timeout <= INTERVAL);
+    }
+
+    #[test]
+    fn input_or_animation_interrupts_idle_state_immediately() {
+        let now = Instant::now();
+        let mut scheduler = scheduler(now);
+        scheduler.step(now, pending(false, true, true)); // Request Flutter
+
+        // Waiting for Flutter must keep the clock edge active even if has_pending_work is false.
+        let dispatch_timeout = scheduler.limit_dispatch_timeout(now, Duration::from_secs(1), false);
+        assert!(dispatch_timeout <= INTERVAL);
+    }
+
+    #[test]
+    fn vrr_same_vblank_produces_at_most_one_flip_and_rejects_duplicate_sequence() {
+        let now = Instant::now();
+        let mut scheduler = scheduler(now);
+        scheduler.outputs.clocks[0].source.variable_refresh = true;
+
+        // First flip in sequence 100
+        scheduler.observe_presentation(PresentedOutput {
+            id: FAST_OUTPUT,
+            observed_at: now + Duration::from_millis(10),
+            presented_at: Some(Duration::from_millis(10)),
+            sequence: Some(100),
+        });
+        assert_eq!(
+            scheduler.limit_dispatch_timeout(now, Duration::from_secs(1), false),
+            Duration::ZERO,
+            "presented tick must wake dispatch immediately"
+        );
+
+        // Take the tick
+        scheduler.step(now + Duration::from_millis(10), pending(false, false, true));
+        assert_eq!(scheduler.output_ticks().len(), 1);
+
+        // Inject duplicate presentation within the same vblank sequence 100
+        // (even if arrival jitter exceeds half interval)
+        scheduler.observe_presentation(PresentedOutput {
+            id: FAST_OUTPUT,
+            observed_at: now + Duration::from_millis(16),
+            presented_at: Some(Duration::from_millis(16)),
+            sequence: Some(100),
+        });
+
+        // The duplicate sequence must NOT generate a second presented tick
+        scheduler.step(now + Duration::from_millis(16), pending(false, false, true));
+        assert!(
+            scheduler.output_ticks().is_empty(),
+            "same vblank presentation must never produce a second tick"
+        );
+    }
+
+    #[test]
+    fn measured_interval_clamps_to_physically_reasonable_lower_bound() {
+        let now = Instant::now();
+        // 1ms for 10ms nominal display (1000Hz vs 100Hz max) is rejected
+        assert_eq!(
+            measured_interval(now, now + Duration::from_millis(1), 1, INTERVAL),
+            None
+        );
+        // 5ms for 10ms nominal display (200Hz vs 100Hz max) is rejected
+        assert_eq!(
+            measured_interval(now, now + Duration::from_millis(5), 1, INTERVAL),
+            None
+        );
+        // 9.5ms for 10ms nominal display (within 10% physical tolerance) is accepted
+        assert_eq!(
+            measured_interval(now, now + Duration::from_nanos(9_500_000), 1, INTERVAL),
+            Some(Duration::from_nanos(9_500_000))
+        );
+        // 12ms for 10ms nominal display is accepted
+        assert_eq!(
+            measured_interval(now, now + Duration::from_millis(12), 1, INTERVAL),
+            Some(Duration::from_millis(12))
+        );
+    }
+
+    #[test]
+    fn work_aware_governance_with_and_without_direct_scanout() {
+        let now = Instant::now();
+        let mut scheduler = mixed_scheduler(now);
+
+        // Direct scanout closed, but shell work is on SLOW_OUTPUT:
+        scheduler.set_work_output(Some(SLOW_OUTPUT));
+        scheduler.set_work_aware(true);
+
+        assert_eq!(scheduler.render_interval(), Some(INTERVAL));
+
+        // When work clears on both:
+        scheduler.set_work_output(None);
+        scheduler.set_work_aware(false);
+
+        // Falls back to global render output (FAST_OUTPUT)
+        assert_eq!(scheduler.render_interval(), Some(FAST_INTERVAL));
     }
 }
