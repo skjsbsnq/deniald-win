@@ -68,6 +68,8 @@ class SettingsAppearancePage extends StatelessWidget {
     required this.onAllowClientCursorSurfacesChanged,
     required this.onImportCursorZip,
     required this.onRemoveCursorTheme,
+    required this.onUiFontFamilyChanged,
+    required this.onIconThemeNameChanged,
     required this.onReset,
     super.key,
   });
@@ -96,6 +98,8 @@ class SettingsAppearancePage extends StatelessWidget {
   final ValueChanged<bool> onAllowClientCursorSurfacesChanged;
   final Future<ShellCursorThemeData?> Function()? onImportCursorZip;
   final Future<void> Function(ShellCursorThemeData) onRemoveCursorTheme;
+  final ValueChanged<String> onUiFontFamilyChanged;
+  final ValueChanged<String> onIconThemeNameChanged;
   final VoidCallback onReset;
 
   @override
@@ -301,6 +305,14 @@ class SettingsAppearancePage extends StatelessWidget {
               ),
             ),
             SettingsSection(
+              title: l10n.settingsFontsAndIconsTitle,
+              child: _FontsAndIconsSettings(
+                settings: settings,
+                onUiFontFamilyChanged: onUiFontFamilyChanged,
+                onIconThemeNameChanged: onIconThemeNameChanged,
+              ),
+            ),
+            SettingsSection(
               title: l10n.settingsWindowOpacityTitle,
               child: Column(
                 children: [
@@ -342,6 +354,80 @@ class SettingsAppearancePage extends StatelessWidget {
       ],
     );
   }
+}
+
+class _FontsAndIconsSettings extends StatelessWidget {
+  const _FontsAndIconsSettings({
+    required this.settings,
+    required this.onUiFontFamilyChanged,
+    required this.onIconThemeNameChanged,
+  });
+
+  final ShellAppearanceSettings settings;
+  final ValueChanged<String> onUiFontFamilyChanged;
+  final ValueChanged<String> onIconThemeNameChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final fontChoices = <SettingsChoice<String>>[
+      SettingsChoice<String>('', l10n.settingsUiFontFamilyDefault),
+      const SettingsChoice<String>('Maple Mono NF CN', 'Maple Mono NF CN'),
+    ];
+    final iconChoices = <SettingsChoice<String>>[
+      SettingsChoice<String>('', l10n.settingsIconThemeDefault),
+      const SettingsChoice<String>('Papirus', 'Papirus'),
+      const SettingsChoice<String>('Papirus-Dark', 'Papirus-Dark'),
+      const SettingsChoice<String>('Papirus-Light', 'Papirus-Light'),
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(
+          l10n.settingsUiFontFamily,
+          style: ShellText.cardTitle.copyWith(
+            color: context.shellColors.textSecondary,
+          ),
+        ),
+        const SizedBox(height: 9),
+        SettingsSegmentedControl<String>(
+          value: _containsChoice(fontChoices, settings.uiFontFamily)
+              ? settings.uiFontFamily
+              : '',
+          choices: fontChoices,
+          onChanged: onUiFontFamilyChanged,
+        ),
+        const SizedBox(height: 12),
+        Text(
+          l10n.settingsIconTheme,
+          style: ShellText.cardTitle.copyWith(
+            color: context.shellColors.textSecondary,
+          ),
+        ),
+        const SizedBox(height: 9),
+        SettingsSegmentedControl<String>(
+          value: _containsChoice(iconChoices, settings.iconThemeName)
+              ? settings.iconThemeName
+              : '',
+          choices: iconChoices,
+          onChanged: onIconThemeNameChanged,
+        ),
+        const SizedBox(height: 12),
+        Text(
+          l10n.settingsFontsAndIconsRestartNotice,
+          style: ShellText.base.copyWith(
+            color: ShellTheme.colorsOf(context).textSecondary,
+            fontSize: 11,
+            height: 1.4,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+bool _containsChoice(List<SettingsChoice<String>> choices, String value) {
+  return choices.any((choice) => choice.value == value);
 }
 
 class _CursorSettings extends StatefulWidget {

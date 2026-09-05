@@ -4712,5 +4712,29 @@
         "type": "int"
       }
     }
+  },
+  "settingsFontsAndIconsTitle": "Fonts & icons",
+  "@settingsFontsAndIconsTitle": {
+    "description": "Heading for shell font and icon theme settings."
+  },
+  "settingsUiFontFamily": "Interface font",
+  "@settingsUiFontFamily": {
+    "description": "Label above the interface font selector."
+  },
+  "settingsUiFontFamilyDefault": "Default",
+  "@settingsUiFontFamilyDefault": {
+    "description": "Choice keeping the shell's built-in interface font."
+  },
+  "settingsIconTheme": "Icon theme",
+  "@settingsIconTheme": {
+    "description": "Label above the icon theme selector."
+  },
+  "settingsIconThemeDefault": "Default",
+  "@settingsIconThemeDefault": {
+    "description": "Choice keeping the shell's built-in icon resolution order."
+  },
+  "settingsFontsAndIconsRestartNotice": "Takes effect after the shell restarts.",
+  "@settingsFontsAndIconsRestartNotice": {
+    "description": "Notice that font and icon changes apply after a restart."
   }
 }

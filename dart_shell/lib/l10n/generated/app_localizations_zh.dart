@@ -3305,4 +3305,22 @@ class AppLocalizationsZh extends AppLocalizations {
   String windowUntitled(int windowId) {
     return '窗口 $windowId';
   }
+
+  @override
+  String get settingsFontsAndIconsTitle => '字体与图标';
+
+  @override
+  String get settingsUiFontFamily => '界面字体';
+
+  @override
+  String get settingsUiFontFamilyDefault => '默认';
+
+  @override
+  String get settingsIconTheme => '图标主题';
+
+  @override
+  String get settingsIconThemeDefault => '默认';
+
+  @override
+  String get settingsFontsAndIconsRestartNotice => '重启 shell 后生效。';
 }

@@ -19,23 +19,54 @@ class ShellTextTheme {
     required this.cardTitle,
   });
 
-  factory ShellTextTheme.from(ShellColorScheme colors) {
+  factory ShellTextTheme.from(ShellColorScheme colors, {String? fontFamily}) {
+    // An empty family name falls back to the Flutter default; the inherited
+    // fallbackFontFamilies still cover glyphs the family lacks.
+    final String? family = fontFamily == null || fontFamily.isEmpty
+        ? null
+        : fontFamily;
     return ShellTextTheme(
       base: ShellText.base.copyWith(color: colors.textPrimary),
-      statusClock: ShellText.statusClock.copyWith(color: colors.textPrimary),
+      statusClock: ShellText.statusClock.copyWith(
+        color: colors.textPrimary,
+        fontFamily: family,
+      ),
       systemBarValue: ShellText.systemBarValue.copyWith(
         color: colors.textPrimary,
+        fontFamily: family,
       ),
       systemBarCaption: ShellText.systemBarCaption.copyWith(
         color: colors.textSecondary,
+        fontFamily: family,
       ),
-      shadeClock: ShellText.shadeClock.copyWith(color: colors.panelText),
-      shadeDate: ShellText.shadeDate.copyWith(color: colors.textSecondary),
-      lockClock: ShellText.lockClock.copyWith(color: colors.textPrimary),
-      lockDate: ShellText.lockDate.copyWith(color: colors.textSecondary),
-      lockStatus: ShellText.lockStatus.copyWith(color: colors.textSecondary),
-      lockChip: ShellText.lockChip.copyWith(color: colors.textPrimary),
-      cardTitle: ShellText.cardTitle.copyWith(color: colors.textPrimary),
+      shadeClock: ShellText.shadeClock.copyWith(
+        color: colors.panelText,
+        fontFamily: family,
+      ),
+      shadeDate: ShellText.shadeDate.copyWith(
+        color: colors.textSecondary,
+        fontFamily: family,
+      ),
+      lockClock: ShellText.lockClock.copyWith(
+        color: colors.textPrimary,
+        fontFamily: family,
+      ),
+      lockDate: ShellText.lockDate.copyWith(
+        color: colors.textSecondary,
+        fontFamily: family,
+      ),
+      lockStatus: ShellText.lockStatus.copyWith(
+        color: colors.textSecondary,
+        fontFamily: family,
+      ),
+      lockChip: ShellText.lockChip.copyWith(
+        color: colors.textPrimary,
+        fontFamily: family,
+      ),
+      cardTitle: ShellText.cardTitle.copyWith(
+        color: colors.textPrimary,
+        fontFamily: family,
+      ),
     );
   }
 

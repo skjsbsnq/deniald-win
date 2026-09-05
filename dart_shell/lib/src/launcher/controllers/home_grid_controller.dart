@@ -4,6 +4,7 @@ import 'dart:isolate';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../local_apps/local_flutter_application.dart';
+import '../../settings/settings_controller.dart';
 import '../../state/shell_controller.dart';
 import '../../state/system_status.dart';
 import '../launcher_providers.dart';
@@ -20,7 +21,12 @@ import 'home_grid_layout.dart';
 const Object _unset = Object();
 
 final desktopAppsRepositoryProvider = Provider<DesktopAppsRepository>((ref) {
-  return DesktopAppsRepository(paths: ref.watch(runtimePathsProvider));
+  return DesktopAppsRepository(
+    paths: ref.watch(runtimePathsProvider),
+    iconThemeName: ref.watch(
+      shellSettingsProvider.select((s) => s.appearance.iconThemeName),
+    ),
+  );
 });
 
 final homeLayoutRepositoryProvider = Provider<HomeLayoutRepository>((ref) {

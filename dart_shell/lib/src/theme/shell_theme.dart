@@ -113,6 +113,7 @@ class ShellThemeData {
     this.focusedWindowBorderEnabled = true,
     this.focusedWindowOpacity = 1,
     this.unfocusedWindowOpacity = 1,
+    this.fontFamily,
     this._resolvedTextTheme,
     this._resolvedAccentPalette,
     this._resolvedGeneratedColorScheme,
@@ -134,6 +135,11 @@ class ShellThemeData {
   final bool focusedWindowBorderEnabled;
   final double focusedWindowOpacity;
   final double unfocusedWindowOpacity;
+
+  /// Non-null replaces every shell text role's family. Constant within one
+  /// session (settings take effect after a shell restart), so lerping
+  /// snapshots the nearest end instead of blending family names.
+  final String? fontFamily;
 
   static final Expando<_ShellThemeResolution> _resolutionCache =
       Expando<_ShellThemeResolution>('ShellThemeData resolution');
@@ -226,6 +232,7 @@ class ShellThemeData {
     bool? focusedWindowBorderEnabled,
     double? focusedWindowOpacity,
     double? unfocusedWindowOpacity,
+    String? fontFamily,
   }) {
     return ShellThemeData(
       colors: colors ?? this.colors,
@@ -242,6 +249,7 @@ class ShellThemeData {
       focusedWindowOpacity: focusedWindowOpacity ?? this.focusedWindowOpacity,
       unfocusedWindowOpacity:
           unfocusedWindowOpacity ?? this.unfocusedWindowOpacity,
+      fontFamily: fontFamily ?? this.fontFamily,
     );
   }
 
@@ -317,6 +325,7 @@ class ShellThemeData {
         first.unfocusedWindowOpacity,
         second.unfocusedWindowOpacity,
       ),
+      fontFamily: t < 0.5 ? first.fontFamily : second.fontFamily,
     );
   }
 
@@ -333,7 +342,8 @@ class ShellThemeData {
         other.backdropBlurOpacityThreshold == backdropBlurOpacityThreshold &&
         other.focusedWindowBorderEnabled == focusedWindowBorderEnabled &&
         other.focusedWindowOpacity == focusedWindowOpacity &&
-        other.unfocusedWindowOpacity == unfocusedWindowOpacity;
+        other.unfocusedWindowOpacity == unfocusedWindowOpacity &&
+        other.fontFamily == fontFamily;
   }
 
   @override
@@ -349,6 +359,7 @@ class ShellThemeData {
     focusedWindowBorderEnabled,
     focusedWindowOpacity,
     unfocusedWindowOpacity,
+    fontFamily,
   );
 }
 
@@ -412,7 +423,8 @@ class _ShellThemeResolution {
       );
 
   late final ShellTextTheme text =
-      theme._resolvedTextTheme ?? ShellTextTheme.from(theme.colors);
+      theme._resolvedTextTheme ??
+      ShellTextTheme.from(theme.colors, fontFamily: theme.fontFamily);
 
   late final ColorScheme generatedColorScheme =
       theme._resolvedGeneratedColorScheme ??
@@ -477,6 +489,7 @@ class _ShellThemeResolution {
   late final ThemeData materialTheme = ThemeData(
     brightness: theme.brightness,
     useMaterial3: true,
+    fontFamily: theme.fontFamily,
     scaffoldBackgroundColor: ShellMediaColors.transparentDark,
     colorScheme: generatedColorScheme.copyWith(
       surface: theme.colors.background,

@@ -1004,5 +1004,11 @@
   "wifiWepRequirements": "WEP 密钥必须包含 5 到 64 个字符。",
   "windowSwitcherPosition": "{position} / {total}",
   "windowSwitcherSelected": "已选择 {windowTitle}",
-  "windowUntitled": "窗口 {windowId}"
+  "windowUntitled": "窗口 {windowId}",
+  "settingsFontsAndIconsTitle": "字体与图标",
+  "settingsUiFontFamily": "界面字体",
+  "settingsUiFontFamilyDefault": "默认",
+  "settingsIconTheme": "图标主题",
+  "settingsIconThemeDefault": "默认",
+  "settingsFontsAndIconsRestartNotice": "重启 shell 后生效。"
 }

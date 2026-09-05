@@ -92,6 +92,8 @@ class ShellAppearanceSettings {
     this.cursorSize = shellCursorDefaultSize,
     this.cursorThemeId = 'bibata_modern_ice',
     this.allowClientCursorSurfaces = true,
+    this.uiFontFamily = '',
+    this.iconThemeName = '',
   });
 
   final DesktopColorSchemePreference colorSchemePreference;
@@ -110,6 +112,15 @@ class ShellAppearanceSettings {
   final String cursorThemeId;
   final bool allowClientCursorSurfaces;
 
+  /// Empty keeps the shell default font; otherwise a fontconfig family name
+  /// such as 'Maple Mono NF CN'. Takes effect after a shell restart.
+  final String uiFontFamily;
+
+  /// Empty keeps the icon resolution order as-is; otherwise a theme directory
+  /// name under `<root>/icons/` such as 'Papirus-Dark'. Takes effect after a
+  /// shell restart.
+  final String iconThemeName;
+
   ShellAppearanceSettings copyWith({
     DesktopColorSchemePreference? colorSchemePreference,
     ShellAccentSource? accentSource,
@@ -126,6 +137,8 @@ class ShellAppearanceSettings {
     double? cursorSize,
     String? cursorThemeId,
     bool? allowClientCursorSurfaces,
+    String? uiFontFamily,
+    String? iconThemeName,
   }) {
     return ShellAppearanceSettings(
       colorSchemePreference:
@@ -148,6 +161,8 @@ class ShellAppearanceSettings {
       cursorThemeId: cursorThemeId ?? this.cursorThemeId,
       allowClientCursorSurfaces:
           allowClientCursorSurfaces ?? this.allowClientCursorSurfaces,
+      uiFontFamily: uiFontFamily ?? this.uiFontFamily,
+      iconThemeName: iconThemeName ?? this.iconThemeName,
     );
   }
 
@@ -168,7 +183,9 @@ class ShellAppearanceSettings {
         other.unfocusedWindowOpacity == unfocusedWindowOpacity &&
         other.cursorSize == cursorSize &&
         other.cursorThemeId == cursorThemeId &&
-        other.allowClientCursorSurfaces == allowClientCursorSurfaces;
+        other.allowClientCursorSurfaces == allowClientCursorSurfaces &&
+        other.uiFontFamily == uiFontFamily &&
+        other.iconThemeName == iconThemeName;
   }
 
   @override
@@ -188,6 +205,8 @@ class ShellAppearanceSettings {
     cursorSize,
     cursorThemeId,
     allowClientCursorSurfaces,
+    uiFontFamily,
+    iconThemeName,
   );
 }
 
@@ -791,7 +810,7 @@ class ShellSettings {
 
   // Blur levels are additive in schema 9. Keep emitting the derived legacy
   // sigma so older shells can read settings written by this version.
-  static const int schemaVersion = 21;
+  static const int schemaVersion = 22;
 
   final ShellLocalizationSettings localization;
   final ShellAppearanceSettings appearance;
@@ -897,6 +916,12 @@ class ShellSettings {
           before.allowClientCursorSurfaces) {
         section['allowClientCursorSurfaces'] =
             appearance.allowClientCursorSurfaces;
+      }
+      if (appearance.uiFontFamily != before.uiFontFamily) {
+        section['uiFontFamily'] = appearance.uiFontFamily;
+      }
+      if (appearance.iconThemeName != before.iconThemeName) {
+        section['iconThemeName'] = appearance.iconThemeName;
       }
       patch['appearance'] = section;
     }
@@ -1050,6 +1075,8 @@ class ShellSettings {
         'cursorSize': appearance.cursorSize,
         'cursorThemeId': appearance.cursorThemeId,
         'allowClientCursorSurfaces': appearance.allowClientCursorSurfaces,
+        'uiFontFamily': appearance.uiFontFamily,
+        'iconThemeName': appearance.iconThemeName,
       },
       'layout': <String, Object>{
         'windowLayout': layout.windowLayout.name,
@@ -1258,6 +1285,14 @@ class ShellSettings {
             appearanceJson['allowClientCursorSurfaces'] is bool
             ? appearanceJson['allowClientCursorSurfaces'] as bool
             : defaults.appearance.allowClientCursorSurfaces,
+        uiFontFamily: _themeName(
+          appearanceJson['uiFontFamily'],
+          defaults.appearance.uiFontFamily,
+        ),
+        iconThemeName: _themeName(
+          appearanceJson['iconThemeName'],
+          defaults.appearance.iconThemeName,
+        ),
       ),
       layout: ShellLayoutSettings(
         windowLayout: _enumValue(
@@ -1516,4 +1551,17 @@ String _cursorThemeId(Object? value, String fallback) {
     return fallback;
   }
   return id;
+}
+
+// Empty string is a valid value for uiFontFamily/iconThemeName (it means
+// "keep the default"), so unlike _cursorThemeId it is not rejected.
+String _themeName(Object? value, String fallback) {
+  if (value is! String) {
+    return fallback;
+  }
+  final name = value.trim();
+  if (name.length > 128 || name.contains('\u0000')) {
+    return fallback;
+  }
+  return name;
 }

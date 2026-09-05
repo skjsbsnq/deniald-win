@@ -23,7 +23,7 @@ use denial_core::portal_protocol::{DesktopColorSchemePreference, DesktopThemeSna
 
 use super::window_layout::WindowLayoutKind;
 
-pub(super) const SETTINGS_SCHEMA_VERSION: u64 = 21;
+pub(super) const SETTINGS_SCHEMA_VERSION: u64 = 22;
 const MAX_SETTINGS_BYTES: usize = 256 * 1024;
 const MAX_APPLICATION_ENVIRONMENT_ENTRIES: usize = 256;
 const MAX_APPLICATION_ENVIRONMENT_APPLICATIONS: usize = 256;

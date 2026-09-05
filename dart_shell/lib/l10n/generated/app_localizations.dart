@@ -6141,6 +6141,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Window {windowId}'**
   String windowUntitled(int windowId);
+
+  /// Heading for shell font and icon theme settings.
+  ///
+  /// In en, this message translates to:
+  /// **'Fonts & icons'**
+  String get settingsFontsAndIconsTitle;
+
+  /// Label above the interface font selector.
+  ///
+  /// In en, this message translates to:
+  /// **'Interface font'**
+  String get settingsUiFontFamily;
+
+  /// Choice keeping the shell's built-in interface font.
+  ///
+  /// In en, this message translates to:
+  /// **'Default'**
+  String get settingsUiFontFamilyDefault;
+
+  /// Label above the icon theme selector.
+  ///
+  /// In en, this message translates to:
+  /// **'Icon theme'**
+  String get settingsIconTheme;
+
+  /// Choice keeping the shell's built-in icon resolution order.
+  ///
+  /// In en, this message translates to:
+  /// **'Default'**
+  String get settingsIconThemeDefault;
+
+  /// Notice that font and icon changes apply after a restart.
+  ///
+  /// In en, this message translates to:
+  /// **'Takes effect after the shell restarts.'**
+  String get settingsFontsAndIconsRestartNotice;
 }
 
 class _AppLocalizationsDelegate

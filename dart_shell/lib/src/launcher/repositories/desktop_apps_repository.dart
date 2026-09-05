@@ -7,9 +7,14 @@ import '../runtime_paths.dart';
 import '../models/desktop_app.dart';
 
 class DesktopAppsRepository {
-  const DesktopAppsRepository({required this._paths});
+  const DesktopAppsRepository({required this._paths, this.iconThemeName = ''});
 
   final RuntimePaths _paths;
+
+  /// When non-empty, this theme directory under `<root>/icons/` is searched
+  /// before the built-in theme order so a user-selected theme (such as
+  /// Papirus) wins. Icons it lacks fall back to the usual hicolor chain.
+  final String iconThemeName;
 
   /// Watches the XDG application directories for desktop-entry changes.
   ///
@@ -263,6 +268,7 @@ class DesktopAppsRepository {
       }
 
       final themes = <String>[
+        if (iconThemeName.isNotEmpty) p.join(root, 'icons', iconThemeName),
         p.join(root, 'icons', 'hicolor'),
         p.join(root, 'icons', 'Adwaita'),
         p.join(root, 'icons', 'Tela'),

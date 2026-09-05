@@ -453,6 +453,8 @@ class _SettingsPageBody extends ConsumerWidget {
           onCursorThemeChanged: controller.setCursorThemeId,
           onAllowClientCursorSurfacesChanged:
               controller.setAllowClientCursorSurfaces,
+          onUiFontFamilyChanged: controller.setUiFontFamily,
+          onIconThemeNameChanged: controller.setIconThemeName,
           onImportCursorZip: onPickCursorZip == null
               ? null
               : () async {

@@ -3461,4 +3461,23 @@ class AppLocalizationsEn extends AppLocalizations {
   String windowUntitled(int windowId) {
     return 'Window $windowId';
   }
+
+  @override
+  String get settingsFontsAndIconsTitle => 'Fonts & icons';
+
+  @override
+  String get settingsUiFontFamily => 'Interface font';
+
+  @override
+  String get settingsUiFontFamilyDefault => 'Default';
+
+  @override
+  String get settingsIconTheme => 'Icon theme';
+
+  @override
+  String get settingsIconThemeDefault => 'Default';
+
+  @override
+  String get settingsFontsAndIconsRestartNotice =>
+      'Takes effect after the shell restarts.';
 }

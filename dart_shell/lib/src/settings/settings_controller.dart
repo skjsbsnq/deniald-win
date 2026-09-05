@@ -10,6 +10,7 @@ import '../models/shell_popup_placement.dart';
 import '../state/desktop_window_close_effect.dart';
 import '../theme/backdrop_blur_level.dart';
 import '../theme/cursor_themes.dart';
+import '../theme/system_theme_propagation.dart';
 import '../theme/tokens.dart';
 import '../state/shell_controller.dart';
 import '../platform/denial_bridge.dart';
@@ -76,6 +77,8 @@ class ShellSettingsController extends Notifier<ShellSettings> {
   late ShellSettings _latestSettings;
   late Completer<void> _initialLoad;
   final Map<String, Object?> _pendingMutationPatch = <String, Object?>{};
+  SystemThemePropagation? _systemThemePropagation;
+  ShellAppearanceSettings? _lastPropagatedAppearance;
 
   @override
   ShellSettings build() {
@@ -265,6 +268,22 @@ class ShellSettingsController extends Notifier<ShellSettings> {
 
   void setAllowClientCursorSurfaces(bool value) {
     _updateAppearance(allowClientCursorSurfaces: value);
+  }
+
+  void setUiFontFamily(String value) {
+    final name = value.trim();
+    if (name.length > 128 || name.contains('\u0000')) {
+      return;
+    }
+    _updateAppearance(uiFontFamily: name);
+  }
+
+  void setIconThemeName(String value) {
+    final name = value.trim();
+    if (name.length > 128 || name.contains('\u0000')) {
+      return;
+    }
+    _updateAppearance(iconThemeName: name);
   }
 
   void setSystemBarPlacement({
@@ -633,6 +652,8 @@ class ShellSettingsController extends Notifier<ShellSettings> {
     double? cursorSize,
     String? cursorThemeId,
     bool? allowClientCursorSurfaces,
+    String? uiFontFamily,
+    String? iconThemeName,
   }) {
     _update(
       state.copyWith(
@@ -649,9 +670,28 @@ class ShellSettingsController extends Notifier<ShellSettings> {
           cursorSize: cursorSize,
           cursorThemeId: cursorThemeId,
           allowClientCursorSurfaces: allowClientCursorSurfaces,
+          uiFontFamily: uiFontFamily,
+          iconThemeName: iconThemeName,
         ),
       ),
     );
+  }
+
+  /// Reconciles fontconfig, gsettings, and GTK settings.ini with the current
+  /// appearance once at startup and after every change. The propagation is
+  /// best effort; standalone settings sessions without a session bus simply
+  /// skip it.
+  void _propagateSystemTheme(ShellAppearanceSettings appearance) {
+    final lastRun = _lastPropagatedAppearance;
+    // Skipping when nothing changed avoids re-running resets on every
+    // unrelated settings write; the first run after a restart always goes
+    // through because the last run is forgotten with the session.
+    if (lastRun != null && lastRun == appearance) {
+      return;
+    }
+    _lastPropagatedAppearance = appearance;
+    final propagation = _systemThemePropagation ??= SystemThemePropagation();
+    unawaited(propagation.apply(appearance));
   }
 
   void _update(ShellSettings next) {
@@ -662,6 +702,7 @@ class ShellSettingsController extends Notifier<ShellSettings> {
     _mutationSerial += 1;
     state = next;
     _latestSettings = next;
+    _propagateSystemTheme(next.appearance);
     if (!_hasAuthoritativeState) {
       return;
     }
@@ -731,6 +772,7 @@ class ShellSettingsController extends Notifier<ShellSettings> {
     _mutationSerial += 1;
     state = resolved;
     _latestSettings = resolved;
+    _propagateSystemTheme(resolved.appearance);
     ref.read(shellSettingsSyncStatusProvider.notifier).markReady();
     if (!_initialLoad.isCompleted) {
       _initialLoad.complete();

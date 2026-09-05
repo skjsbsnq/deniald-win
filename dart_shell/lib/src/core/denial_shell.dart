@@ -100,6 +100,9 @@ class DenialShell extends ConsumerWidget {
       focusedWindowBorderEnabled: appearance.focusedWindowBorderEnabled,
       focusedWindowOpacity: appearance.focusedWindowOpacity,
       unfocusedWindowOpacity: appearance.unfocusedWindowOpacity,
+      fontFamily: appearance.uiFontFamily.isEmpty
+          ? null
+          : appearance.uiFontFamily,
     );
     final bridge = ref.watch(denialBridgeProvider);
     final hideCursor = ref.watch(
