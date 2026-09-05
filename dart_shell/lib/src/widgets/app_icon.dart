@@ -98,11 +98,23 @@ class AppIconImage extends StatelessWidget {
 /// that is meant to be re-tinted by the toolkit before display. Rendering
 /// them as-is puts near-black strokes on the equally dark shelf. This mapper
 /// maps every non-transparent fill/stroke to [foreground].
+///
+/// Value equality is required for the svg cache: tray icons build a fresh
+/// mapper on every rebuild, and without it no two loaders ever share a
+/// decoded cache entry.
 @immutable
 class _SymbolicColorMapper extends ColorMapper {
   const _SymbolicColorMapper(this.foreground);
 
   final Color foreground;
+
+  @override
+  int get hashCode => foreground.hashCode;
+
+  @override
+  bool operator ==(Object other) {
+    return other is _SymbolicColorMapper && other.foreground == foreground;
+  }
 
   @override
   Color substitute(

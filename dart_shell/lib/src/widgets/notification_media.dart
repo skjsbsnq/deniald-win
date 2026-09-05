@@ -33,6 +33,10 @@ class NotificationIconRequest {
   int get hashCode => Object.hash(appIcon, desktopEntry);
 }
 
+// Resident on purpose: entries hold one resolved path string per distinct
+// (appIcon, desktopEntry) pair. The bubble unmounts its notification cards
+// whenever it collapses, and auto-disposing here re-spawned a resolve isolate
+// for every card on every reopen, completing mid open animation.
 final notificationIconPathProvider =
     FutureProvider.family<String?, NotificationIconRequest>((ref, request) {
       final repository = ref.watch(desktopAppsRepositoryProvider);
@@ -42,7 +46,7 @@ final notificationIconPathProvider =
           desktopEntry: request.desktopEntry,
         ),
       );
-    }, isAutoDispose: true);
+    });
 
 const int maxNotificationStaticImageBytes = 4 * 1024 * 1024;
 

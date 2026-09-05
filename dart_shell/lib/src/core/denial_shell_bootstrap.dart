@@ -1,5 +1,6 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../config/startup_environment.dart';
 import '../desktop/desktop_window_render_telemetry.dart';
@@ -21,6 +22,11 @@ void runDenialShell({
 }) {
   final environment = StartupEnvironment.capture();
   WidgetsFlutterBinding.ensureInitialized();
+  // The default 100-entry LRU is smaller than one launcher catalog plus the
+  // shelf and tray icons, so an icon-heavy browse evicts resident icons and
+  // every reopen re-decodes them. Compiled icon vectors are a few KB each, so
+  // a larger budget keeps working sets resident without a real memory cost.
+  svg.cache.maximumSize = 500;
   MotionTelemetry.install(enabled: environment.flag('DENIA_DART_FRAME_TRACE'));
   DesktopWindowRenderTelemetry.install(
     enabled: environment.flag('DENIA_RENDER_AUDIT'),

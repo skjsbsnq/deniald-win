@@ -1,9 +1,17 @@
 import 'package:denial_dart_shell/l10n/generated/app_localizations.dart';
 import 'package:denial_dart_shell/src/desktop/desktop_shell.dart';
+import 'package:denial_dart_shell/src/desktop/desktop_workspace.dart';
+import 'package:denial_dart_shell/src/desktop/shelf/unified_tray_bubble.dart';
+import 'package:denial_dart_shell/src/models/battery_status.dart';
 import 'package:denial_dart_shell/src/models/desktop_notification.dart';
 import 'package:denial_dart_shell/src/models/denial_window.dart';
 import 'package:denial_dart_shell/src/settings/settings_controller.dart';
 import 'package:denial_dart_shell/src/settings/shell_settings.dart';
+import 'package:denial_dart_shell/src/state/bluetooth.dart';
+import 'package:denial_dart_shell/src/state/desktop_notifications.dart';
+import 'package:denial_dart_shell/src/state/network_connectivity.dart';
+import 'package:denial_dart_shell/src/state/quick_settings.dart';
+import 'package:denial_dart_shell/src/state/system_status.dart';
 import 'package:denial_dart_shell/src/theme/shell_theme.dart';
 import 'package:denial_dart_shell/src/widgets/notification_banner.dart';
 import 'package:denial_dart_shell/src/widgets/overview/overview_window_card.dart';
@@ -220,6 +228,137 @@ void main() {
       matchesGoldenFile('goldens/overview_window_card.png'),
     );
   });
+
+  testWidgets('unified tray bubble renders a bounded history window', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          quickSettingsProvider.overrideWith(_FakeQuickSettingsController.new),
+          networkConnectivityProvider.overrideWith(_FakeNetworkController.new),
+          bluetoothProvider.overrideWith(_FakeBluetoothController.new),
+          desktopNotificationsProvider.overrideWith(
+            _FakeNotificationsController.new,
+          ),
+          batteryProvider.overrideWith(_FakeBatteryController.new),
+          desktopWorkspaceProvider.overrideWith(_FakeWorkspaceController.new),
+        ],
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          locale: const Locale('en'),
+          home: Scaffold(
+            backgroundColor: const Color(0xff121212),
+            body: ShellTheme(
+              data: const ShellThemeData(),
+              child: UnifiedTrayBubble(
+                visible: true,
+                onDismiss: () {},
+                shelfHeight: 56.0,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    await expectLater(
+      find.byType(UnifiedTrayBubble),
+      matchesGoldenFile('goldens/unified_tray_bubble.png'),
+    );
+
+    // The list stays lazy, so prove the cap by scrolling: the 10th record is
+    // reachable and the 11th never materializes.
+    await tester.dragUntilVisible(
+      find.text('History 9'),
+      find.byType(ListView),
+      const Offset(0, -80),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('History 10'), findsNothing);
+    expect(find.text('History 11'), findsNothing);
+  });
+
+  testWidgets('launcher bubble keeps its subtree mounted across close', (
+    tester,
+  ) async {
+    final searchFocusNode = FocusNode();
+    addTearDown(searchFocusNode.dispose);
+
+    Widget buildLauncher(bool visible) {
+      return ProviderScope(
+        overrides: [
+          shellSettingsProvider.overrideWith(_MockShelfSettingsController.new),
+        ],
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          locale: const Locale('en'),
+          home: Scaffold(
+            backgroundColor: const Color(0xff121212),
+            body: Center(
+              child: SizedBox(
+                width: 400,
+                height: 560,
+                child: ShellTheme(
+                  data: const ShellThemeData(),
+                  child: DesktopApplicationLauncher(
+                    searchFocusNode: searchFocusNode,
+                    onEnter: () {},
+                    onExit: () {},
+                    onDismiss: () {},
+                    onLaunch: (_) {},
+                    onLaunchLocal: (_) {},
+                    visible: visible,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    await tester.pumpWidget(buildLauncher(true));
+    await tester.pumpAndSettle();
+
+    final gridFinder = find.descendant(
+      of: find.byType(DesktopApplicationLauncher),
+      matching: find.byType(CustomScrollView),
+    );
+    final gridElement = tester.element(gridFinder);
+
+    await tester.enterText(find.byType(EditableText), 'term');
+    await tester.pump();
+    searchFocusNode.unfocus();
+    await tester.pump();
+
+    await tester.pumpWidget(buildLauncher(false));
+    await tester.pumpAndSettle();
+
+    // The collapsed bubble parks the grid behind Offstage instead of
+    // unmounting it, so a reopen skips the full first-frame inflate.
+    expect(gridFinder, findsNothing);
+    expect(
+      find.descendant(
+        of: find.byType(DesktopApplicationLauncher),
+        matching: find.byType(CustomScrollView, skipOffstage: false),
+        skipOffstage: false,
+      ),
+      findsOneWidget,
+    );
+
+    await tester.pumpWidget(buildLauncher(true));
+    await tester.pumpAndSettle();
+
+    // Same element instance: the subtree was retained, not rebuilt, and the
+    // close-settle reset already cleared the search field.
+    expect(find.text('term'), findsNothing);
+    expect(identical(tester.element(gridFinder), gridElement), isTrue);
+  });
 }
 
 class _MockShelfSettingsController extends ShellSettingsController {
@@ -229,4 +368,82 @@ class _MockShelfSettingsController extends ShellSettingsController {
       layout: ShellLayoutSettings(useChromeOsShelf: true),
     );
   }
+}
+
+// Fixed-state controllers so the tray bubble golden renders the same chips on
+// every machine: no D-Bus, sysfs, or clock reads.
+class _FakeQuickSettingsController extends QuickSettingsController {
+  @override
+  QuickSettingsState build() => QuickSettingsState.initial();
+}
+
+class _FakeNetworkController extends NetworkConnectivityController {
+  @override
+  NetworkConnectivityState build() =>
+      NetworkConnectivityState.initial().copyWith(initializing: false);
+}
+
+class _FakeBluetoothController extends BluetoothController {
+  @override
+  BluetoothState build() =>
+      BluetoothState.initial().copyWith(initializing: false);
+}
+
+class _FakeBatteryController extends BatteryController {
+  @override
+  BatteryStatus build() =>
+      const BatteryStatus(capacity: 87, charging: false, full: true);
+}
+
+class _FakeWorkspaceController extends DesktopWorkspaceController {
+  @override
+  DesktopWorkspaceState build() => DesktopWorkspaceState.initial();
+}
+
+class _FakeNotificationsController extends DesktopNotificationsController {
+  @override
+  DesktopNotificationsState build() {
+    return DesktopNotificationsState(
+      history: List<DesktopNotificationRecord>.unmodifiable(
+        <DesktopNotificationRecord>[
+          for (var index = 0; index < 12; index += 1)
+            DesktopNotificationRecord(
+              notification: _historyNotification(index),
+              sequence: index,
+              active: false,
+              unread: false,
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+DesktopNotification _historyNotification(int index) {
+  return DesktopNotification(
+    id: index,
+    sender: 'test',
+    appName: 'Test App',
+    appIcon: '',
+    summary: 'History $index',
+    body: 'Notification body number $index.',
+    actions: const <DesktopNotificationAction>[],
+    urgency: DesktopNotificationUrgency.normal,
+    category: '',
+    desktopEntry: '',
+    imagePath: '',
+    imageData: null,
+    resident: false,
+    transient: false,
+    suppressSound: false,
+    actionIcons: false,
+    soundName: '',
+    soundFile: '',
+    x: 0,
+    y: 0,
+    hasPosition: false,
+    progress: 0,
+    hasProgress: false,
+    expireTimeoutMs: 5000,
+  );
 }

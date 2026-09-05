@@ -120,6 +120,7 @@ class _DesktopApplicationLauncherState
   final ScrollController _gridController = ScrollController();
   late final AnimationController _expandController;
   bool _isOpen = false;
+  bool _hasInflated = false;
   String _lastSearchText = '';
   String? _selectedTargetId;
   bool _hasCachedDesktopApps = false;
@@ -146,6 +147,7 @@ class _DesktopApplicationLauncherState
     final initialOpen =
         widget.visible ?? ref.read(desktopWorkspaceProvider).launcherOpen;
     _isOpen = initialOpen;
+    _hasInflated = initialOpen;
     _expandController = AnimationController.unbounded(
       vsync: this,
       value: initialOpen ? 1.0 : 0.0,
@@ -204,33 +206,38 @@ class _DesktopApplicationLauncherState
   void _updateVisibility(bool visible) {
     if (_isOpen == visible) return;
     _isOpen = visible;
-    if (visible) {
-      _resetForReopen();
-    }
-    springTo(
+    final settle = springTo(
       _expandController,
       visible ? 1.0 : 0.0,
       spring: Motion.expressiveSpatialDefault,
       telemetryLabel: 'launcher_bubble_toggle',
     );
+    if (visible) {
+      _hasInflated = true;
+      return;
+    }
+    // The kept-alive grid keeps its scroll controller attached, so the
+    // fresh-state reset can run once the collapse settles instead of one
+    // frame into the next reopen. Running it while the bubble is still
+    // visible would snap the grid mid-collapse.
+    settle.whenCompleteOrCancel(() {
+      if (mounted && !_isOpen && _expandController.value <= 0.001) {
+        _resetForNextOpen();
+      }
+    });
   }
 
   /// Restores the launcher to a fresh state for the next show.
   ///
-  /// The grid keeps its scroll offset and search text while the bubble
-  /// collapses, so closing no longer visibly snaps the list back to the top.
-  /// The reset happens on reopen instead: the search field is cleared while
-  /// the bubble is still collapsed, and the scroll offset is restored one
-  /// frame later, after the grid has re-attached.
-  void _resetForReopen() {
+  /// The kept-alive grid keeps its scroll offset and search text while the
+  /// bubble collapses, so the reset waits until the collapse settles and the
+  /// subtree is parked off stage. The scroll controller stays attached, so no
+  /// post-frame scroll hop into the open animation is needed anymore.
+  void _resetForNextOpen() {
     if (_searchController.text.isNotEmpty) {
       _searchController.clear();
     }
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted && _isOpen) {
-        _resetGridScroll();
-      }
-    });
+    _resetGridScroll();
   }
 
   void _clearSearch() {
@@ -542,7 +549,10 @@ class _DesktopApplicationLauncherState
             animation: _expandController,
             builder: (context, child) {
               final progress = _expandController.value;
-              if (useChromeOsShelf && progress <= 0.001 && !_isOpen) {
+              final hidden = useChromeOsShelf && progress <= 0.001 && !_isOpen;
+              if (hidden && !_hasInflated) {
+                // Stay unmounted until the first open so shell startup does
+                // not pay the bubble's inflate.
                 return const SizedBox.shrink();
               }
               final clampedProgress = progress.clamp(0.0, 1.0);
@@ -563,25 +573,33 @@ class _DesktopApplicationLauncherState
                 ),
               );
 
-              if (useChromeOsShelf) {
-                content = SizedBox(
-                  width: _LauncherBubbleMetrics.width(
-                    MediaQuery.sizeOf(context),
-                  ),
-                  child: ShellBackdropBlur(
-                    strength: clampedProgress,
-                    borderRadius: bubbleRadius,
-                    child: content,
-                  ),
-                );
-                return Transform.scale(
-                  scale: scale,
-                  alignment: Alignment.bottomLeft,
-                  child: content,
-                );
+              if (!useChromeOsShelf) {
+                return content;
               }
 
-              return content;
+              content = SizedBox(
+                width: _LauncherBubbleMetrics.width(MediaQuery.sizeOf(context)),
+                child: ShellBackdropBlur(
+                  strength: clampedProgress,
+                  borderRadius: bubbleRadius,
+                  child: content,
+                ),
+              );
+              // The wrapper keeps one shape for the shown and hidden states,
+              // so parking the collapsed bubble flips the Offstage flag
+              // instead of re-inflating the subtree on every reopen. TickerMode
+              // parks the subtree's animations while it is hidden.
+              return TickerMode(
+                enabled: !hidden,
+                child: Offstage(
+                  offstage: hidden,
+                  child: Transform.scale(
+                    scale: scale,
+                    alignment: Alignment.bottomLeft,
+                    child: content,
+                  ),
+                ),
+              );
             },
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

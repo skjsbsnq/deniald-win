@@ -519,7 +519,9 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
   int _nextCloseId = 1;
   _DesktopHomeLayoutCache? _homeLayoutCache;
   _DesktopSceneTopologyCache? _topologyCache;
-  bool _shelfTrayExpanded = false;
+  // Tray expansion is notifier-backed so toggling it rebuilds only the tray
+  // button and the bubble instead of the whole desktop scene.
+  final ValueNotifier<bool> _shelfTrayExpanded = ValueNotifier<bool>(false);
 
   @override
   void initState() {
@@ -753,6 +755,7 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
   void dispose() {
     _minimizeLayerHandoff.dispose();
     _minimizedPlacementTransition.dispose();
+    _shelfTrayExpanded.dispose();
     _minimizedPlacementExitFrames.clear();
     for (final closing in _closingWindows.values) {
       widget.onCloseLeaseComplete(closing.window.windowId);
@@ -916,19 +919,16 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
                           ? ShelfLayer(
                               height: bar.rect.height,
                               onLauncherPressed: () {
-                                if (_shelfTrayExpanded) {
-                                  setState(() => _shelfTrayExpanded = false);
-                                }
+                                _shelfTrayExpanded.value = false;
                                 onOpenLauncher();
                               },
                               trayExpanded: _shelfTrayExpanded,
                               onTrayPressed: () {
-                                if (!_shelfTrayExpanded) {
+                                if (!_shelfTrayExpanded.value) {
                                   onDismissLauncher();
                                 }
-                                setState(() {
-                                  _shelfTrayExpanded = !_shelfTrayExpanded;
-                                });
+                                _shelfTrayExpanded.value =
+                                    !_shelfTrayExpanded.value;
                               },
                             )
                           : DesktopSystemBar(
@@ -1021,26 +1021,32 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
                   ),
                   if (useChromeOsShelf)
                     Positioned.fill(
-                      child: ShellInputRegion(
-                        debugLabel: 'Unified tray bubble',
-                        active: _shelfTrayExpanded && !desktop.overviewActive,
-                        pointerPolicy: ShellPointerPolicy.fullScene,
-                        keyboardPolicy: ShellKeyboardPolicy.none,
-                        child: IgnorePointer(
-                          ignoring: !_shelfTrayExpanded,
-                          child: UnifiedTrayBubble(
-                            key: const ValueKey<String>(
-                              'shelf-unified-tray-bubble',
+                      child: ValueListenableBuilder<bool>(
+                        valueListenable: _shelfTrayExpanded,
+                        builder: (context, shelfTrayExpanded, _) {
+                          final trayVisible =
+                              shelfTrayExpanded && !desktop.overviewActive;
+                          return ShellInputRegion(
+                            debugLabel: 'Unified tray bubble',
+                            active: trayVisible,
+                            pointerPolicy: ShellPointerPolicy.fullScene,
+                            keyboardPolicy: ShellKeyboardPolicy.none,
+                            child: IgnorePointer(
+                              ignoring: !shelfTrayExpanded,
+                              child: UnifiedTrayBubble(
+                                key: const ValueKey<String>(
+                                  'shelf-unified-tray-bubble',
+                                ),
+                                visible: trayVisible,
+                                onDismiss: () =>
+                                    _shelfTrayExpanded.value = false,
+                                shelfHeight: visibleSystemBars.isNotEmpty
+                                    ? visibleSystemBars.first.rect.height
+                                    : 56.0,
+                              ),
                             ),
-                            visible:
-                                _shelfTrayExpanded && !desktop.overviewActive,
-                            onDismiss: () =>
-                                setState(() => _shelfTrayExpanded = false),
-                            shelfHeight: visibleSystemBars.isNotEmpty
-                                ? visibleSystemBars.first.rect.height
-                                : 56.0,
-                          ),
-                        ),
+                          );
+                        },
                       ),
                     ),
                   for (final popup in inputMethodPopups)

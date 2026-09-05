@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -15,7 +16,7 @@ class ShelfLayer extends ConsumerWidget {
   const ShelfLayer({
     this.height,
     this.onLauncherPressed,
-    this.trayExpanded = false,
+    required this.trayExpanded,
     this.onTrayPressed,
     super.key,
   });
@@ -24,7 +25,10 @@ class ShelfLayer extends ConsumerWidget {
 
   final double? height;
   final VoidCallback? onLauncherPressed;
-  final bool trayExpanded;
+
+  /// Listenable so tray expansion rebuilds the tray button alone, not the
+  /// complete shelf with its app strip and tray icons.
+  final ValueListenable<bool> trayExpanded;
   final VoidCallback? onTrayPressed;
 
   @override
@@ -67,10 +71,13 @@ class ShelfLayer extends ConsumerWidget {
                     const Spacer(),
                     const _ShelfSystemTrayModule(),
                     const SizedBox(width: 8.0),
-                    UnifiedTrayButton(
-                      key: const ValueKey('shelf-tray-button'),
-                      expanded: trayExpanded,
-                      onPressed: onTrayPressed ?? () {},
+                    ValueListenableBuilder<bool>(
+                      valueListenable: trayExpanded,
+                      builder: (context, expanded, _) => UnifiedTrayButton(
+                        key: const ValueKey('shelf-tray-button'),
+                        expanded: expanded,
+                        onPressed: onTrayPressed ?? () {},
+                      ),
                     ),
                   ],
                 ),

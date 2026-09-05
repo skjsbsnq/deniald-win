@@ -81,7 +81,10 @@ class _UnifiedTrayBubbleState extends ConsumerState<UnifiedTrayBubble>
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: _controller,
-      builder: (context, _) {
+      // The content is lifted out of the builder so the settle spring only
+      // rebuilds the blur/scale shell, and wrapped in a RepaintBoundary so the
+      // per-tick backdrop re-filter cannot re-paint the content layer.
+      builder: (context, child) {
         final progress = _controller.value;
         if (progress <= 0.001 && !widget.visible) {
           return const SizedBox.shrink();
@@ -123,13 +126,7 @@ class _UnifiedTrayBubbleState extends ConsumerState<UnifiedTrayBubble>
                           width: 1.0,
                         ),
                       ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: _TrayBubbleContent(
-                          onDismiss: widget.onDismiss,
-                          onOpenOverview: widget.onOpenOverview,
-                        ),
-                      ),
+                      child: child,
                     ),
                   ),
                 ),
@@ -138,12 +135,27 @@ class _UnifiedTrayBubbleState extends ConsumerState<UnifiedTrayBubble>
           ],
         );
       },
+      child: RepaintBoundary(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: _TrayBubbleContent(
+            onDismiss: widget.onDismiss,
+            onOpenOverview: widget.onOpenOverview,
+          ),
+        ),
+      ),
     );
   }
 }
 
 class _TrayBubbleContent extends ConsumerWidget {
   const _TrayBubbleContent({this.onDismiss, this.onOpenOverview});
+
+  /// The bubble shows only the newest history window; the dashboard's
+  /// notification center still lists everything. The list materializes
+  /// lazily, so the cap bounds what scrolling can ever build while the
+  /// bubble is open.
+  static const int _maxHistoryRecords = 10;
 
   final VoidCallback? onDismiss;
   final VoidCallback? onOpenOverview;
@@ -197,7 +209,9 @@ class _TrayBubbleContent extends ConsumerWidget {
         bluetooth.available &&
         !bluetooth.powerChanging;
 
-    final records = notificationPolicy.history;
+    final records = notificationPolicy.history
+        .take(_maxHistoryRecords)
+        .toList(growable: false);
 
     return Column(
       mainAxisSize: MainAxisSize.min,
