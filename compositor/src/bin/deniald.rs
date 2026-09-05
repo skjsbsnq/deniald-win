@@ -139,8 +139,8 @@ use calloop::signals::{Signal, Signals};
 #[cfg(feature = "flutter")]
 use denial_core::portal_protocol::{DesktopAccentColor, DesktopThemeSnapshot};
 use denial_core::topology::{
-    AtlasPlan, LogicalPoint, OutputId, OutputSpec, OutputTransform, PixelRect, PixelSize,
-    SCALE_BASE, TopologyChange, TopologyManager, TopologySnapshot,
+    AtlasPlan, LogicalPoint, OutputId, OutputSpec, OutputSubpixel, OutputTransform, PixelRect,
+    PixelSize, SCALE_BASE, TopologyChange, TopologyManager, TopologySnapshot,
 };
 use smithay::backend::allocator::dmabuf::{AsDmabuf, Dmabuf};
 use smithay::backend::allocator::format::FormatSet;

@@ -5,8 +5,8 @@ use std::time::{Duration, Instant};
 
 use ::winit::event_loop::pump_events::PumpStatus;
 use denial_core::topology::{
-    AtlasPlan, LogicalPoint, LogicalRect, OutputId, OutputSpec, OutputTransform, PixelRect,
-    PixelSize, TopologyManager,
+    AtlasPlan, LogicalPoint, LogicalRect, OutputId, OutputSpec, OutputSubpixel, OutputTransform,
+    PixelRect, PixelSize, TopologyManager,
 };
 use smithay::backend::input::InputEvent;
 use smithay::backend::renderer::{Color32F, Frame, Renderer, gles::GlesRenderer};
@@ -353,5 +353,6 @@ fn output(
         scale_120,
         refresh_millihz,
         transform: OutputTransform::Normal,
+        subpixel: OutputSubpixel::Unknown,
     }
 }

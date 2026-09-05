@@ -232,6 +232,7 @@ pub(super) fn configured_outputs(
                 mode,
                 transform,
                 vrr_enabled,
+                subpixel: connector.info.subpixel(),
             })
         })
         .collect()
@@ -791,6 +792,20 @@ pub(super) fn update_topology_for_outputs(
     Ok(topology.snapshot())
 }
 
+fn subpixel_spec(subpixel: connector::SubPixel) -> OutputSubpixel {
+    match subpixel {
+        connector::SubPixel::HorizontalRgb => OutputSubpixel::HorizontalRgb,
+        connector::SubPixel::HorizontalBgr => OutputSubpixel::HorizontalBgr,
+        connector::SubPixel::VerticalRgb => OutputSubpixel::VerticalRgb,
+        connector::SubPixel::VerticalBgr => OutputSubpixel::VerticalBgr,
+        connector::SubPixel::None => OutputSubpixel::None,
+        // `Unknown`, drm-rs's `NotImplemented`, and any future variant all
+        // mean the kernel gave us nothing actionable; advertise the safe
+        // grayscale fallback.
+        _ => OutputSubpixel::Unknown,
+    }
+}
+
 fn output_specs(
     outputs: &[ConnectedOutput],
     configuration: &RuntimeOutputConfiguration,
@@ -816,6 +831,7 @@ fn output_specs(
                 scale_120,
                 refresh_millihz: u32::try_from(mode.refresh)?,
                 transform: output.transform,
+                subpixel: subpixel_spec(output.subpixel),
             },
             configured_position.is_some(),
         ));

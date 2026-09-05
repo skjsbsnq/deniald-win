@@ -1,7 +1,7 @@
 use std::error::Error;
 
 use denial_core::topology::{
-    AtlasPlan, LogicalRect, OutputId, OutputSpec, OutputTransform, TopologySnapshot,
+    AtlasPlan, LogicalRect, OutputId, OutputSpec, OutputSubpixel, OutputTransform, TopologySnapshot,
 };
 use smithay::backend::renderer::damage::OutputDamageTracker;
 use smithay::desktop::Window;
@@ -38,6 +38,41 @@ fn output_candidate_is_better(candidate: OutputCandidateScore, best: OutputCandi
         || (candidate.contains_center == best.contains_center
             && (candidate.overlap > best.overlap
                 || (candidate.overlap == best.overlap && candidate.distance < best.distance)))
+}
+
+/// Maps a topology spec's connector-reported subpixel geometry onto the
+/// `wl_output.subpixel` value clients should observe. `wl_output` describes
+/// the transformed logical orientation, so rotated panels flip the axis and
+/// channel order the same way mutter does before advertising.
+pub(super) fn subpixel_for_output(spec: &OutputSpec) -> Subpixel {
+    let base = match spec.subpixel {
+        OutputSubpixel::Unknown => Subpixel::Unknown,
+        OutputSubpixel::HorizontalRgb => Subpixel::HorizontalRgb,
+        OutputSubpixel::HorizontalBgr => Subpixel::HorizontalBgr,
+        OutputSubpixel::VerticalRgb => Subpixel::VerticalRgb,
+        OutputSubpixel::VerticalBgr => Subpixel::VerticalBgr,
+        OutputSubpixel::None => Subpixel::None,
+    };
+    match spec.transform {
+        OutputTransform::Normal | OutputTransform::Flipped => base,
+        OutputTransform::Rotate180 | OutputTransform::Flipped180 => match base {
+            Subpixel::HorizontalRgb => Subpixel::HorizontalBgr,
+            Subpixel::HorizontalBgr => Subpixel::HorizontalRgb,
+            Subpixel::VerticalRgb => Subpixel::VerticalBgr,
+            Subpixel::VerticalBgr => Subpixel::VerticalRgb,
+            other => other,
+        },
+        OutputTransform::Rotate90
+        | OutputTransform::Rotate270
+        | OutputTransform::Flipped90
+        | OutputTransform::Flipped270 => match base {
+            Subpixel::HorizontalRgb => Subpixel::VerticalBgr,
+            Subpixel::HorizontalBgr => Subpixel::VerticalRgb,
+            Subpixel::VerticalRgb => Subpixel::HorizontalBgr,
+            Subpixel::VerticalBgr => Subpixel::HorizontalRgb,
+            other => other,
+        },
+    }
 }
 
 impl WaylandFrontend {
@@ -237,7 +272,7 @@ impl WaylandFrontend {
                 spec.name.clone(),
                 PhysicalProperties {
                     size: (0, 0).into(),
-                    subpixel: Subpixel::Unknown,
+                    subpixel: subpixel_for_output(spec),
                     make: "Denial".into(),
                     model: spec.name.clone(),
                     serial_number: format!("connector-{}", spec.id.0),

@@ -39,6 +39,10 @@ pub(super) struct ConnectedOutput {
     pub(super) mode: Mode,
     pub(super) transform: OutputTransform,
     pub(super) vrr_enabled: bool,
+    /// Kernel-reported physical subpixel geometry. Forwarded to clients as
+    /// `wl_output.subpixel` so text renderers can enable subpixel AA instead
+    /// of the visibly softer grayscale fallback.
+    pub(super) subpixel: connector::SubPixel,
 }
 
 pub(super) struct Scanout {

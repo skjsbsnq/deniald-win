@@ -131,7 +131,7 @@ impl WaylandFrontend {
                 spec.name.clone(),
                 PhysicalProperties {
                     size: (0, 0).into(),
-                    subpixel: Subpixel::Unknown,
+                    subpixel: super::topology::subpixel_for_output(spec),
                     make: "Denial".into(),
                     model: spec.name.clone(),
                     serial_number: format!("connector-{}", spec.id.0),

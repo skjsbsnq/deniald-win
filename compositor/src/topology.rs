@@ -168,6 +168,21 @@ impl OutputTransform {
     }
 }
 
+/// Physical subpixel geometry of a connector, as the DRM kernel driver
+/// reports it. Mirrors the wire values of `wl_output.subpixel` so clients can
+/// enable subpixel text antialiasing; `Unknown` makes them fall back to
+/// grayscale antialiasing, which reads visibly softer on fractional scales.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum OutputSubpixel {
+    #[default]
+    Unknown,
+    HorizontalRgb,
+    HorizontalBgr,
+    VerticalRgb,
+    VerticalBgr,
+    None,
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct OutputSpec {
     pub id: OutputId,
@@ -177,6 +192,7 @@ pub struct OutputSpec {
     pub scale_120: u32,
     pub refresh_millihz: u32,
     pub transform: OutputTransform,
+    pub subpixel: OutputSubpixel,
 }
 
 impl OutputSpec {
