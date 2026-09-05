@@ -135,14 +135,14 @@ class _SystemLevelHudCard extends StatelessWidget {
           child: RepaintBoundary(
             child: ShellBackdropBlur(
               blur: theme.effectivePanelOpacity < 1.0,
-              borderRadius: BorderRadius.circular(theme.panelRadius),
+              borderRadius: theme.borderRadius(ShellShapeScale.extraLarge),
               child: DecoratedBox(
                 decoration: BoxDecoration(
                   gradient: theme.panelGradient(
                     context.shellColors.panelBackground,
                     context.shellColors.panelBackgroundBottom,
                   ),
-                  borderRadius: BorderRadius.circular(theme.panelRadius),
+                  borderRadius: theme.borderRadius(ShellShapeScale.extraLarge),
                   border: Border.all(color: context.shellColors.hairline),
                 ),
                 child: Padding(
@@ -202,34 +202,77 @@ class _SystemLevelHudCard extends StatelessWidget {
   }
 }
 
-class _LevelProgress extends StatelessWidget {
+class _LevelProgress extends StatefulWidget {
   const _LevelProgress({required this.level, required this.inactiveColor});
 
   final double level;
   final Color inactiveColor;
 
   @override
+  State<_LevelProgress> createState() => _LevelProgressState();
+}
+
+class _LevelProgressState extends State<_LevelProgress>
+    with SingleTickerProviderStateMixin {
+  // Unbounded: hardware-key presses can re-target mid-glide and expressive
+  // springs are allowed to pass briefly outside [0, 1].
+  late final AnimationController _level = AnimationController.unbounded(
+    vsync: this,
+    value: widget.level,
+  );
+
+  @override
+  void initState() {
+    super.initState();
+    // Start at rest on the incoming level so the first appearance does not
+    // glide from zero.
+    _level.value = widget.level;
+  }
+
+  @override
+  void didUpdateWidget(covariant _LevelProgress oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.level != widget.level) {
+      if (MediaQuery.disableAnimationsOf(context)) {
+        _level
+          ..stop()
+          ..value = widget.level;
+        return;
+      }
+      // Springs start from the controller's current value, so rapid
+      // hardware-key presses form one continuous glide.
+      springTo(
+        _level,
+        widget.level,
+        spring: Motion.expressiveEffectsDefault,
+        telemetryLabel: 'system_level_hud_value',
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _level.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final duration = MediaQuery.disableAnimationsOf(context)
-        ? Duration.zero
-        : Motion.systemLevelHudValue;
-    return TweenAnimationBuilder<double>(
-      tween: Tween<double>(end: level),
-      duration: duration,
-      // Re-targeting this implicit tween starts from its current rendered
-      // value, so rapid hardware-key presses form one continuous glide.
-      curve: Motion.md3EmphasizedDecelerate,
-      builder: (context, value, _) => ClipRRect(
-        borderRadius: context.shellTheme.borderRadius(4),
+    return AnimatedBuilder(
+      animation: _level,
+      builder: (context, _) => ClipRRect(
+        borderRadius: context.shellTheme.borderRadius(
+          ShellShapeScale.extraSmall,
+        ),
         child: SizedBox(
           height: 7,
           child: Stack(
             fit: StackFit.expand,
             children: [
-              ColoredBox(color: inactiveColor),
+              ColoredBox(color: widget.inactiveColor),
               FractionallySizedBox(
                 alignment: Alignment.centerLeft,
-                widthFactor: value.clamp(0.0, 1.0).toDouble(),
+                widthFactor: _level.value.clamp(0.0, 1.0).toDouble(),
                 child: ColoredBox(color: ShellTheme.of(context).accent),
               ),
             ],

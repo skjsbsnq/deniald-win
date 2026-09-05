@@ -76,6 +76,23 @@ abstract final class ShellRadii {
   static const double roundButton = 21.0;
 }
 
+/// Material 3 Expressive corner scale.
+///
+/// [ShellRadii] keeps its established component values; this scale gives new
+/// surfaces a shared vocabulary instead of ad-hoc numbers.
+abstract final class ShellShapeScale {
+  static const double none = 0.0;
+  static const double extraSmall = 4.0;
+  static const double small = 8.0;
+  static const double medium = 12.0;
+  static const double large = 16.0;
+  static const double largeIncreased = 20.0;
+  static const double extraLarge = 28.0;
+  static const double extraLargeIncreased = 32.0;
+  static const double extraExtraLarge = 48.0;
+  static const double full = 999.0;
+}
+
 /// Brightness-independent text metrics.
 ///
 /// [ShellTextTheme] applies semantic foreground colors. Keeping these
@@ -188,6 +205,31 @@ abstract final class ShellText {
     fontFamilyFallback: fallbackFontFamilies,
     fontSize: 13,
     fontWeight: FontWeight.w600,
+    decoration: TextDecoration.none,
+  );
+
+  static const TextStyle shelfTooltip = TextStyle(
+    fontFamilyFallback: fallbackFontFamilies,
+    fontSize: 12,
+    height: 1,
+    fontWeight: FontWeight.w500,
+    decoration: TextDecoration.none,
+  );
+
+  static const TextStyle trayClock = TextStyle(
+    fontFamilyFallback: fallbackFontFamilies,
+    fontSize: 13,
+    height: 1,
+    fontWeight: FontWeight.w600,
+    letterSpacing: 0.1,
+    decoration: TextDecoration.none,
+  );
+
+  static const TextStyle podLabel = TextStyle(
+    fontFamilyFallback: fallbackFontFamilies,
+    fontSize: 11,
+    height: 1.2,
+    fontWeight: FontWeight.w500,
     decoration: TextDecoration.none,
   );
 }

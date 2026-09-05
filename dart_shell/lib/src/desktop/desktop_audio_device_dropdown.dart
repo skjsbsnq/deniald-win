@@ -141,7 +141,9 @@ class _DashboardAudioDeviceDropdownState
                   color: _hovered || _focused || _expanded
                       ? context.shellColors.surfaceContainerHighest
                       : context.shellColors.surfaceContainerHigh,
-                  borderRadius: context.shellTheme.borderRadius(12),
+                  borderRadius: context.shellTheme.borderRadius(
+                    ShellShapeScale.medium,
+                  ),
                   border: Border.all(
                     color: _focused || _expanded
                         ? accent.primary
@@ -244,11 +246,11 @@ class _AudioDeviceOptions extends StatelessWidget {
           color: context.shellTheme.cardColor(
             context.shellColors.surfaceContainerHighest,
           ),
-          borderRadius: context.shellTheme.borderRadius(12),
+          borderRadius: context.shellTheme.borderRadius(ShellShapeScale.medium),
           border: Border.all(color: context.shellColors.hairlineSoft),
         ),
         child: ClipRRect(
-          borderRadius: context.shellTheme.borderRadius(11),
+          borderRadius: context.shellTheme.borderRadius(ShellShapeScale.medium),
           child: ListView.separated(
             shrinkWrap: true,
             padding: const EdgeInsets.all(5),
@@ -338,7 +340,9 @@ class _AudioDeviceOptionState extends State<_AudioDeviceOption> {
                   : _highlighted
                   ? context.shellColors.surfaceContainerHigh
                   : ShellMediaColors.transparentDark,
-              borderRadius: context.shellTheme.borderRadius(8),
+              borderRadius: context.shellTheme.borderRadius(
+                ShellShapeScale.small,
+              ),
             ),
             child: Row(
               children: <Widget>[

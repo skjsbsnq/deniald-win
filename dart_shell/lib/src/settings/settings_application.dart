@@ -4,6 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/generated/app_localizations_en.dart';
+import '../config/startup_environment.dart';
+import '../desktop/desktop_workspace.dart';
+import '../launcher/controllers/application_recents_controller.dart';
 import '../local_apps/local_flutter_application.dart';
 import '../launcher/controllers/home_grid_controller.dart';
 import '../launcher/models/desktop_app.dart';
@@ -12,6 +15,7 @@ import '../models/display_layout.dart';
 import '../state/display_layout.dart';
 import '../state/cursor_theme.dart';
 import '../state/output_configuration.dart';
+import '../state/shell_controller.dart';
 import '../state/ui_development.dart';
 import '../theme/motion.dart';
 import '../theme/cursor_themes.dart';
@@ -103,6 +107,72 @@ final denialSettingsApplication = LocalFlutterApplication(
   builder: _buildSettingsApplication,
 );
 
+/// Opens the Settings application on [page], or its front page when null.
+///
+/// Both hosting modes are covered: embedded shells reuse the in-process
+/// single-instance window via [settingsPageOpenRequestProvider], while
+/// stand-alone shells launch (or activate) the external binary with a
+/// `--page` argument. The optional [onActivated] hook lets surface hosts
+/// dismiss themselves once the request is dispatched.
+void launchSettingsPage(
+  WidgetRef ref,
+  BuildContext context,
+  SettingsPageId? page, {
+  VoidCallback? onDispatched,
+}) {
+  final environment = ref.read(startupEnvironmentProvider);
+  if (environment.flag('DENIA_EMBED_SETTINGS')) {
+    if (page != null) {
+      ref.read(settingsPageOpenRequestProvider.notifier).request(page);
+    }
+    _launchSettingsLocalApp(ref, context);
+    onDispatched?.call();
+    return;
+  }
+  for (final window in ref.read(shellControllerProvider).openAppWindows) {
+    if (isDenialSettingsApplicationId(window.appId)) {
+      ref.read(desktopWorkspaceProvider.notifier).activate(window.objectId);
+      ref.read(shellControllerProvider.notifier).focusWindow(window);
+      if (page == null) {
+        onDispatched?.call();
+        return;
+      }
+      break;
+    }
+  }
+  final binary = environment['DENIAL_SETTINGS_BINARY']?.trim();
+  final executable = binary == null || binary.isEmpty
+      ? '/usr/bin/denial-settings'
+      : binary;
+  ref.read(denialBridgeProvider).launchApplication(<String>[
+    executable,
+    if (page != null) '--page=${page.name}',
+  ]);
+  onDispatched?.call();
+}
+
+void _launchSettingsLocalApp(WidgetRef ref, BuildContext context) {
+  ref
+      .read(applicationRecentsProvider.notifier)
+      .record(localApplicationRecentId(denialSettingsApplication.id));
+  final displayLayout = ref.read(displayLayoutProvider);
+  final mainOutput = displayLayout?.mainOutput;
+  final workspace = ref.read(desktopWorkspaceProvider);
+  final viewSize = workspace.viewSize.isEmpty
+      ? MediaQuery.sizeOf(context)
+      : workspace.viewSize;
+  final availableBounds = mainOutput == null
+      ? Offset.zero & viewSize
+      : displayLayout!.workAreaOf(mainOutput);
+  ref
+      .read(localFlutterApplicationLauncherProvider)
+      .launch(
+        denialSettingsApplication.id,
+        availableBounds: availableBounds,
+        title: denialSettingsApplication.titleFor(context),
+      );
+}
+
 String _localizedSettingsTitle(BuildContext context) {
   return context.l10n.settingsApplicationTitle;
 }
@@ -184,82 +254,85 @@ class _DenialSettingsApplicationState
       container: true,
       role: .main,
       label: context.l10n.settingsApplicationSemanticsLabel,
-      child: Material(
-        color: context.shellTheme.panelColor(
-          context.shellColors.panelBackground,
-        ),
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final compactNavigation = constraints.maxWidth < 700;
-            final content = Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                const _SettingsHeader(),
-                Divider(height: 1, color: context.shellColors.hairlineSoft),
-                if (compactNavigation) ...[
-                  SettingsNavigation(
-                    selected: _page,
-                    compact: true,
-                    showTouchpad: true,
-                    onSelected: _selectPage,
-                  ),
+      child: Theme(
+        data: context.shellTheme.toMaterialTheme(),
+        child: Material(
+          color: context.shellTheme.panelColor(
+            context.shellColors.panelBackground,
+          ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final compactNavigation = constraints.maxWidth < 700;
+              final content = Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const _SettingsHeader(),
                   Divider(height: 1, color: context.shellColors.hairlineSoft),
-                ],
-                Expanded(
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      if (!compactNavigation)
-                        SettingsNavigation(
-                          selected: _page,
-                          compact: false,
-                          showTouchpad: true,
-                          onSelected: _selectPage,
-                        ),
-                      Expanded(
-                        child: AnimatedSwitcher(
-                          duration: Motion.cardSettle,
-                          switchInCurve: Motion.md3EmphasizedDecelerate,
-                          switchOutCurve: Motion.md3EmphasizedAccelerate,
-                          layoutBuilder: (currentChild, previousChildren) {
-                            return Stack(
-                              alignment: Alignment.topCenter,
-                              fit: StackFit.expand,
-                              children: [...previousChildren, ?currentChild],
-                            );
-                          },
-                          child: KeyedSubtree(
-                            key: ValueKey<SettingsPageId>(_page),
-                            child: _SettingsPageBody(
-                              page: _page,
-                              onOpenAccentPicker: () =>
-                                  setState(() => _colorPickerOpen = true),
-                              onOpenWallpaperSelector: () =>
-                                  unawaited(_openWallpaperSelector()),
-                              onPickCursorZip: widget.onPickCursorZip,
+                  if (compactNavigation) ...[
+                    SettingsNavigation(
+                      selected: _page,
+                      compact: true,
+                      showTouchpad: true,
+                      onSelected: _selectPage,
+                    ),
+                    Divider(height: 1, color: context.shellColors.hairlineSoft),
+                  ],
+                  Expanded(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        if (!compactNavigation)
+                          SettingsNavigation(
+                            selected: _page,
+                            compact: false,
+                            showTouchpad: true,
+                            onSelected: _selectPage,
+                          ),
+                        Expanded(
+                          child: AnimatedSwitcher(
+                            duration: Motion.cardSettle,
+                            switchInCurve: Motion.md3EmphasizedDecelerate,
+                            switchOutCurve: Motion.md3EmphasizedAccelerate,
+                            layoutBuilder: (currentChild, previousChildren) {
+                              return Stack(
+                                alignment: Alignment.topCenter,
+                                fit: StackFit.expand,
+                                children: [...previousChildren, ?currentChild],
+                              );
+                            },
+                            child: KeyedSubtree(
+                              key: ValueKey<SettingsPageId>(_page),
+                              child: _SettingsPageBody(
+                                page: _page,
+                                onOpenAccentPicker: () =>
+                                    setState(() => _colorPickerOpen = true),
+                                onOpenWallpaperSelector: () =>
+                                    unawaited(_openWallpaperSelector()),
+                                onPickCursorZip: widget.onPickCursorZip,
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
-              ],
-            );
-            return Stack(
-              fit: StackFit.expand,
-              children: [
-                content,
-                Positioned.fill(
-                  child: AnimatedSwitcher(
-                    duration: Motion.cardSettle,
-                    reverseDuration: Motion.tile,
-                    child: _buildColorPicker(),
+                ],
+              );
+              return Stack(
+                fit: StackFit.expand,
+                children: [
+                  content,
+                  Positioned.fill(
+                    child: AnimatedSwitcher(
+                      duration: Motion.cardSettle,
+                      reverseDuration: Motion.tile,
+                      child: _buildColorPicker(),
+                    ),
                   ),
-                ),
-              ],
-            );
-          },
+                ],
+              );
+            },
+          ),
         ),
       ),
     );
@@ -479,6 +552,7 @@ class _SettingsPageBody extends ConsumerWidget {
               controller.setMinimizedWindowPlacement,
           onClipboardTrayEdgeChanged: controller.setClipboardTrayEdge,
           onClipboardTrayExtentChanged: controller.setClipboardTrayExtent,
+          onUseChromeOsShelfChanged: controller.setUseChromeOsShelf,
           onReset: controller.resetLayout,
         );
       case SettingsPageId.animations:

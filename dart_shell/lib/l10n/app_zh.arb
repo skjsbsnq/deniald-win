@@ -17,6 +17,7 @@
   "batteryDischarging": "正在放电",
   "batteryGraphMarker": "{label} {value}",
   "batteryIdle": "空闲",
+  "batteryFullyCharged": "已充满·已接电源",
   "batteryLowNotificationBody": "电池电量仅剩 {percent}%。请连接充电器。",
   "batteryLowNotificationTitle": "电池电量低",
   "batteryCriticalNotificationTitle": "电池电量严重不足",

@@ -75,8 +75,20 @@ class ShellPowerStatus {
     if (battery.capacity == null) {
       return this;
     }
+    // "Full" and "Not charging" both mean external power without active
+    // charge flow; a mains supply alone keeps the generic idle label.
+    final String state;
+    if (battery.charging) {
+      state = 'charging';
+    } else if (battery.full) {
+      state = 'full';
+    } else if (battery.acOnline) {
+      state = 'idle';
+    } else {
+      state = 'discharging';
+    }
     return ShellPowerStatus(
-      state: battery.charging ? 'charging' : 'discharging',
+      state: state,
       capacity: battery.capacity,
       fastCharge: fastCharge,
       voocCharging: voocCharging,
@@ -104,7 +116,12 @@ class ShellPowerStatus {
   }
 
   BatteryStatus get batteryStatus {
-    return BatteryStatus(capacity: capacity, charging: charging);
+    return BatteryStatus(
+      capacity: capacity,
+      charging: charging,
+      full: state == 'full' || (state == 'idle' && capacity == 100),
+      acOnline: state == 'full' || state == 'idle' || charging,
+    );
   }
 
   ShellChargeProtocol? get chargeProtocol {

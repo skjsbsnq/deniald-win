@@ -168,7 +168,9 @@ class _WifiNetworkRowState extends State<_WifiNetworkRow> {
                   : _hovered || _focused
                   ? context.shellColors.surfaceContainerHighest
                   : context.shellColors.surfaceContainer,
-              borderRadius: context.shellTheme.borderRadius(16),
+              borderRadius: context.shellTheme.borderRadius(
+                ShellShapeScale.medium,
+              ),
               border: Border.all(
                 color: _focused ? accent : context.shellColors.hairlineSoft,
               ),

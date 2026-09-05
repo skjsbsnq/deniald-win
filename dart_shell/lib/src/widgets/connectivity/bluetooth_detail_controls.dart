@@ -26,7 +26,7 @@ class _BluetoothPairingPanel extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: context.shellColors.surfaceContainerHigh,
-        borderRadius: context.shellTheme.borderRadius(16),
+        borderRadius: context.shellTheme.borderRadius(ShellShapeScale.large),
         border: Border.all(
           color: inputError == null
               ? context.shellColors.hairlineSoft
@@ -72,7 +72,9 @@ class _BluetoothPairingPanel extends StatelessWidget {
                 child: DecoratedBox(
                   decoration: BoxDecoration(
                     color: theme.cardColor(context.shellColors.panelBackground),
-                    borderRadius: context.shellTheme.borderRadius(12),
+                    borderRadius: context.shellTheme.borderRadius(
+                      ShellShapeScale.medium,
+                    ),
                     border: Border.all(color: context.shellColors.hairline),
                   ),
                   child: Padding(
@@ -207,7 +209,7 @@ class _BluetoothErrorNotice extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: context.shellColors.surfaceContainerHigh,
-        borderRadius: context.shellTheme.borderRadius(12),
+        borderRadius: context.shellTheme.borderRadius(ShellShapeScale.medium),
         border: Border.all(color: context.shellColors.performanceBad),
       ),
       child: Padding(
@@ -309,7 +311,9 @@ class _BluetoothIconButtonState extends State<_BluetoothIconButton> {
               color: widget.active
                   ? context.shellTheme.accentPalette.container
                   : context.shellColors.surfaceContainerHigh,
-              borderRadius: context.shellTheme.borderRadius(12),
+              borderRadius: context.shellTheme.borderRadius(
+                ShellShapeScale.medium,
+              ),
               border: Border.all(
                 color: _focused ? accent : context.shellColors.hairlineSoft,
               ),
@@ -395,7 +399,9 @@ class _BluetoothInlineButtonState extends State<_BluetoothInlineButton> {
             width: 30,
             height: 30,
             decoration: BoxDecoration(
-              borderRadius: context.shellTheme.borderRadius(9),
+              borderRadius: context.shellTheme.borderRadius(
+                ShellShapeScale.small,
+              ),
               border: _focused ? Border.all(color: accent) : null,
             ),
             child: Icon(
@@ -462,7 +468,9 @@ class _BluetoothTextButtonState extends State<_BluetoothTextButton> {
               color: widget.emphasized
                   ? context.shellTheme.accentPalette.container
                   : context.shellColors.surfaceContainerHighest,
-              borderRadius: context.shellTheme.borderRadius(11),
+              borderRadius: context.shellTheme.borderRadius(
+                ShellShapeScale.medium,
+              ),
               border: Border.all(
                 color: _focused ? accent : context.shellColors.hairlineSoft,
               ),

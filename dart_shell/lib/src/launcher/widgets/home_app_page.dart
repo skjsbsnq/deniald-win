@@ -351,7 +351,9 @@ class _ResizeHandle extends StatelessWidget {
           child: DecoratedBox(
             decoration: BoxDecoration(
               color: ShellMediaColors.lightForeground.withValues(alpha: 0.87),
-              borderRadius: context.shellTheme.borderRadius(16),
+              borderRadius: context.shellTheme.borderRadius(
+                ShellShapeScale.large,
+              ),
               border: Border.all(
                 color: ShellMediaColors.darkSurface.withValues(alpha: 0.54),
               ),

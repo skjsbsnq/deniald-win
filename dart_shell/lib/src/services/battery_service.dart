@@ -49,18 +49,32 @@ class BatteryService {
     return BatteryStatus(
       capacity: capacity.clamp(0, 100),
       charging: selected.any((sample) => sample.charging),
+      full: selected.any((sample) => sample.full),
+      acOnline:
+          scan.acOnline ||
+          selected.any((sample) => sample.charging || sample.full),
     );
   }
 
   Future<_BatteryScan> _readSamples() async {
     try {
       final samples = <_BatterySample>[];
+      var acOnline = false;
       await for (final entity in Directory(powerSupplyRoot).list()) {
         if (entity is! Directory && entity is! Link) {
           continue;
         }
         final path = entity.path;
-        if ((await readSysString('$path/type'))?.toLowerCase() != 'battery') {
+        final type = (await readSysString('$path/type'))?.toLowerCase();
+        if (type == 'mains') {
+          // A mains supply only tells whether external power is present; the
+          // battery aggregates stay authoritative for level and state.
+          if (await readSysInt('$path/online') == 1) {
+            acOnline = true;
+          }
+          continue;
+        }
+        if (type != 'battery') {
           continue;
         }
         final present = await readSysInt('$path/present');
@@ -87,13 +101,17 @@ class BatteryService {
         samples.add(
           _BatterySample(
             capacity: capacity,
+            // Linux reports the plugged-in-and-topped-off case as "Full"
+            // (some drivers "Not charging"); only "Charging" means power is
+            // actually flowing into the pack.
             charging: status == 'charging',
+            full: status == 'full' || status == 'not charging',
             weight: weight,
             weightKind: weightKind,
           ),
         );
       }
-      return _BatteryScan(samples: samples);
+      return _BatteryScan(samples: samples, acOnline: acOnline);
     } on FileSystemException {
       return const _BatteryScan(samples: <_BatterySample>[]);
     }
@@ -101,9 +119,10 @@ class BatteryService {
 }
 
 class _BatteryScan {
-  const _BatteryScan({required this.samples});
+  const _BatteryScan({required this.samples, this.acOnline = false});
 
   final List<_BatterySample> samples;
+  final bool acOnline;
 }
 
 enum _BatteryWeightKind { energy, charge }
@@ -112,12 +131,14 @@ class _BatterySample {
   const _BatterySample({
     required this.capacity,
     required this.charging,
-    required this.weight,
-    required this.weightKind,
+    required this.full,
+    this.weight,
+    this.weightKind,
   });
 
   final int capacity;
   final bool charging;
+  final bool full;
   final double? weight;
   final _BatteryWeightKind? weightKind;
 }

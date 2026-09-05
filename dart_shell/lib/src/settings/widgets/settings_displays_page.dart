@@ -172,7 +172,9 @@ class _SettingsDisplayConfirmationDialogState
             child: DecoratedBox(
               decoration: BoxDecoration(
                 color: context.shellColors.surfaceContainerHigh,
-                borderRadius: context.shellTheme.borderRadius(18),
+                borderRadius: context.shellTheme.borderRadius(
+                  ShellShapeScale.large,
+                ),
                 border: Border.all(color: context.shellColors.hairline),
                 boxShadow: <BoxShadow>[
                   BoxShadow(
@@ -648,7 +650,9 @@ class _MonitorLayoutEditorState extends State<MonitorLayoutEditor> {
                     color: context.shellColors.surfaceContainerHigh.withValues(
                       alpha: 0.56,
                     ),
-                    borderRadius: context.shellTheme.borderRadius(14),
+                    borderRadius: context.shellTheme.borderRadius(
+                      ShellShapeScale.medium,
+                    ),
                     border: Border.all(color: context.shellColors.hairline),
                   ),
                   child: SizedBox(
@@ -767,7 +771,7 @@ class _CanvasZoomButton extends StatelessWidget {
         hoverColor: context.shellColors.textSecondary.withAlpha(26),
         focusColor: context.shellColors.textSecondary.withAlpha(26),
         shape: RoundedRectangleBorder(
-          borderRadius: context.shellTheme.borderRadius(10),
+          borderRadius: context.shellTheme.borderRadius(ShellShapeScale.medium),
           side: BorderSide(color: context.shellColors.hairline),
         ),
       ),
@@ -1302,7 +1306,9 @@ class _DisplayDropdownState<T> extends State<_DisplayDropdown<T>> {
                   padding: const EdgeInsets.fromLTRB(12, 8, 9, 9),
                   decoration: BoxDecoration(
                     color: context.shellColors.surfaceContainerHigh,
-                    borderRadius: context.shellTheme.borderRadius(10),
+                    borderRadius: context.shellTheme.borderRadius(
+                      ShellShapeScale.medium,
+                    ),
                     border: Border.all(
                       color: _expanded || _focused
                           ? accent
@@ -1419,7 +1425,9 @@ class _DisplayDropdownOverlay<T> extends StatelessWidget {
                     child: DecoratedBox(
                       decoration: BoxDecoration(
                         color: context.shellColors.surfaceContainerHighest,
-                        borderRadius: context.shellTheme.borderRadius(10),
+                        borderRadius: context.shellTheme.borderRadius(
+                          ShellShapeScale.medium,
+                        ),
                         border: Border.all(color: context.shellColors.hairline),
                         boxShadow: <BoxShadow>[
                           BoxShadow(
@@ -1520,7 +1528,9 @@ class _DisplayDropdownOptionState<T> extends State<_DisplayDropdownOption<T>> {
                   : _highlighted
                   ? context.shellColors.surfaceContainerHigh
                   : ShellMediaColors.transparentDark,
-              borderRadius: context.shellTheme.borderRadius(7),
+              borderRadius: context.shellTheme.borderRadius(
+                ShellShapeScale.small,
+              ),
             ),
             child: Row(
               children: <Widget>[
@@ -1649,7 +1659,7 @@ class _InlineError extends StatelessWidget {
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: context.shellColors.performanceBad.withValues(alpha: 0.1),
-          borderRadius: context.shellTheme.borderRadius(10),
+          borderRadius: context.shellTheme.borderRadius(ShellShapeScale.medium),
           border: Border.all(
             color: context.shellColors.performanceBad.withValues(alpha: 0.42),
           ),

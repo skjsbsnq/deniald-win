@@ -47,14 +47,8 @@ class _LockScreenPane extends ConsumerStatefulWidget {
 class _LockScreenPaneState extends ConsumerState<_LockScreenPane>
     with SingleTickerProviderStateMixin {
   static const double _unlockThreshold = 0.46;
-  static const Duration _snapDuration = Duration(milliseconds: 210);
 
-  late final Ticker _motion;
-  VoidCallback? _onMotionComplete;
-  double _motionStart = 0.0;
-  double _motionTarget = 0.0;
-  Duration _motionDuration = Duration.zero;
-  Curve _motionCurve = Curves.linear;
+  late final AnimationController _motion;
   double _slideOffset = 0.0;
   bool _dragging = false;
   final TextEditingController _responseController = TextEditingController();
@@ -67,7 +61,8 @@ class _LockScreenPaneState extends ConsumerState<_LockScreenPane>
   @override
   void initState() {
     super.initState();
-    _motion = createTicker(_syncMotion);
+    _motion = AnimationController.unbounded(vsync: this, value: 0.0)
+      ..addListener(() => setState(() => _slideOffset = _motion.value));
   }
 
   @override
@@ -212,7 +207,6 @@ class _LockScreenPaneState extends ConsumerState<_LockScreenPane>
     }
 
     _motion.stop();
-    _onMotionComplete = null;
     _dragging = true;
   }
 
@@ -239,11 +233,9 @@ class _LockScreenPaneState extends ConsumerState<_LockScreenPane>
         .toDouble();
     if (progress >= _unlockThreshold) {
       _showAuthentication();
-      _animateSlideTo(0.0, duration: _snapDuration, curve: Motion.standard);
-      return;
     }
 
-    _animateSlideTo(0.0, duration: _snapDuration, curve: Motion.standard);
+    _animateSlideTo(0.0);
   }
 
   void _showAuthentication() {
@@ -291,41 +283,18 @@ class _LockScreenPaneState extends ConsumerState<_LockScreenPane>
     }
 
     _dragging = false;
-    _animateSlideTo(0.0, duration: _snapDuration, curve: Motion.standard);
+    _animateSlideTo(0.0);
   }
 
-  void _animateSlideTo(
-    double target, {
-    required Duration duration,
-    required Curve curve,
-    VoidCallback? onComplete,
-  }) {
+  void _animateSlideTo(double target) {
     _motion.stop();
-    _motionStart = _slideOffset;
-    _motionTarget = target;
-    _motionDuration = duration;
-    _motionCurve = curve;
-    _onMotionComplete = onComplete;
-    _motion.start();
-  }
-
-  void _syncMotion(Duration elapsed) {
-    final durationMicros = _motionDuration.inMicroseconds;
-    final progress = durationMicros <= 0
-        ? 1.0
-        : (elapsed.inMicroseconds / durationMicros).clamp(0.0, 1.0).toDouble();
-    final eased = _motionCurve.transform(progress);
-
-    setState(() {
-      _slideOffset = _motionStart + (_motionTarget - _motionStart) * eased;
-    });
-
-    if (progress >= 1.0) {
-      _motion.stop();
-      final onComplete = _onMotionComplete;
-      _onMotionComplete = null;
-      onComplete?.call();
-    }
+    _motion.value = _slideOffset;
+    springTo(
+      _motion,
+      target,
+      spring: Motion.expressiveSpatialDefault,
+      telemetryLabel: 'lock_slide',
+    );
   }
 }
 
@@ -407,7 +376,9 @@ class _DesktopUnlockPrompt extends StatelessWidget {
                           DecoratedBox(
                             decoration: BoxDecoration(
                               color: accent.primary,
-                              borderRadius: context.shellTheme.borderRadius(16),
+                              borderRadius: context.shellTheme.borderRadius(
+                                ShellShapeScale.large,
+                              ),
                             ),
                             child: Padding(
                               padding: const EdgeInsets.symmetric(

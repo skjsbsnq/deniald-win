@@ -21,9 +21,11 @@ class DesktopWorkspaceController extends Notifier<DesktopWorkspaceState> {
   double _devicePixelRatio = 1.0;
   Map<int, Rect> _workAreas = const <int, Rect>{};
 
-  /// Publishes per-monitor work areas (output rect minus the system bar).
-  /// Maximized windows are reconciled immediately so a late display-layout
-  /// load or a bar change never leaves a window under the bar.
+  /// Publishes per-monitor work areas (output rect minus the system bar or shelf).
+  ///
+  /// Reconciles maximized window frames so neither the system bar nor shelf
+  /// (both sharing the canonical [DisplayLayout.systemBarThickness] and
+  /// [DisplayLayout.systemBarSide] layout channel) ever overlaps windows.
   void syncWorkAreas(Map<int, Rect> workAreas) {
     if (mapEquals(_workAreas, workAreas)) {
       return;

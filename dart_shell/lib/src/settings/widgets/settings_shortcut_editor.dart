@@ -676,7 +676,9 @@ class _EditorSurface extends StatelessWidget {
         context.shellColors.surfaceContainerHigh,
       ),
       shape: RoundedRectangleBorder(
-        borderRadius: context.shellTheme.borderRadius(20),
+        borderRadius: context.shellTheme.borderRadius(
+          ShellShapeScale.largeIncreased,
+        ),
         side: BorderSide(color: accent.withAlpha(86)),
       ),
       elevation: 18,
@@ -772,11 +774,11 @@ class _ShortcutTextField extends StatelessWidget {
         filled: true,
         fillColor: context.shellColors.surfaceContainerHighest,
         border: OutlineInputBorder(
-          borderRadius: context.shellTheme.borderRadius(12),
+          borderRadius: context.shellTheme.borderRadius(ShellShapeScale.medium),
           borderSide: BorderSide(color: context.shellColors.hairline),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: context.shellTheme.borderRadius(12),
+          borderRadius: context.shellTheme.borderRadius(ShellShapeScale.medium),
           borderSide: BorderSide(color: context.shellColors.hairline),
         ),
       ),
@@ -902,7 +904,7 @@ class _ApplicationSelectionField extends StatelessWidget {
         backgroundColor: context.shellColors.surfaceContainerHighest,
         side: BorderSide(color: context.shellColors.hairline),
         shape: RoundedRectangleBorder(
-          borderRadius: context.shellTheme.borderRadius(12),
+          borderRadius: context.shellTheme.borderRadius(ShellShapeScale.medium),
         ),
       ),
       child: Row(
@@ -1133,11 +1135,11 @@ class _CommandTextField extends StatelessWidget {
         filled: true,
         fillColor: context.shellColors.surfaceContainerHighest,
         border: OutlineInputBorder(
-          borderRadius: context.shellTheme.borderRadius(12),
+          borderRadius: context.shellTheme.borderRadius(ShellShapeScale.medium),
           borderSide: BorderSide(color: context.shellColors.hairline),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: context.shellTheme.borderRadius(12),
+          borderRadius: context.shellTheme.borderRadius(ShellShapeScale.medium),
           borderSide: BorderSide(color: context.shellColors.hairline),
         ),
       ),
@@ -1167,7 +1169,7 @@ class _ActionSelectionField extends StatelessWidget {
         backgroundColor: context.shellColors.surfaceContainerHighest,
         side: BorderSide(color: context.shellColors.hairline),
         shape: RoundedRectangleBorder(
-          borderRadius: context.shellTheme.borderRadius(12),
+          borderRadius: context.shellTheme.borderRadius(ShellShapeScale.medium),
         ),
       ),
       child: Row(
@@ -1309,7 +1311,7 @@ class _EditorErrorMessage extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: context.shellColors.performanceBad.withAlpha(18),
-        borderRadius: context.shellTheme.borderRadius(10),
+        borderRadius: context.shellTheme.borderRadius(ShellShapeScale.medium),
         border: Border.all(
           color: context.shellColors.performanceBad.withAlpha(82),
         ),
@@ -1514,11 +1516,15 @@ class _CatalogLayout extends StatelessWidget {
               filled: true,
               fillColor: context.shellColors.surfaceContainerHighest,
               border: OutlineInputBorder(
-                borderRadius: context.shellTheme.borderRadius(12),
+                borderRadius: context.shellTheme.borderRadius(
+                  ShellShapeScale.medium,
+                ),
                 borderSide: BorderSide(color: context.shellColors.hairline),
               ),
               enabledBorder: OutlineInputBorder(
-                borderRadius: context.shellTheme.borderRadius(12),
+                borderRadius: context.shellTheme.borderRadius(
+                  ShellShapeScale.medium,
+                ),
                 borderSide: BorderSide(color: context.shellColors.hairline),
               ),
             ),
@@ -1562,7 +1568,7 @@ class _ShortcutDraftPreview extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: accent.withAlpha(22),
-        borderRadius: context.shellTheme.borderRadius(10),
+        borderRadius: context.shellTheme.borderRadius(ShellShapeScale.medium),
         border: Border.all(color: accent.withAlpha(70)),
       ),
       child: Padding(
@@ -1618,7 +1624,7 @@ class _ActionCatalogRow extends StatelessWidget {
       selectedColor: foreground,
       selectedTileColor: palette.container,
       shape: RoundedRectangleBorder(
-        borderRadius: context.shellTheme.borderRadius(11),
+        borderRadius: context.shellTheme.borderRadius(ShellShapeScale.medium),
       ),
       leading: Icon(settingsShortcutActionIcon(action), size: 20),
       title: Text(
@@ -1656,7 +1662,7 @@ class _ApplicationCatalogRow extends StatelessWidget {
       selectedColor: foreground,
       selectedTileColor: palette.container,
       shape: RoundedRectangleBorder(
-        borderRadius: context.shellTheme.borderRadius(11),
+        borderRadius: context.shellTheme.borderRadius(ShellShapeScale.medium),
       ),
       leading: SizedBox.square(
         dimension: 30,
@@ -1703,7 +1709,7 @@ class _InputCatalogRow extends StatelessWidget {
     final aliases = input.aliases.join(', ');
     return ListTile(
       shape: RoundedRectangleBorder(
-        borderRadius: context.shellTheme.borderRadius(11),
+        borderRadius: context.shellTheme.borderRadius(ShellShapeScale.medium),
       ),
       leading: Icon(
         input.kind == DenialShortcutInputKind.gesture

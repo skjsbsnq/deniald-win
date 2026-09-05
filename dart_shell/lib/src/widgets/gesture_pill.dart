@@ -1,3 +1,4 @@
+import '../theme/tokens.dart';
 import 'package:flutter/widgets.dart';
 
 import '../theme/shell_theme.dart';
@@ -18,7 +19,9 @@ class GesturePill extends StatelessWidget {
         color: armed
             ? context.shellColors.gestureArmed
             : context.shellColors.gesturePill,
-        borderRadius: context.shellTheme.borderRadius(3),
+        borderRadius: context.shellTheme.borderRadius(
+          ShellShapeScale.extraSmall,
+        ),
         boxShadow: <BoxShadow>[
           BoxShadow(
             color: context.shellColors.shadowSoft,

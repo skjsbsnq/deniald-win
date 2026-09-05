@@ -36,7 +36,9 @@ class _HomeBatteryDischargeTile extends StatelessWidget {
             color: context.shellTheme.cardColor(
               context.shellColors.surfaceContainerLow,
             ),
-            borderRadius: context.shellTheme.borderRadius(8),
+            borderRadius: context.shellTheme.borderRadius(
+              ShellShapeScale.small,
+            ),
             border: Border.all(color: ShellMediaColors.lightOutline),
           ),
           child: Padding(

@@ -62,6 +62,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get batteryIdle => '空闲';
 
   @override
+  String get batteryFullyCharged => '已充满·已接电源';
+
+  @override
   String batteryLowNotificationBody(int percent) {
     return '电池电量仅剩 $percent%。请连接充电器。';
   }

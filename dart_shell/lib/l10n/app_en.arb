@@ -76,6 +76,10 @@
   "@batteryIdle": {
     "description": "English UI text for batteryIdle."
   },
+  "batteryFullyCharged": "Fully charged",
+  "@batteryFullyCharged": {
+    "description": "Battery is topped off while external power is connected."
+  },
   "batteryLowNotificationBody": "Battery is at {percent}%. Connect a charger.",
   "@batteryLowNotificationBody": {
     "description": "Message shown when the battery crosses a low-charge warning threshold.",

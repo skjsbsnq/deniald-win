@@ -59,7 +59,7 @@ class NotificationCard extends StatelessWidget {
                 context.shellColors.panelBackgroundBottom,
               )
             : null,
-        borderRadius: BorderRadius.circular(theme.panelRadius),
+        borderRadius: theme.borderRadius(ShellRadii.notification),
         border: Border.all(
           color: banner
               ? context.shellColors.hairline
@@ -281,13 +281,15 @@ class _NotificationProgress extends StatelessWidget {
       label: context.l10n.notificationProgress(normalized),
       value: context.l10n.settingsPercent(normalized),
       child: ClipRRect(
-        borderRadius: context.shellTheme.borderRadius(2),
+        borderRadius: context.shellTheme.borderRadius(
+          ShellShapeScale.extraSmall,
+        ),
         child: SizedBox(
-          height: 3,
+          height: 4,
           child: Stack(
             fit: StackFit.expand,
             children: [
-              ColoredBox(color: context.shellColors.surfaceContainerHighest),
+              ColoredBox(color: context.shellColors.tileOff),
               FractionallySizedBox(
                 alignment: Alignment.centerLeft,
                 widthFactor: normalized / 100,

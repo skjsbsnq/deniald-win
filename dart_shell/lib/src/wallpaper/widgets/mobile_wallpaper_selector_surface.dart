@@ -9,6 +9,7 @@ import '../../localization/denial_localizations.dart';
 import '../../models/display_layout.dart';
 import '../../state/display_layout.dart';
 import '../../state/shell_controller.dart';
+import '../../theme/motion.dart';
 import '../../theme/shell_theme.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/shell_cursor.dart';
@@ -630,7 +631,7 @@ class _MobileWallpaperPanel extends StatelessWidget {
   }
 }
 
-class _MobileWallpaperCandidateCard extends StatelessWidget {
+class _MobileWallpaperCandidateCard extends StatefulWidget {
   const _MobileWallpaperCandidateCard({
     required this.candidate,
     required this.current,
@@ -646,8 +647,41 @@ class _MobileWallpaperCandidateCard extends StatelessWidget {
   final ValueChanged<Offset> onTapUp;
 
   @override
+  State<_MobileWallpaperCandidateCard> createState() =>
+      _MobileWallpaperCandidateCardState();
+}
+
+class _MobileWallpaperCandidateCardState
+    extends State<_MobileWallpaperCandidateCard>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _press;
+
+  @override
+  void initState() {
+    super.initState();
+    // Unbounded: the expressive fast spring overshoots below 1.0.
+    _press = AnimationController.unbounded(vsync: this, value: 1.0);
+  }
+
+  @override
+  void dispose() {
+    _press.dispose();
+    super.dispose();
+  }
+
+  void _setPressed(bool pressed) {
+    springTo(
+      _press,
+      pressed ? 0.94 : 1.0,
+      spring: Motion.expressiveSpatialFast,
+      telemetryLabel: 'wallpaper_card_press',
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     final accent = ShellTheme.of(context).accentPalette;
+    final candidate = widget.candidate;
     final image = wallpaperCandidateImageProvider(
       candidate,
       cacheHeight: (128 * MediaQuery.devicePixelRatioOf(context)).ceil(),
@@ -660,95 +694,109 @@ class _MobileWallpaperCandidateCard extends StatelessWidget {
     return Semantics(
       excludeSemantics: true,
       button: true,
-      selected: current,
+      selected: widget.current,
       label: context.l10n.wallpaperApplyCandidate(label),
       child: MouseRegion(
         cursor: ShellMouseCursors.link,
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onTapUp: (details) => onTapUp(details.globalPosition),
-          child: SizedBox(
-            width: 174,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: context.shellColors.surfaceContainerHigh,
-                borderRadius: context.shellTheme.borderRadius(18),
-                border: Border.all(
-                  color: current
-                      ? accent.primary
-                      : context.shellColors.hairline,
-                  width: current ? 3 : 1,
+          onTapDown: (_) => _setPressed(true),
+          onTapUp: (details) {
+            _setPressed(false);
+            widget.onTapUp(details.globalPosition);
+          },
+          onTapCancel: () => _setPressed(false),
+          child: AnimatedBuilder(
+            animation: _press,
+            builder: (context, child) =>
+                Transform.scale(scale: _press.value, child: child),
+            child: SizedBox(
+              width: 174,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: context.shellColors.surfaceContainerHigh,
+                  borderRadius: context.shellTheme.borderRadius(
+                    ShellShapeScale.large,
+                  ),
+                  border: Border.all(
+                    color: widget.current
+                        ? accent.outline
+                        : context.shellColors.hairline,
+                    width: widget.current ? 3 : 1,
+                  ),
                 ),
-              ),
-              child: ClipRRect(
-                borderRadius: context.shellTheme.borderRadius(
-                  current ? 14 : 17,
-                ),
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    if (image != null)
-                      Image(
-                        image: image,
-                        fit: BoxFit.cover,
-                        filterQuality: FilterQuality.medium,
-                        gaplessPlayback: true,
-                        excludeFromSemantics: true,
-                        errorBuilder: (_, _, _) => ColoredBox(
+                child: ClipRRect(
+                  borderRadius: context.shellTheme.borderRadius(
+                    widget.current
+                        ? ShellShapeScale.medium
+                        : ShellShapeScale.large,
+                  ),
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      if (image != null)
+                        Image(
+                          image: image,
+                          fit: BoxFit.cover,
+                          filterQuality: FilterQuality.medium,
+                          gaplessPlayback: true,
+                          excludeFromSemantics: true,
+                          errorBuilder: (_, _, _) => ColoredBox(
+                            color: context.shellColors.surfaceContainerHigh,
+                            child: Icon(
+                              Icons.broken_image_rounded,
+                              color: context.shellColors.textTertiary,
+                            ),
+                          ),
+                        )
+                      else
+                        ColoredBox(
                           color: context.shellColors.surfaceContainerHigh,
                           child: Icon(
-                            Icons.broken_image_rounded,
+                            Icons.image_rounded,
                             color: context.shellColors.textTertiary,
                           ),
                         ),
-                      )
-                    else
-                      ColoredBox(
-                        color: context.shellColors.surfaceContainerHigh,
-                        child: Icon(
-                          Icons.image_rounded,
-                          color: context.shellColors.textTertiary,
-                        ),
-                      ),
-                    Positioned(
-                      left: 0,
-                      right: 0,
-                      bottom: 0,
-                      child: ColoredBox(
-                        color: ShellMediaColors.darkness.withValues(
-                          alpha: 0.78,
-                        ),
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 7,
+                      Positioned(
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        child: ColoredBox(
+                          color: ShellMediaColors.darkness.withValues(
+                            alpha: 0.78,
                           ),
-                          child: Text(
-                            label,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: ShellText.cardTitle.copyWith(fontSize: 12),
-                          ),
-                        ),
-                      ),
-                    ),
-                    if (downloading)
-                      ColoredBox(
-                        color: context.shellColors.overviewScrim,
-                        child: Center(
-                          child: SizedBox.square(
-                            dimension: 38,
-                            child: CircularProgressIndicator(
-                              value: downloadProgress > 0
-                                  ? downloadProgress
-                                  : null,
-                              color: accent.primary,
-                              strokeWidth: 4,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 7,
+                            ),
+                            child: Text(
+                              label,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: ShellText.cardTitle.copyWith(fontSize: 12),
                             ),
                           ),
                         ),
                       ),
-                  ],
+                      if (widget.downloading)
+                        ColoredBox(
+                          color: context.shellColors.overviewScrim,
+                          child: Center(
+                            child: SizedBox.square(
+                              dimension: 38,
+                              child: CircularProgressIndicator(
+                                value: widget.downloadProgress > 0
+                                    ? widget.downloadProgress
+                                    : null,
+                                color: accent.primary,
+                                strokeWidth: 4,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ),
             ),

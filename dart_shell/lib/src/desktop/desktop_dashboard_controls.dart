@@ -53,7 +53,9 @@ class _DashboardIconButtonState extends State<_DashboardIconButton> {
                   : _hovered
                   ? context.shellColors.surfaceContainerHighest
                   : context.shellColors.surfaceContainerHigh,
-              borderRadius: context.shellTheme.borderRadius(12),
+              borderRadius: context.shellTheme.borderRadius(
+                ShellShapeScale.medium,
+              ),
             ),
             child: widget.busy
                 ? Padding(
@@ -134,7 +136,9 @@ class _DashboardValueButtonState extends State<_DashboardValueButton> {
               color: _hovered || _focused
                   ? context.shellColors.surfaceContainerHighest
                   : context.shellColors.surfaceContainerHigh,
-              borderRadius: context.shellTheme.borderRadius(12),
+              borderRadius: context.shellTheme.borderRadius(
+                ShellShapeScale.medium,
+              ),
               border: Border.all(
                 color: _focused
                     ? accent.primary

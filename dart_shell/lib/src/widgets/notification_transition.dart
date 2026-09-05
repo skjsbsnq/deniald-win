@@ -52,11 +52,20 @@ class _NotificationTransitionState extends State<_NotificationTransition>
     );
     _curved = CurvedAnimation(
       parent: _controller,
-      curve: Motion.md3EmphasizedDecelerate,
+      curve: Curves.linear,
       reverseCurve: Motion.md3EmphasizedAccelerate,
     );
     if (widget.visible) {
-      _controller.forward();
+      if (widget.duration == Duration.zero) {
+        _controller.value = 1.0;
+      } else {
+        springTo(
+          _controller,
+          1.0,
+          spring: Motion.expressiveSpatialDefault,
+          telemetryLabel: 'notification_banner_entry',
+        );
+      }
     }
   }
 
@@ -72,7 +81,16 @@ class _NotificationTransitionState extends State<_NotificationTransition>
       return;
     }
     if (widget.visible) {
-      _controller.forward();
+      if (widget.duration == Duration.zero) {
+        _controller.value = 1.0;
+      } else {
+        springTo(
+          _controller,
+          1.0,
+          spring: Motion.expressiveSpatialDefault,
+          telemetryLabel: 'notification_banner_entry',
+        );
+      }
     } else {
       _controller.reverse();
     }
@@ -120,7 +138,7 @@ class _NotificationTransitionState extends State<_NotificationTransition>
             child: RepaintBoundary(
               child: ShellBackdropBlur(
                 blur: theme.effectivePanelOpacity < 1.0,
-                borderRadius: BorderRadius.circular(theme.panelRadius),
+                borderRadius: theme.borderRadius(ShellRadii.notification),
                 child: cardRegion,
               ),
             ),

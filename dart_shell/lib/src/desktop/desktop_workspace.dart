@@ -112,6 +112,9 @@ abstract final class DesktopMetrics {
     return (outputRect ?? canvas).intersect(canvas);
   }
 
+  /// Returns the canvas bounds as a fallback work area when per-monitor work
+  /// areas have not yet been synced. Standard per-monitor work areas deduct
+  /// [DisplayLayout.systemBarThickness] at the configured system bar or shelf edge.
   static Rect windowWorkArea(Size viewSize) {
     return Offset.zero & viewSize;
   }

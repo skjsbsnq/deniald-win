@@ -171,6 +171,7 @@ String localizedBatteryState(
 }) => switch (state) {
   'charging' => l10n.batteryCharging,
   'discharging' => l10n.batteryDischarging,
+  'full' => l10n.batteryFullyCharged,
   'idle' => l10n.batteryIdle,
   _ => showUnknown ? l10n.statusUnknown : '',
 };

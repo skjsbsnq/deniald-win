@@ -2,7 +2,6 @@ import 'dart:math' as math;
 import 'dart:ui' show ImageFilter, TileMode;
 
 import 'package:flutter/material.dart' show Icons;
-import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';

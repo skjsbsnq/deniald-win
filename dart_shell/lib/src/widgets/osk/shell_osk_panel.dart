@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 
 import '../../../l10n/generated/app_localizations.dart';
 import '../../localization/denial_localizations.dart';
+import '../../theme/motion.dart';
 import '../../theme/shell_theme.dart';
 import '../../theme/tokens.dart';
 
@@ -356,7 +357,6 @@ class _OskKeyButton extends StatefulWidget {
 class _OskKeyButtonState extends State<_OskKeyButton>
     with SingleTickerProviderStateMixin {
   static const Duration _minimumVisibleDuration = Duration(milliseconds: 180);
-  static const Duration _fadeOutDuration = Duration(milliseconds: 360);
 
   late final AnimationController _glow = AnimationController(
     vsync: this,
@@ -424,7 +424,9 @@ class _OskKeyButtonState extends State<_OskKeyButton>
                         : accent,
                     glow * 0.48,
                   ),
-                  borderRadius: context.shellTheme.borderRadius(16),
+                  borderRadius: context.shellTheme.borderRadius(
+                    ShellShapeScale.small,
+                  ),
                   border: Border.all(color: border),
                   boxShadow: glowAlpha <= 0
                       ? []
@@ -510,7 +512,12 @@ class _OskKeyButtonState extends State<_OskKeyButton>
   }
 
   void _fadeOut() {
-    _glow.animateTo(0, duration: _fadeOutDuration, curve: Curves.linear);
+    springTo(
+      _glow,
+      0.0,
+      spring: Motion.expressiveEffectsFast,
+      telemetryLabel: 'osk_key_release',
+    );
   }
 
   Color _backgroundFor(_OskKeySpec spec, bool selected) {

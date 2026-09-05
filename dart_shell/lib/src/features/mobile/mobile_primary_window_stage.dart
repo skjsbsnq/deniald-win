@@ -20,7 +20,7 @@ class MobilePrimaryWindowStage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final switchRadius = context.shellTheme.borderRadius(18);
+    final switchRadius = context.shellTheme.borderRadius(ShellShapeScale.large);
     final target = switchTargetWindow;
     if (target == null || switchDragX.abs() < 0.5) {
       final texture = WindowContentRect(

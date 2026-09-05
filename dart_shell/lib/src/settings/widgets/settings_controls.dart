@@ -117,7 +117,7 @@ class SettingsSavedBadge extends StatelessWidget {
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: context.shellColors.surfaceContainerHigh,
-          borderRadius: context.shellTheme.borderRadius(ShellRadii.chip),
+          borderRadius: context.shellTheme.borderRadius(ShellShapeScale.full),
           border: Border.all(color: context.shellColors.hairlineSoft),
         ),
         child: Padding(
@@ -158,7 +158,7 @@ class SettingsCardGroup extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = ShellTheme.of(context);
-    final radius = BorderRadius.circular(theme.panelRadius);
+    final radius = theme.borderRadius(ShellShapeScale.large);
     return DecoratedBox(
       decoration: BoxDecoration(
         color: theme.cardColor(context.shellColors.surfaceContainerLow),
@@ -385,7 +385,7 @@ class SettingsSlider extends StatelessWidget {
   }
 }
 
-class SettingsToggle extends StatelessWidget {
+class SettingsToggle extends StatefulWidget {
   const SettingsToggle({
     required this.label,
     required this.description,
@@ -402,14 +402,56 @@ class SettingsToggle extends StatelessWidget {
   final bool enabled;
 
   @override
+  State<SettingsToggle> createState() => _SettingsToggleState();
+}
+
+class _SettingsToggleState extends State<SettingsToggle>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _valueController;
+
+  @override
+  void initState() {
+    super.initState();
+    _valueController = AnimationController(
+      vsync: this,
+      value: widget.value ? 1.0 : 0.0,
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant SettingsToggle oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.value != widget.value) {
+      if (MediaQuery.disableAnimationsOf(context)) {
+        _valueController.value = widget.value ? 1.0 : 0.0;
+      } else {
+        springTo(
+          _valueController,
+          widget.value ? 1.0 : 0.0,
+          spring: Motion.expressiveEffectsDefault,
+          telemetryLabel: 'settings_toggle_effects',
+        );
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _valueController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final theme = ShellTheme.of(context);
     final accent = theme.accent;
+    final enabled = widget.enabled;
+    final value = widget.value;
     return Semantics(
       button: true,
       enabled: enabled,
       toggled: value,
-      label: label,
+      label: widget.label,
       child: FocusableActionDetector(
         enabled: enabled,
         mouseCursor: enabled
@@ -423,7 +465,7 @@ class SettingsToggle extends StatelessWidget {
           ActivateIntent: CallbackAction<ActivateIntent>(
             onInvoke: (_) {
               if (enabled) {
-                onChanged(!value);
+                widget.onChanged(!value);
               }
               return null;
             },
@@ -434,17 +476,17 @@ class SettingsToggle extends StatelessWidget {
           opacity: enabled ? 1 : 0.46,
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onTap: enabled ? () => onChanged(!value) : null,
+            onTap: enabled ? () => widget.onChanged(!value) : null,
             child: Row(
               children: [
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(label, style: ShellText.cardTitle),
+                      Text(widget.label, style: ShellText.cardTitle),
                       const SizedBox(height: 4),
                       Text(
-                        description,
+                        widget.description,
                         style: ShellText.base.copyWith(
                           color: context.shellColors.textTertiary,
                           fontSize: 12,
@@ -454,30 +496,48 @@ class SettingsToggle extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 18),
-                AnimatedContainer(
-                  duration: Motion.tile,
-                  width: 44,
-                  height: 25,
-                  padding: const EdgeInsets.all(3),
-                  alignment: value
-                      ? Alignment.centerRight
-                      : Alignment.centerLeft,
-                  decoration: BoxDecoration(
-                    color: value
-                        ? accent
-                        : context.shellColors.surfaceContainerHighest,
-                    borderRadius: context.shellTheme.borderRadius(99),
-                    border: Border.all(
-                      color: value ? accent : context.shellColors.hairline,
-                    ),
-                  ),
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: context.shellColors.sliderThumb,
-                      borderRadius: theme.borderRadius(8.5),
-                    ),
-                    child: SizedBox.square(dimension: 17),
-                  ),
+                AnimatedBuilder(
+                  animation: _valueController,
+                  builder: (context, _) {
+                    // The color cross-fade runs on the effects spring; the
+                    // thumb position keeps its container alignment animation.
+                    final t = _valueController.value.clamp(0.0, 1.0);
+                    return AnimatedContainer(
+                      duration: Motion.tile,
+                      width: 44,
+                      height: 25,
+                      padding: const EdgeInsets.all(3),
+                      alignment: value
+                          ? Alignment.centerRight
+                          : Alignment.centerLeft,
+                      decoration: BoxDecoration(
+                        color: Color.lerp(
+                          context.shellColors.surfaceContainerHighest,
+                          accent,
+                          t,
+                        )!,
+                        borderRadius: context.shellTheme.borderRadius(
+                          ShellShapeScale.full,
+                        ),
+                        border: Border.all(
+                          color: Color.lerp(
+                            context.shellColors.hairline,
+                            accent,
+                            t,
+                          )!,
+                        ),
+                      ),
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: context.shellColors.sliderThumb,
+                          borderRadius: theme.borderRadius(
+                            ShellShapeScale.small,
+                          ),
+                        ),
+                        child: SizedBox.square(dimension: 17),
+                      ),
+                    );
+                  },
                 ),
               ],
             ),
@@ -1061,7 +1121,9 @@ class _AnchorButton extends StatelessWidget {
             color: selected
                 ? accent.withAlpha(46)
                 : context.shellColors.surfaceContainerHigh,
-            borderRadius: context.shellTheme.borderRadius(8),
+            borderRadius: context.shellTheme.borderRadius(
+              ShellShapeScale.small,
+            ),
             border: Border.all(
               color: selected ? accent : context.shellColors.hairline,
             ),

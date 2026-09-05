@@ -209,7 +209,9 @@ class _LockPreview extends StatelessWidget {
                 child: DecoratedBox(
                   decoration: BoxDecoration(
                     color: context.shellColors.panelBackgroundBottom,
-                    borderRadius: context.shellTheme.borderRadius(18),
+                    borderRadius: context.shellTheme.borderRadius(
+                      ShellShapeScale.large,
+                    ),
                     border: Border.all(color: accent.withAlpha(96)),
                     boxShadow: [
                       BoxShadow(

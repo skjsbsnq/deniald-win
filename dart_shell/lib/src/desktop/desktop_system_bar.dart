@@ -54,10 +54,6 @@ class DesktopSystemBar extends ConsumerWidget {
     final batteryVisible = ref.watch(
       batteryProvider.select((battery) => battery.capacity != null),
     );
-    final cpuVisible = ref.watch(
-      cpuUsageProvider.select((cpu) => cpu.current != null),
-    );
-    final gpuCount = ref.watch(gpuUsageProvider.select((gpus) => gpus.length));
     final mediaVisible = ref.watch(
       mediaPlaybackProvider.select((media) => media.value?.available ?? false),
     );
@@ -102,11 +98,7 @@ class DesktopSystemBar extends ConsumerWidget {
           if (mediaVisible)
             _SystemBarEntrance(
               key: const ValueKey('system-bar-media'),
-              index:
-                  (cpuVisible ? 1 : 0) +
-                  gpuCount +
-                  (batteryVisible ? 1 : 0) +
-                  1,
+              index: (batteryVisible ? 1 : 0) + 1,
               horizontal: horizontal,
               child: Padding(
                 padding: horizontal
@@ -121,7 +113,7 @@ class DesktopSystemBar extends ConsumerWidget {
           if (batteryVisible)
             _SystemBarEntrance(
               key: const ValueKey('system-bar-battery'),
-              index: (cpuVisible ? 1 : 0) + gpuCount + 1,
+              index: 1,
               horizontal: horizontal,
               child: Padding(
                 padding: horizontal
@@ -133,14 +125,6 @@ class DesktopSystemBar extends ConsumerWidget {
                 ),
               ),
             ),
-          if (gpuCount > 0)
-            _GpuStatusCards(
-              accent: accent,
-              horizontal: horizontal,
-              cpuVisible: cpuVisible,
-            ),
-          if (cpuVisible)
-            _CpuStatusCard(accent: accent, horizontal: horizontal),
           _SystemBarEntrance(
             key: const ValueKey('system-bar-clock'),
             index: 0,

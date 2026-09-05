@@ -1260,7 +1260,7 @@ class _EnvironmentStatusMarker extends StatelessWidget {
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: color.withValues(alpha: 0.12),
-          borderRadius: context.shellTheme.borderRadius(7),
+          borderRadius: context.shellTheme.borderRadius(ShellShapeScale.small),
           border: Border.all(color: color.withValues(alpha: 0.62)),
         ),
         child: SizedBox.square(

@@ -373,7 +373,9 @@ class _ShortcutRow extends StatelessWidget {
                   child: DecoratedBox(
                     decoration: BoxDecoration(
                       color: context.shellColors.surfaceContainerHigh,
-                      borderRadius: context.shellTheme.borderRadius(10),
+                      borderRadius: context.shellTheme.borderRadius(
+                        ShellShapeScale.medium,
+                      ),
                       border: Border.all(color: context.shellColors.hairline),
                     ),
                     child: Padding(
@@ -506,7 +508,7 @@ class _ShortcutIconButton extends StatelessWidget {
         hoverColor: foreground.withAlpha(28),
         focusColor: foreground.withAlpha(28),
         shape: RoundedRectangleBorder(
-          borderRadius: context.shellTheme.borderRadius(11),
+          borderRadius: context.shellTheme.borderRadius(ShellShapeScale.medium),
           side: BorderSide(color: context.shellColors.hairline),
         ),
       ),
@@ -541,7 +543,7 @@ class _ShortcutErrorBanner extends StatelessWidget {
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: context.shellColors.performanceBad.withAlpha(18),
-          borderRadius: context.shellTheme.borderRadius(12),
+          borderRadius: context.shellTheme.borderRadius(ShellShapeScale.medium),
           border: Border.all(
             color: context.shellColors.performanceBad.withAlpha(82),
           ),

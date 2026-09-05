@@ -85,14 +85,14 @@ class _DesktopAppSearchField extends StatelessWidget {
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: theme.cardColor(context.shellColors.surfaceContainerHigh),
-          borderRadius: context.shellTheme.borderRadius(ShellRadii.chip),
+          borderRadius: context.shellTheme.borderRadius(ShellShapeScale.full),
         ),
         child: Stack(
           children: <Widget>[
             SizedBox(
-              height: 44,
+              height: 48,
               child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 13),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Row(
                   children: [
                     Icon(
@@ -172,11 +172,11 @@ class _DesktopAppSearchField extends StatelessWidget {
                   builder: (context, child) => DecoratedBox(
                     decoration: BoxDecoration(
                       borderRadius: context.shellTheme.borderRadius(
-                        ShellRadii.chip,
+                        ShellShapeScale.full,
                       ),
                       border: Border.all(
                         color: focusNode.hasFocus
-                            ? accent.primary
+                            ? accent.outline
                             : context.shellColors.hairline,
                       ),
                     ),
@@ -236,14 +236,28 @@ class _DesktopAppTile extends StatefulWidget {
   State<_DesktopAppTile> createState() => _DesktopAppTileState();
 }
 
-class _DesktopAppTileState extends State<_DesktopAppTile> {
+class _DesktopAppTileState extends State<_DesktopAppTile>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pressController;
   bool _hovered = false;
   late bool _selected = widget.selected;
+
+  @override
+  void initState() {
+    super.initState();
+    _pressController = AnimationController.unbounded(vsync: this, value: 0.0);
+  }
 
   @override
   void didUpdateWidget(covariant _DesktopAppTile oldWidget) {
     super.didUpdateWidget(oldWidget);
     _selected = widget.selected;
+  }
+
+  @override
+  void dispose() {
+    _pressController.dispose();
+    super.dispose();
   }
 
   void setSelected(bool selected) {
@@ -253,21 +267,30 @@ class _DesktopAppTileState extends State<_DesktopAppTile> {
     setState(() => _selected = selected);
   }
 
+  void _updatePress(bool pressed) {
+    springTo(
+      _pressController,
+      pressed ? 1.0 : 0.0,
+      spring: Motion.expressiveSpatialFast,
+      telemetryLabel: 'desktop_app_tile_press',
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = ShellTheme.of(context);
+    final colors = context.shellColors;
     final accent = theme.accentPalette;
     final l10n = context.l10n;
     final highlighted = _selected || _hovered;
+    final borderRadius = theme.borderRadius(ShellShapeScale.medium);
     final name = Text(
       widget.app.name,
       maxLines: widget.singleLineName ? 1 : 2,
       overflow: TextOverflow.ellipsis,
       textAlign: TextAlign.center,
-      style: context.shellTheme.text.cardTitle.copyWith(
-        color: highlighted
-            ? accent.onContainer
-            : context.shellColors.textPrimary,
+      style: theme.text.cardTitle.copyWith(
+        color: colors.textPrimary,
         fontSize: 11,
       ),
     );
@@ -281,39 +304,59 @@ class _DesktopAppTileState extends State<_DesktopAppTile> {
         onExit: (_) => setState(() => _hovered = false),
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
+          onTapDown: (_) => _updatePress(true),
+          onTapUp: (_) => _updatePress(false),
+          onTapCancel: () => _updatePress(false),
           onTap: widget.onTap,
-          child: AnimatedContainer(
-            duration: Motion.tile,
-            curve: Motion.standard,
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              // Keep the idle endpoint in the accent hue so the implicit
-              // alpha transition never flashes through neutral grey before
-              // reaching the highlighted state.
-              color: highlighted
-                  ? theme.cardColor(accent.container)
-                  : accent.container.withValues(alpha: 0),
-              borderRadius: context.shellTheme.borderRadius(18),
-              border: _selected ? Border.all(color: accent.primary) : null,
-            ),
-            child: Column(
-              children: [
-                SizedBox(
-                  width: 54,
-                  height: 54,
-                  child: widget.app.icon != null
-                      ? ExcludeSemantics(
-                          child: Icon(
-                            widget.app.icon!,
-                            size: 46,
-                            color: accent.primary,
-                          ),
-                        )
-                      : DeferredAppIcon(iconPath: widget.app.iconPath),
+          child: AnimatedBuilder(
+            animation: _pressController,
+            builder: (context, child) {
+              final pressT = _pressController.value.clamp(0.0, 1.0);
+              final hoverColor = highlighted
+                  ? colors.panelHighlight
+                  : colors.panelHighlight.withValues(alpha: 0);
+              final backgroundColor = Color.lerp(
+                hoverColor,
+                accent.subtle,
+                pressT,
+              );
+              final scale = 1.0 - 0.06 * _pressController.value;
+
+              return Transform.scale(
+                scale: scale,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: backgroundColor,
+                    borderRadius: borderRadius,
+                    border: _selected
+                        ? Border.all(color: accent.primary)
+                        : null,
+                  ),
+                  child: child,
                 ),
-                const SizedBox(height: 8),
-                if (widget.singleLineName) name else Expanded(child: name),
-              ],
+              );
+            },
+            child: Padding(
+              padding: const EdgeInsets.all(10),
+              child: Column(
+                children: [
+                  SizedBox(
+                    width: 54,
+                    height: 54,
+                    child: widget.app.icon != null
+                        ? ExcludeSemantics(
+                            child: Icon(
+                              widget.app.icon!,
+                              size: 46,
+                              color: accent.primary,
+                            ),
+                          )
+                        : DeferredAppIcon(iconPath: widget.app.iconPath),
+                  ),
+                  const SizedBox(height: 8),
+                  if (widget.singleLineName) name else Expanded(child: name),
+                ],
+              ),
             ),
           ),
         ),

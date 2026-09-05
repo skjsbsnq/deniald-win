@@ -16,6 +16,7 @@ class RangeBar extends StatefulWidget {
     required this.onChangeEnd,
     required this.height,
     this.onChangeStart,
+    this.trailing,
   });
 
   final IconData icon;
@@ -26,6 +27,7 @@ class RangeBar extends StatefulWidget {
   final ValueChanged<double> onChangeEnd;
   final double height;
   final VoidCallback? onChangeStart;
+  final Widget? trailing;
 
   @override
   State<RangeBar> createState() => _RangeBarState();
@@ -116,18 +118,72 @@ class _RangeBarState extends State<RangeBar> {
 
   @override
   Widget build(BuildContext context) {
+    final trailingWidget = widget.trailing;
+    if (trailingWidget != null) {
+      return Row(
+        children: [
+          Expanded(child: _buildTrack(context)),
+          const SizedBox(width: 8.0),
+          trailingWidget,
+        ],
+      );
+    }
+    return _buildTrack(context);
+  }
+
+  Widget _buildTrack(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
+        final totalWidth = constraints.maxWidth;
         final clamped = _displayValue;
+        final theme = context.shellTheme;
+        final colors = context.shellColors;
+        final radius = theme.borderRadius(widget.height / 2);
+
+        const splitGap = 4.0;
+        final isNearEmpty = clamped <= 0.02;
+        final isNearFull = clamped >= 0.98;
+
+        final double activeWidth;
+        final double inactiveWidth;
+        if (isNearEmpty) {
+          activeWidth = 0.0;
+          inactiveWidth = totalWidth;
+        } else if (isNearFull) {
+          activeWidth = totalWidth;
+          inactiveWidth = 0.0;
+        } else {
+          activeWidth = (totalWidth * clamped - splitGap / 2).clamp(
+            0.0,
+            totalWidth,
+          );
+          inactiveWidth = (totalWidth - activeWidth - splitGap).clamp(
+            0.0,
+            totalWidth,
+          );
+        }
+
+        final showDot = !isNearFull && inactiveWidth > 40.0;
+        final dotX = totalWidth * 0.82;
+        final showDotAtX =
+            showDot &&
+            (dotX > (activeWidth + splitGap + 8.0)) &&
+            (dotX < totalWidth - 12.0);
+
+        final iconOnActive = activeWidth >= 28.0;
+        final iconColor = iconOnActive
+            ? theme.accentPalette.onPrimary
+            : colors.textPrimary;
+
         return Listener(
           onPointerSignal: _handlePointerSignal,
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
             onTapDown: (details) {
-              _updateFromPosition(details.localPosition, constraints.maxWidth);
+              _updateFromPosition(details.localPosition, totalWidth);
             },
             onTapUp: (details) {
-              _updateFromPosition(details.localPosition, constraints.maxWidth);
+              _updateFromPosition(details.localPosition, totalWidth);
               _endGesture();
             },
             onTapCancel: _endGesture,
@@ -135,79 +191,74 @@ class _RangeBarState extends State<RangeBar> {
               if (details.kind == PointerDeviceKind.trackpad) {
                 _startRelativeGesture();
               } else {
-                _updateFromPosition(
-                  details.localPosition,
-                  constraints.maxWidth,
-                );
+                _updateFromPosition(details.localPosition, totalWidth);
               }
             },
             onHorizontalDragUpdate: (details) {
               if (details.kind == PointerDeviceKind.trackpad) {
-                _updateFromDelta(
-                  details.primaryDelta ?? 0,
-                  constraints.maxWidth,
-                );
+                _updateFromDelta(details.primaryDelta ?? 0, totalWidth);
               } else {
-                _updateFromPosition(
-                  details.localPosition,
-                  constraints.maxWidth,
-                );
+                _updateFromPosition(details.localPosition, totalWidth);
               }
             },
             onHorizontalDragEnd: (_) => _endGesture(),
             onHorizontalDragCancel: _endGesture,
             child: SizedBox(
               height: widget.height,
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: widget.inactiveColor,
-                  borderRadius: context.shellTheme.borderRadius(
-                    widget.height / 2,
-                  ),
-                  border: Border.all(color: context.shellColors.hairlineSoft),
-                ),
-                child: ClipRRect(
-                  borderRadius: context.shellTheme.borderRadius(
-                    widget.height / 2,
-                  ),
-                  child: Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      FractionallySizedBox(
-                        alignment: Alignment.centerLeft,
-                        widthFactor: clamped,
-                        child: ColoredBox(color: widget.activeColor),
-                      ),
-                      Positioned(
-                        top: 6,
-                        bottom: 6,
-                        left: (constraints.maxWidth * clamped - 2).clamp(
-                          16.0,
-                          constraints.maxWidth - 18.0,
+              child: Stack(
+                children: [
+                  if (activeWidth > 0)
+                    Positioned(
+                      left: 0,
+                      top: 0,
+                      bottom: 0,
+                      width: activeWidth,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: widget.activeColor,
+                          borderRadius: radius,
                         ),
-                        width: 5,
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            color: context.shellColors.sliderThumb,
-                            borderRadius: context.shellTheme.borderRadius(4),
+                      ),
+                    ),
+                  if (inactiveWidth > 0)
+                    Positioned(
+                      left: activeWidth > 0 ? activeWidth + splitGap : 0,
+                      top: 0,
+                      bottom: 0,
+                      width: inactiveWidth,
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: widget.inactiveColor,
+                          borderRadius: radius,
+                          border: Border.all(
+                            color: colors.hairlineSoft.withValues(alpha: 0.50),
+                            width: 1.0,
                           ),
                         ),
                       ),
-                      Positioned(
-                        right: 15,
-                        top: 0,
-                        bottom: 0,
-                        child: Icon(
-                          widget.icon,
-                          color: clamped > 0.72
-                              ? context.shellTheme.accentPalette.onPrimary
-                              : context.shellColors.panelText,
-                          size: 25,
+                    ),
+                  if (showDotAtX)
+                    Positioned(
+                      left: dotX - 2.0,
+                      top: (widget.height - 4.0) / 2,
+                      child: Container(
+                        width: 4.0,
+                        height: 4.0,
+                        decoration: BoxDecoration(
+                          color: colors.textTertiary.withValues(alpha: 0.55),
+                          shape: BoxShape.circle,
                         ),
                       ),
-                    ],
+                    ),
+                  Positioned(
+                    left: 12.0,
+                    top: 0,
+                    bottom: 0,
+                    child: Center(
+                      child: Icon(widget.icon, color: iconColor, size: 20.0),
+                    ),
                   ),
-                ),
+                ],
               ),
             ),
           ),

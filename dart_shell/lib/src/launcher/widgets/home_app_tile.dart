@@ -30,15 +30,23 @@ class _HomeAppTile extends StatelessWidget {
               child: Center(
                 child: SizedBox.square(
                   dimension: 85,
-                  child: icon == null
-                      ? AppIconImage(iconPath: iconPath)
-                      : ExcludeSemantics(
-                          child: Icon(
-                            icon,
-                            size: 72,
-                            color: ShellTheme.of(context).accentPalette.primary,
+                  child: ClipRRect(
+                    borderRadius: context.shellTheme.borderRadius(
+                      ShellShapeScale.large,
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: icon == null
+                        ? AppIconImage(iconPath: iconPath)
+                        : ExcludeSemantics(
+                            child: Icon(
+                              icon,
+                              size: 72,
+                              color: ShellTheme.of(
+                                context,
+                              ).accentPalette.primary,
+                            ),
                           ),
-                        ),
+                  ),
                 ),
               ),
             ),

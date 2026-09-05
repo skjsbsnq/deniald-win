@@ -24,13 +24,41 @@ class _ClipboardEntryDragState {
   }
 }
 
-class _DraggedClipboardEntry extends StatelessWidget {
+class _DraggedClipboardEntry extends StatefulWidget {
   const _DraggedClipboardEntry({required this.state});
 
   final _ClipboardEntryDragState state;
 
   @override
+  State<_DraggedClipboardEntry> createState() => _DraggedClipboardEntryState();
+}
+
+class _DraggedClipboardEntryState extends State<_DraggedClipboardEntry>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _lift;
+
+  @override
+  void initState() {
+    super.initState();
+    // Unbounded: the expressive fast spring overshoots past 1.0.
+    _lift = AnimationController.unbounded(vsync: this, value: 1.0);
+    springTo(
+      _lift,
+      1.06,
+      spring: Motion.expressiveSpatialFast,
+      telemetryLabel: 'clipboard_drag_lift',
+    );
+  }
+
+  @override
+  void dispose() {
+    _lift.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final state = widget.state;
     final origin =
         state.position -
         Offset(
@@ -46,13 +74,18 @@ class _DraggedClipboardEntry extends StatelessWidget {
       child: IgnorePointer(
         child: ExcludeSemantics(
           child: RepaintBoundary(
-            child: _ClipboardEntryItem(
-              onDelete: () {},
-              pinned: state.entry.pinned,
-              onTogglePinned: () {},
-              showDelete: false,
-              showPin: false,
-              child: _ClipboardEntryVisual(entry: state.entry, lifted: true),
+            child: AnimatedBuilder(
+              animation: _lift,
+              builder: (context, child) =>
+                  Transform.scale(scale: _lift.value, child: child),
+              child: _ClipboardEntryItem(
+                onDelete: () {},
+                pinned: state.entry.pinned,
+                onTogglePinned: () {},
+                showDelete: false,
+                showPin: false,
+                child: _ClipboardEntryVisual(entry: state.entry, lifted: true),
+              ),
             ),
           ),
         ),

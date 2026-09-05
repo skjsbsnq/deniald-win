@@ -105,7 +105,7 @@ class _OverviewLayerState extends State<OverviewLayer>
       springTo(
         _controller,
         0.0,
-        spring: Motion.gentle,
+        spring: Motion.expressiveSpatialDefault,
         telemetryLabel: 'overview_home_settle',
       );
       return;
@@ -122,7 +122,7 @@ class _OverviewLayerState extends State<OverviewLayer>
       springTo(
         _controller,
         widget.visible ? 1.0 : 0.0,
-        spring: Motion.gentle,
+        spring: Motion.expressiveSpatialDefault,
         telemetryLabel: widget.visible ? 'overview_open' : 'overview_close',
       );
       return;
@@ -146,7 +146,7 @@ class _OverviewLayerState extends State<OverviewLayer>
       springTo(
         _controller,
         0.0,
-        spring: Motion.gentle,
+        spring: Motion.expressiveSpatialDefault,
         telemetryLabel: 'overview_drag_cancel',
       );
     } else if (!_controller.isAnimating && _controller.value != 0.0) {

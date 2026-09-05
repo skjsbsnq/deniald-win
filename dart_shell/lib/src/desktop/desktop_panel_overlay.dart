@@ -1,5 +1,20 @@
 part of 'desktop_shell.dart';
 
+/// Shared geometry for the ChromeOS-style launcher bubble.
+///
+/// Both the overlay positioning rect and the launcher's own layout must agree
+/// on the bubble width; a single source keeps them from drifting apart.
+class _LauncherBubbleMetrics {
+  _LauncherBubbleMetrics._();
+
+  static const double idealWidth = 600.0;
+
+  /// The bubble width for [viewSize], clamped so the bubble plus its 8px
+  /// margins stay inside the view.
+  static double width(Size viewSize) =>
+      (viewSize.width - 16.0).clamp(320.0, idealWidth).toDouble();
+}
+
 class _DesktopPanelOverlay extends ConsumerStatefulWidget {
   const _DesktopPanelOverlay({
     required this.viewSize,
@@ -96,11 +111,36 @@ class _DesktopPanelOverlayState extends ConsumerState<_DesktopPanelOverlay> {
     final overlaySettings = ref.watch(
       shellSettingsProvider.select((settings) => settings.overlays),
     );
-    final launcherRect = DesktopMetrics.launcherRect(
-      widget.viewSize,
-      outputRect: widget.shellOutputRect,
-      placement: overlaySettings.launcher,
+    final useChromeOsShelf = ref.watch(
+      shellSettingsProvider.select((s) => s.layout.useChromeOsShelf),
     );
+    final configuredThickness = ref.watch(
+      shellSettingsProvider.select((s) => s.layout.effectiveSystemBarThickness),
+    );
+    final effectiveShelfHeight = configuredThickness > 0
+        ? configuredThickness
+        : ShelfLayer.defaultThickness;
+
+    final bubbleHeight = math.min(
+      560.0,
+      math.max(200.0, widget.viewSize.height - effectiveShelfHeight - 16.0),
+    );
+    final shelfBubbleRect = Rect.fromLTWH(
+      8.0,
+      math.max(
+        8.0,
+        widget.viewSize.height - effectiveShelfHeight - 8.0 - bubbleHeight,
+      ),
+      _LauncherBubbleMetrics.width(widget.viewSize),
+      bubbleHeight,
+    );
+    final launcherRect = useChromeOsShelf
+        ? shelfBubbleRect
+        : DesktopMetrics.launcherRect(
+            widget.viewSize,
+            outputRect: widget.shellOutputRect,
+            placement: overlaySettings.launcher,
+          );
     final dashboardRect = DesktopMetrics.dashboardRect(
       widget.viewSize,
       outputRect: widget.shellOutputRect,
@@ -142,21 +182,32 @@ class _DesktopPanelOverlayState extends ConsumerState<_DesktopPanelOverlay> {
           Positioned.fromRect(
             key: const ValueKey<String>('desktop-launcher-position'),
             rect: launcherRect,
-            child: DesktopPanelTransition(
-              key: const ValueKey<String>('desktop-launcher-panel'),
-              inputDebugLabel: 'Desktop application launcher',
-              keyboardPolicy: ShellKeyboardPolicy.capture,
-              maintainState: true,
-              visible: launcherOpen,
-              entryDirection: _entryDirectionFor(
-                overlaySettings.launcher.anchor.horizontal,
-                overlaySettings.launcher.anchor.vertical,
-              ),
-              entryDistance: widget.panelTravel,
-              durationScale: widget.panelDurationScale,
-              onOpened: widget.onPanelOpened,
-              child: _cachedApplicationLauncher(),
-            ),
+            child: useChromeOsShelf
+                ? ShellInputRegion(
+                    debugLabel: 'Desktop application launcher',
+                    active: launcherOpen,
+                    pointerPolicy: ShellPointerPolicy.fullScene,
+                    keyboardPolicy: ShellKeyboardPolicy.capture,
+                    child: IgnorePointer(
+                      ignoring: !launcherOpen,
+                      child: _cachedApplicationLauncher(),
+                    ),
+                  )
+                : DesktopPanelTransition(
+                    key: const ValueKey<String>('desktop-launcher-panel'),
+                    inputDebugLabel: 'Desktop application launcher',
+                    keyboardPolicy: ShellKeyboardPolicy.capture,
+                    maintainState: true,
+                    visible: launcherOpen,
+                    entryDirection: _entryDirectionFor(
+                      overlaySettings.launcher.anchor.horizontal,
+                      overlaySettings.launcher.anchor.vertical,
+                    ),
+                    entryDistance: widget.panelTravel,
+                    durationScale: widget.panelDurationScale,
+                    onOpened: widget.onPanelOpened,
+                    child: _cachedApplicationLauncher(),
+                  ),
           ),
         if (!dashboardRect.isEmpty)
           Positioned.fromRect(
@@ -178,7 +229,9 @@ class _DesktopPanelOverlayState extends ConsumerState<_DesktopPanelOverlay> {
               child: _cachedDashboard(),
             ),
           ),
-        if (!panelState.overviewActive && !launcherTriggerRect.isEmpty)
+        if (!useChromeOsShelf &&
+            !panelState.overviewActive &&
+            !launcherTriggerRect.isEmpty)
           Positioned.fromRect(
             rect: launcherTriggerRect,
             child: ShellInputRegion(

@@ -168,7 +168,9 @@ class _NotificationCenterHeader extends StatelessWidget {
             child: DecoratedBox(
               decoration: BoxDecoration(
                 color: context.shellTheme.accentPalette.container,
-                borderRadius: context.shellTheme.borderRadius(10),
+                borderRadius: context.shellTheme.borderRadius(
+                  ShellShapeScale.medium,
+                ),
               ),
               child: Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
@@ -294,8 +296,42 @@ class _PrivacyChoice extends StatefulWidget {
   State<_PrivacyChoice> createState() => _PrivacyChoiceState();
 }
 
-class _PrivacyChoiceState extends State<_PrivacyChoice> {
+class _PrivacyChoiceState extends State<_PrivacyChoice>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
   bool _focused = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      value: widget.selected ? 1.0 : 0.0,
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant _PrivacyChoice oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.selected != widget.selected) {
+      if (MediaQuery.disableAnimationsOf(context)) {
+        _controller.value = widget.selected ? 1.0 : 0.0;
+      } else {
+        springTo(
+          _controller,
+          widget.selected ? 1.0 : 0.0,
+          spring: Motion.expressiveEffectsDefault,
+          telemetryLabel: 'privacy_choice_effects',
+        );
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -336,36 +372,52 @@ class _PrivacyChoiceState extends State<_PrivacyChoice> {
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: widget.enabled ? widget.onPressed : null,
-          child: AnimatedContainer(
-            duration: MediaQuery.disableAnimationsOf(context)
-                ? Duration.zero
-                : Motion.pill,
-            height: 29,
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: widget.selected
-                  ? context.shellTheme.accentPalette.container
-                  : context.shellColors.surfaceContainerHigh,
-              borderRadius: context.shellTheme.borderRadius(10),
-              border: Border.all(
-                color: _focused ? accent : context.shellColors.hairlineSoft,
-              ),
-            ),
-            child: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: ShellText.base.copyWith(
-                color: widget.enabled
-                    ? (widget.selected
-                          ? context.shellTheme.accentPalette.onContainer
-                          : context.shellColors.textSecondary)
-                    : context.shellColors.glyphInactive,
-                fontSize: 10.5,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
+          child: AnimatedBuilder(
+            animation: _controller,
+            builder: (context, child) {
+              final t = _controller.value.clamp(0.0, 1.0);
+              final backgroundColor = Color.lerp(
+                context.shellColors.surfaceContainerHigh,
+                context.shellTheme.accentPalette.container,
+                t,
+              );
+              final textColor = widget.enabled
+                  ? Color.lerp(
+                      context.shellColors.textSecondary,
+                      context.shellTheme.accentPalette.onContainer,
+                      t,
+                    )
+                  : context.shellColors.glyphInactive;
+              return DecoratedBox(
+                decoration: BoxDecoration(
+                  color: backgroundColor,
+                  borderRadius: context.shellTheme.borderRadius(
+                    ShellShapeScale.full,
+                  ),
+                  border: Border.all(
+                    color: _focused ? accent : context.shellColors.hairlineSoft,
+                  ),
+                ),
+                child: SizedBox(
+                  height: 29,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    child: Center(
+                      child: Text(
+                        label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: ShellText.base.copyWith(
+                          color: textColor,
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              );
+            },
           ),
         ),
       ),
@@ -383,7 +435,7 @@ class _DoNotDisturbNotice extends StatelessWidget {
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: context.shellTheme.accentPalette.mutedContainer,
-          borderRadius: context.shellTheme.borderRadius(12),
+          borderRadius: context.shellTheme.borderRadius(ShellShapeScale.medium),
           border: Border.all(color: context.shellColors.hairlineSoft),
         ),
         child: Padding(
@@ -519,7 +571,9 @@ class _CenterIconButtonState extends State<_CenterIconButton> {
                   : _hovered || _focused
                   ? context.shellColors.surfaceContainerHighest
                   : context.shellColors.surfaceContainerHigh,
-              borderRadius: context.shellTheme.borderRadius(12),
+              borderRadius: context.shellTheme.borderRadius(
+                ShellShapeScale.medium,
+              ),
               border: Border.all(
                 color: _focused ? accent : context.shellColors.hairlineSoft,
               ),

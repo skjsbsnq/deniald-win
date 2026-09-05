@@ -15,8 +15,31 @@ class _NotificationActivator extends StatefulWidget {
   State<_NotificationActivator> createState() => _NotificationActivatorState();
 }
 
-class _NotificationActivatorState extends State<_NotificationActivator> {
+class _NotificationActivatorState extends State<_NotificationActivator>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pressController;
   bool _focused = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _pressController = AnimationController.unbounded(vsync: this, value: 0.0);
+  }
+
+  @override
+  void dispose() {
+    _pressController.dispose();
+    super.dispose();
+  }
+
+  void _updatePress(bool pressed) {
+    springTo(
+      _pressController,
+      pressed ? 1.0 : 0.0,
+      spring: Motion.expressiveSpatialFast,
+      telemetryLabel: 'notification_activator_press',
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -37,17 +60,27 @@ class _NotificationActivatorState extends State<_NotificationActivator> {
       },
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
+        onTapDown: (_) => _updatePress(true),
+        onTapUp: (_) => _updatePress(false),
+        onTapCancel: () => _updatePress(false),
         onTap: widget.onActivate,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            borderRadius: context.shellTheme.borderRadius(
-              ShellRadii.notification,
+        child: AnimatedBuilder(
+          animation: _pressController,
+          builder: (context, child) {
+            final scale = 1.0 - 0.02 * _pressController.value;
+            return Transform.scale(scale: scale, child: child);
+          },
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              borderRadius: context.shellTheme.borderRadius(
+                ShellRadii.notification,
+              ),
+              border: _focused
+                  ? Border.all(color: ShellTheme.of(context).accent, width: 1.5)
+                  : null,
             ),
-            border: _focused
-                ? Border.all(color: ShellTheme.of(context).accent, width: 1.5)
-                : null,
+            child: widget.child,
           ),
-          child: widget.child,
         ),
       ),
     );
@@ -68,9 +101,32 @@ class _NotificationActionButton extends StatefulWidget {
       _NotificationActionButtonState();
 }
 
-class _NotificationActionButtonState extends State<_NotificationActionButton> {
+class _NotificationActionButtonState extends State<_NotificationActionButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pressController;
   bool _hovered = false;
   bool _focused = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _pressController = AnimationController.unbounded(vsync: this, value: 0.0);
+  }
+
+  @override
+  void dispose() {
+    _pressController.dispose();
+    super.dispose();
+  }
+
+  void _updatePress(bool pressed) {
+    springTo(
+      _pressController,
+      pressed ? 1.0 : 0.0,
+      spring: Motion.expressiveSpatialFast,
+      telemetryLabel: 'notification_action_press',
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -95,31 +151,43 @@ class _NotificationActionButtonState extends State<_NotificationActionButton> {
         },
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
+          onTapDown: (_) => _updatePress(true),
+          onTapUp: (_) => _updatePress(false),
+          onTapCancel: () => _updatePress(false),
           onTap: widget.onPressed,
-          child: AnimatedContainer(
-            duration: MediaQuery.disableAnimationsOf(context)
-                ? Duration.zero
-                : Motion.pill,
-            curve: Motion.standard,
-            constraints: const BoxConstraints(minWidth: 48),
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: _hovered || _focused
-                  ? context.shellTheme.accentPalette.container
-                  : context.shellColors.surfaceContainerHighest,
-              borderRadius: context.shellTheme.borderRadius(12),
-              border: Border.all(
-                color: _focused
-                    ? ShellTheme.of(context).accent
-                    : context.shellColors.hairlineSoft,
+          child: AnimatedBuilder(
+            animation: _pressController,
+            builder: (context, child) {
+              final scale = 1.0 - 0.06 * _pressController.value;
+              return Transform.scale(scale: scale, child: child);
+            },
+            child: AnimatedContainer(
+              duration: MediaQuery.disableAnimationsOf(context)
+                  ? Duration.zero
+                  : const Duration(milliseconds: 100),
+              curve: Motion.standard,
+              constraints: const BoxConstraints(minWidth: 48),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: _hovered || _focused
+                    ? context.shellTheme.accentPalette.container
+                    : context.shellColors.surfaceContainerHighest,
+                borderRadius: context.shellTheme.borderRadius(
+                  ShellShapeScale.full,
+                ),
+                border: Border.all(
+                  color: _focused
+                      ? ShellTheme.of(context).accent
+                      : context.shellColors.hairlineSoft,
+                ),
               ),
-            ),
-            child: Text(
-              widget.label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: ShellText.cardTitle.copyWith(fontSize: 12),
+              child: Text(
+                widget.label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: ShellText.cardTitle.copyWith(fontSize: 12),
+              ),
             ),
           ),
         ),
@@ -144,9 +212,32 @@ class _NotificationIconButton extends StatefulWidget {
       _NotificationIconButtonState();
 }
 
-class _NotificationIconButtonState extends State<_NotificationIconButton> {
+class _NotificationIconButtonState extends State<_NotificationIconButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pressController;
   bool _hovered = false;
   bool _focused = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _pressController = AnimationController.unbounded(vsync: this, value: 0.0);
+  }
+
+  @override
+  void dispose() {
+    _pressController.dispose();
+    super.dispose();
+  }
+
+  void _updatePress(bool pressed) {
+    springTo(
+      _pressController,
+      pressed ? 1.0 : 0.0,
+      spring: Motion.expressiveSpatialFast,
+      telemetryLabel: 'notification_icon_press',
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -171,26 +262,38 @@ class _NotificationIconButtonState extends State<_NotificationIconButton> {
         },
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
+          onTapDown: (_) => _updatePress(true),
+          onTapUp: (_) => _updatePress(false),
+          onTapCancel: () => _updatePress(false),
           onTap: widget.onPressed,
-          child: AnimatedContainer(
-            duration: MediaQuery.disableAnimationsOf(context)
-                ? Duration.zero
-                : Motion.pill,
-            width: 30,
-            height: 30,
-            decoration: BoxDecoration(
-              color: _hovered || _focused
-                  ? context.shellColors.surfaceContainerHighest
-                  : ShellMediaColors.transparentDark,
-              borderRadius: context.shellTheme.borderRadius(11),
-              border: _focused
-                  ? Border.all(color: ShellTheme.of(context).accent)
-                  : null,
-            ),
-            child: Icon(
-              widget.icon,
-              size: 17,
-              color: context.shellColors.textSecondary,
+          child: AnimatedBuilder(
+            animation: _pressController,
+            builder: (context, child) {
+              final scale = 1.0 - 0.08 * _pressController.value;
+              return Transform.scale(scale: scale, child: child);
+            },
+            child: AnimatedContainer(
+              duration: MediaQuery.disableAnimationsOf(context)
+                  ? Duration.zero
+                  : const Duration(milliseconds: 100),
+              width: 30,
+              height: 30,
+              decoration: BoxDecoration(
+                color: _hovered || _focused
+                    ? context.shellColors.surfaceContainerHighest
+                    : ShellMediaColors.transparentDark,
+                borderRadius: context.shellTheme.borderRadius(
+                  ShellShapeScale.full,
+                ),
+                border: _focused
+                    ? Border.all(color: ShellTheme.of(context).accent)
+                    : null,
+              ),
+              child: Icon(
+                widget.icon,
+                size: 17,
+                color: context.shellColors.textSecondary,
+              ),
             ),
           ),
         ),

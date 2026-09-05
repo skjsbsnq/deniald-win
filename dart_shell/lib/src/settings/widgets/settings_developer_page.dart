@@ -380,7 +380,7 @@ class _WorkspaceSetupPanel extends StatelessWidget {
           const SizedBox(height: 10),
           LinearProgressIndicator(
             minHeight: 4,
-            borderRadius: context.shellTheme.borderRadius(99),
+            borderRadius: context.shellTheme.borderRadius(ShellShapeScale.full),
             color: ShellTheme.of(context).accent,
             backgroundColor: context.shellColors.surfaceContainerHighest,
           ),
@@ -510,7 +510,7 @@ class _RuntimeSummary extends StatelessWidget {
           LinearProgressIndicator(
             value: progress,
             minHeight: 4,
-            borderRadius: context.shellTheme.borderRadius(99),
+            borderRadius: context.shellTheme.borderRadius(ShellShapeScale.full),
             color: ShellTheme.of(context).accent,
             backgroundColor: context.shellColors.surfaceContainerHighest,
           ),
@@ -530,7 +530,7 @@ class _WarningBanner extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: context.shellColors.performanceWarning.withValues(alpha: 0.08),
-        borderRadius: context.shellTheme.borderRadius(12),
+        borderRadius: context.shellTheme.borderRadius(ShellShapeScale.medium),
         border: Border.all(
           color: context.shellColors.performanceWarning.withValues(alpha: 0.28),
         ),

@@ -583,7 +583,9 @@ class _CursorThemeCardState extends State<_CursorThemeCard> {
                         ),
                       )
                     : theme.cardColor(colors.surfaceContainerHigh),
-                borderRadius: context.shellTheme.borderRadius(12),
+                borderRadius: context.shellTheme.borderRadius(
+                  ShellShapeScale.medium,
+                ),
                 border: Border.all(
                   color: widget.selected
                       ? accent
@@ -700,7 +702,7 @@ class _WallpaperThumbnail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final radius = context.shellTheme.borderRadius(10);
+    final radius = context.shellTheme.borderRadius(ShellShapeScale.medium);
     return Semantics(
       image: true,
       label: semanticsLabel,

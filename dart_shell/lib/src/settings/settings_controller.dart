@@ -285,6 +285,12 @@ class ShellSettingsController extends Notifier<ShellSettings> {
     _update(state.copyWith(layout: state.layout.copyWith(windowLayout: value)));
   }
 
+  void setUseChromeOsShelf(bool value) {
+    _update(
+      state.copyWith(layout: state.layout.copyWith(useChromeOsShelf: value)),
+    );
+  }
+
   void setSystemBarThickness(double value) {
     _update(
       state.copyWith(

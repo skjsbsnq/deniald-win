@@ -237,6 +237,7 @@ class DesktopAppsRepository {
     final extensions = ['png', 'webp', 'jpg', 'jpeg', 'svg'];
     final sizes = [
       'scalable',
+      'symbolic',
       '512x512',
       '256x256',
       '192x192',
@@ -305,6 +306,7 @@ class DesktopAppsRepository {
     final extensions = ['png', 'webp', 'jpg', 'jpeg', 'svg'];
     final sizes = [
       'scalable',
+      'symbolic',
       '128x128',
       '96x96',
       '64x64',

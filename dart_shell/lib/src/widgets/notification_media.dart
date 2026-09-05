@@ -9,6 +9,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../launcher/controllers/home_grid_controller.dart';
 import '../models/desktop_notification.dart';
 import '../theme/shell_theme.dart';
+import '../theme/tokens.dart';
 import 'app_icon.dart';
 
 @immutable
@@ -149,7 +150,7 @@ class NotificationArtwork extends ConsumerWidget {
       child: SizedBox.square(
         dimension: size,
         child: ClipRRect(
-          borderRadius: context.shellTheme.borderRadius(size * 0.24),
+          borderRadius: context.shellTheme.borderRadius(ShellShapeScale.medium),
           child: content,
         ),
       ),

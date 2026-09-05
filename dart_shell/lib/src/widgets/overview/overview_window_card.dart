@@ -215,7 +215,7 @@ class _OverviewWindowCardState extends State<OverviewWindowCard>
       _dismiss,
       0.0,
       velocity: velocity,
-      spring: Motion.bouncy,
+      spring: Motion.expressiveSpatialFast,
       telemetryLabel: 'overview_card_settle',
     );
   }

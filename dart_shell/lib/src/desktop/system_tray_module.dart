@@ -14,10 +14,11 @@ import '../launcher/runtime_paths.dart';
 import '../models/system_tray_item.dart';
 import '../services/background_worker.dart';
 import '../state/system_tray.dart';
+import '../theme/motion.dart';
 import '../theme/shell_theme.dart';
-import '../theme/tokens.dart';
 import '../widgets/app_icon.dart';
 import '../widgets/shell_cursor.dart';
+import '../widgets/shell_menu.dart';
 
 @immutable
 class SystemTrayIconRequest {
@@ -153,59 +154,10 @@ const systemTrayMenuDismissLayerKey = ValueKey<String>(
 );
 
 void dismissOpenSystemTrayMenu(WidgetRef ref) {
-  ref.read(_systemTrayMenuSessionProvider.notifier).dismiss();
+  ref.read(shellMenuSessionProvider.notifier).dismiss();
 }
 
-class _SystemTrayMenuSession {
-  const _SystemTrayMenuSession({required this.owner, required this.dismiss});
-
-  final Object owner;
-  final VoidCallback dismiss;
-}
-
-final _systemTrayMenuSessionProvider =
-    NotifierProvider<_SystemTrayMenuSessionController, _SystemTrayMenuSession?>(
-      _SystemTrayMenuSessionController.new,
-    );
-
-class _SystemTrayMenuSessionController
-    extends Notifier<_SystemTrayMenuSession?> {
-  final Set<int> _menuPointerDowns = <int>{};
-
-  @override
-  _SystemTrayMenuSession? build() => null;
-
-  void show(Object owner, VoidCallback dismiss) {
-    final previous = state;
-    if (previous != null && !identical(previous.owner, owner)) {
-      previous.dismiss();
-    }
-    state = _SystemTrayMenuSession(owner: owner, dismiss: dismiss);
-  }
-
-  void clear(Object owner) {
-    if (identical(state?.owner, owner)) {
-      state = null;
-    }
-  }
-
-  void dismiss() {
-    final current = state;
-    if (current == null) {
-      return;
-    }
-    state = null;
-    current.dismiss();
-  }
-
-  void noteMenuPointerDown(int pointer) {
-    _menuPointerDowns.add(pointer);
-  }
-
-  bool takeMenuPointerDown(int pointer) {
-    return _menuPointerDowns.remove(pointer);
-  }
-}
+final _systemTrayMenuSessionProvider = shellMenuSessionProvider;
 
 /// Passively observes client and Flutter clicks while an application menu is
 /// open.
@@ -223,7 +175,7 @@ class SystemTrayMenuDismissLayer extends ConsumerStatefulWidget {
 
 class _SystemTrayMenuDismissLayerState
     extends ConsumerState<SystemTrayMenuDismissLayer> {
-  late final _SystemTrayMenuSessionController _menuSessions;
+  late final ShellMenuSessionController _menuSessions;
 
   @override
   void initState() {
@@ -347,10 +299,11 @@ class _SystemTrayButton extends ConsumerStatefulWidget {
 class _SystemTrayButtonState extends ConsumerState<_SystemTrayButton> {
   final MenuController _menuController = MenuController();
   final Object _menuOwner = Object();
-  late final _SystemTrayMenuSessionController _menuSessions;
+  late final ShellMenuSessionController _menuSessions;
   Offset? _primaryPosition;
   List<SystemTrayMenuEntry> _menuEntries = const <SystemTrayMenuEntry>[];
   int _menuGeneration = 0;
+  var _hovered = false;
 
   @override
   void initState() {
@@ -526,94 +479,12 @@ class _SystemTrayButtonState extends ConsumerState<_SystemTrayButton> {
     return output;
   }
 
-  MenuStyle _menuStyle(BuildContext context) {
-    final accent = ShellTheme.of(context).accentPalette;
-    final viewHeight = MediaQuery.sizeOf(context).height;
-    return MenuStyle(
-      backgroundColor: WidgetStatePropertyAll<Color>(
-        context.shellColors.panelBackgroundBottom,
-      ),
-      shadowColor: WidgetStatePropertyAll<Color>(context.shellColors.shadow),
-      surfaceTintColor: WidgetStatePropertyAll<Color>(
-        ShellMediaColors.transparentDark,
-      ),
-      elevation: WidgetStatePropertyAll<double>(14),
-      padding: WidgetStatePropertyAll<EdgeInsetsGeometry>(
-        EdgeInsets.symmetric(vertical: 4),
-      ),
-      minimumSize: WidgetStatePropertyAll<Size>(Size(164, 0)),
-      maximumSize: WidgetStatePropertyAll<Size>(
-        Size(320, (viewHeight - 16).clamp(120, 560).toDouble()),
-      ),
-      side: WidgetStatePropertyAll<BorderSide>(
-        BorderSide(color: accent.outline, width: 1),
-      ),
-      shape: WidgetStatePropertyAll<OutlinedBorder>(
-        RoundedRectangleBorder(
-          borderRadius: context.shellTheme.borderRadius(10),
-        ),
-      ),
-      visualDensity: VisualDensity.compact,
-    );
-  }
+  MenuStyle _menuStyle(BuildContext context) => shellMenuStyle(context);
 
   ButtonStyle _menuButtonStyle(
     BuildContext context, {
     required bool destructive,
-  }) {
-    final accent = ShellTheme.of(context).accentPalette;
-    return ButtonStyle(
-      foregroundColor: WidgetStateProperty.resolveWith<Color>((states) {
-        if (states.contains(WidgetState.disabled)) {
-          return context.shellColors.textTertiary;
-        }
-        return destructive
-            ? context.shellColors.performanceBad
-            : context.shellColors.textPrimary;
-      }),
-      iconColor: WidgetStateProperty.resolveWith<Color>((states) {
-        if (states.contains(WidgetState.disabled)) {
-          return context.shellColors.textTertiary;
-        }
-        return destructive
-            ? context.shellColors.performanceBad
-            : context.shellColors.textSecondary;
-      }),
-      backgroundColor: WidgetStateProperty.resolveWith<Color>((states) {
-        if (states.contains(WidgetState.hovered) ||
-            states.contains(WidgetState.focused)) {
-          return accent.subtle;
-        }
-        return ShellMediaColors.transparentDark;
-      }),
-      overlayColor: WidgetStatePropertyAll<Color>(
-        ShellMediaColors.transparentDark,
-      ),
-      textStyle: WidgetStatePropertyAll<TextStyle>(
-        TextStyle(
-          fontFamilyFallback: ShellText.fallbackFontFamilies,
-          fontSize: 12,
-          height: 1.25,
-          leadingDistribution: TextLeadingDistribution.even,
-          fontWeight: FontWeight.w500,
-          decoration: TextDecoration.none,
-        ),
-      ),
-      padding: WidgetStatePropertyAll<EdgeInsetsGeometry>(
-        EdgeInsets.symmetric(horizontal: 10),
-      ),
-      minimumSize: WidgetStatePropertyAll<Size>(Size(164, 28)),
-      maximumSize: WidgetStatePropertyAll<Size>(Size(320, 28)),
-      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      visualDensity: VisualDensity.standard,
-      shape: WidgetStatePropertyAll<OutlinedBorder>(
-        RoundedRectangleBorder(
-          borderRadius: context.shellTheme.borderRadius(6),
-        ),
-      ),
-      alignment: AlignmentDirectional.centerStart,
-    );
-  }
+  }) => shellMenuButtonStyle(context, destructive: destructive);
 
   Widget? _menuLeadingIcon(
     SystemTrayMenuEntry entry, {
@@ -679,6 +550,8 @@ class _SystemTrayButtonState extends ConsumerState<_SystemTrayButton> {
         child: ExcludeSemantics(
           child: MouseRegion(
             cursor: ShellMouseCursors.link,
+            onEnter: (_) => setState(() => _hovered = true),
+            onExit: (_) => setState(() => _hovered = false),
             child: Listener(
               onPointerDown: (event) {
                 if (event.buttons == kMiddleMouseButton) {
@@ -696,36 +569,49 @@ class _SystemTrayButtonState extends ConsumerState<_SystemTrayButton> {
                 ),
                 onSecondaryTapDown: (details) =>
                     unawaited(_openContextMenu(details.globalPosition)),
-                child: SizedBox.square(
-                  dimension: 22,
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    children: <Widget>[
-                      Center(
-                        child: SizedBox.square(
-                          key: systemTrayItemIconKey(item.id),
-                          dimension: 18,
-                          child: Opacity(
-                            opacity: passive ? 0.52 : 1,
-                            child: RepaintBoundary(
-                              child: _SystemTrayIcon(item: item),
+                child: AnimatedContainer(
+                  duration: Motion.tile,
+                  curve: Curves.easeOut,
+                  width: 28,
+                  height: 28,
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: _hovered
+                        ? context.shellColors.panelHighlight
+                        : Colors.transparent,
+                    shape: BoxShape.circle,
+                  ),
+                  child: SizedBox.square(
+                    dimension: 22,
+                    child: Stack(
+                      clipBehavior: Clip.none,
+                      children: <Widget>[
+                        Center(
+                          child: SizedBox.square(
+                            key: systemTrayItemIconKey(item.id),
+                            dimension: 18,
+                            child: Opacity(
+                              opacity: passive ? 0.52 : 1,
+                              child: RepaintBoundary(
+                                child: _SystemTrayIcon(item: item),
+                              ),
                             ),
                           ),
                         ),
-                      ),
-                      if (attention)
-                        Positioned(
-                          top: 0,
-                          right: 0,
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(
-                              color: widget.accent,
-                              shape: BoxShape.circle,
+                        if (attention)
+                          Positioned(
+                            top: 0,
+                            right: 0,
+                            child: DecoratedBox(
+                              decoration: BoxDecoration(
+                                color: widget.accent,
+                                shape: BoxShape.circle,
+                              ),
+                              child: const SizedBox.square(dimension: 4),
                             ),
-                            child: const SizedBox.square(dimension: 4),
                           ),
-                        ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -764,6 +650,14 @@ class _SystemTrayIcon extends ConsumerWidget {
           .value;
     }
     if (path != null) {
+      // Freedesktop symbolic icons are monochrome and expect toolkit
+      // re-coloring; the literal dark fill is invisible on the dark shelf.
+      if (item.iconName.contains('-symbolic')) {
+        return SymbolicIconImage(
+          iconPath: path,
+          foreground: context.shellColors.textPrimary,
+        );
+      }
       return AppIconImage(iconPath: path);
     }
     final pixmap = item.iconPixmap;

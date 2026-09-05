@@ -519,6 +519,7 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
   int _nextCloseId = 1;
   _DesktopHomeLayoutCache? _homeLayoutCache;
   _DesktopSceneTopologyCache? _topologyCache;
+  bool _shelfTrayExpanded = false;
 
   @override
   void initState() {
@@ -815,6 +816,9 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
             false,
       ),
     );
+    final useChromeOsShelf = ref.watch(
+      shellSettingsProvider.select((s) => s.layout.useChromeOsShelf),
+    );
     final homeLayout = _cachedDesktopHomeLayout(
       viewSize: viewSize,
       displayLayout: displayLayout,
@@ -908,10 +912,29 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
                     Positioned.fromRect(
                       key: ValueKey<String>('system-bar-${bar.monitorId}'),
                       rect: bar.rect,
-                      child: DesktopSystemBar(
-                        side: bar.side,
-                        onOpenPowerSettings: onOpenPowerSettings,
-                      ),
+                      child: useChromeOsShelf
+                          ? ShelfLayer(
+                              height: bar.rect.height,
+                              onLauncherPressed: () {
+                                if (_shelfTrayExpanded) {
+                                  setState(() => _shelfTrayExpanded = false);
+                                }
+                                onOpenLauncher();
+                              },
+                              trayExpanded: _shelfTrayExpanded,
+                              onTrayPressed: () {
+                                if (!_shelfTrayExpanded) {
+                                  onDismissLauncher();
+                                }
+                                setState(() {
+                                  _shelfTrayExpanded = !_shelfTrayExpanded;
+                                });
+                              },
+                            )
+                          : DesktopSystemBar(
+                              side: bar.side,
+                              onOpenPowerSettings: onOpenPowerSettings,
+                            ),
                     ),
                   Positioned.fill(
                     child: ShellInputRegion(
@@ -996,6 +1019,30 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
                     onLaunchApp: onLaunchApp,
                     onLaunchLocalApp: onLaunchLocalApp,
                   ),
+                  if (useChromeOsShelf)
+                    Positioned.fill(
+                      child: ShellInputRegion(
+                        debugLabel: 'Unified tray bubble',
+                        active: _shelfTrayExpanded && !desktop.overviewActive,
+                        pointerPolicy: ShellPointerPolicy.fullScene,
+                        keyboardPolicy: ShellKeyboardPolicy.none,
+                        child: IgnorePointer(
+                          ignoring: !_shelfTrayExpanded,
+                          child: UnifiedTrayBubble(
+                            key: const ValueKey<String>(
+                              'shelf-unified-tray-bubble',
+                            ),
+                            visible:
+                                _shelfTrayExpanded && !desktop.overviewActive,
+                            onDismiss: () =>
+                                setState(() => _shelfTrayExpanded = false),
+                            shelfHeight: visibleSystemBars.isNotEmpty
+                                ? visibleSystemBars.first.rect.height
+                                : 56.0,
+                          ),
+                        ),
+                      ),
+                    ),
                   for (final popup in inputMethodPopups)
                     if (popup.geometry case final geometry?)
                       RetainedAnimatedPositioned(

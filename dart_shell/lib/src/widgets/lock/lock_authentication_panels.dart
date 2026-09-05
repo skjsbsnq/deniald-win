@@ -133,7 +133,9 @@ class _LockAuthenticationPanel extends StatelessWidget {
                                   ? context.shellColors.performanceBad
                                         .withValues(alpha: 0.14)
                                   : accent.subtle,
-                              borderRadius: context.shellTheme.borderRadius(14),
+                              borderRadius: context.shellTheme.borderRadius(
+                                ShellShapeScale.medium,
+                              ),
                               border: Border.all(
                                 color: error
                                     ? context.shellColors.performanceBad
@@ -186,7 +188,9 @@ class _LockAuthenticationPanel extends StatelessWidget {
                           child: DecoratedBox(
                             decoration: BoxDecoration(
                               color: context.shellColors.surfaceContainerHigh,
-                              borderRadius: context.shellTheme.borderRadius(16),
+                              borderRadius: context.shellTheme.borderRadius(
+                                ShellShapeScale.full,
+                              ),
                               border: Border.all(
                                 color: focusNode.hasFocus
                                     ? accent.primary
@@ -320,7 +324,9 @@ class _MobileLockAuthenticationPanel extends StatelessWidget {
                 key: const ValueKey<String>('mobile-lock-authentication-panel'),
                 decoration: BoxDecoration(
                   color: context.shellColors.surfaceContainerLow,
-                  borderRadius: context.shellTheme.borderRadius(24),
+                  borderRadius: context.shellTheme.borderRadius(
+                    ShellRadii.tile,
+                  ),
                   border: Border.all(color: context.shellColors.hairline),
                 ),
                 child: SingleChildScrollView(
@@ -422,7 +428,7 @@ class _MobileLockAuthenticationPanel extends StatelessWidget {
                                     color: context.shellColors.background
                                         .withValues(alpha: 0.72),
                                     borderRadius: context.shellTheme
-                                        .borderRadius(14),
+                                        .borderRadius(ShellShapeScale.full),
                                     border: Border.all(
                                       color: focusNode.hasFocus
                                           ? accent.primary
@@ -558,7 +564,9 @@ class _MobileLockSubmitButton extends StatelessWidget {
         child: DecoratedBox(
           decoration: BoxDecoration(
             color: accent.primary,
-            borderRadius: context.shellTheme.borderRadius(11),
+            borderRadius: context.shellTheme.borderRadius(
+              ShellShapeScale.medium,
+            ),
           ),
           child: SizedBox(
             width: 42,
@@ -599,7 +607,9 @@ class _MobileLockPrimaryButton extends StatelessWidget {
         child: DecoratedBox(
           decoration: BoxDecoration(
             color: enabled ? accent.primary : accent.subtle,
-            borderRadius: context.shellTheme.borderRadius(14),
+            borderRadius: context.shellTheme.borderRadius(
+              ShellShapeScale.medium,
+            ),
           ),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
@@ -688,7 +698,9 @@ class _LockActionButtonState extends State<_LockActionButton> {
                   : (active
                         ? context.shellColors.surfaceContainerHighest
                         : context.shellColors.surfaceContainerHigh),
-              borderRadius: context.shellTheme.borderRadius(16),
+              borderRadius: context.shellTheme.borderRadius(
+                ShellShapeScale.large,
+              ),
               border: Border.all(
                 color: active
                     ? accent.primary

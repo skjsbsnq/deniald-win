@@ -5,6 +5,13 @@ import '../../models/battery_status.dart';
 import '../../localization/denial_localizations.dart';
 import '../../theme/shell_theme.dart';
 
+abstract final class _GlyphRadii {
+  static const double batteryOuter = 3.0;
+  static const double batteryCap = 1.0;
+  static const double batteryFill = 2.0;
+  static const double signalBar = 1.5;
+}
+
 /// Battery pictogram with a level fill and a percentage label.
 class BatteryMark extends StatelessWidget {
   const BatteryMark({
@@ -36,7 +43,9 @@ class BatteryMark extends StatelessWidget {
                 child: DecoratedBox(
                   decoration: BoxDecoration(
                     border: Border.all(color: foreground, width: 1.4 * scale),
-                    borderRadius: context.shellTheme.borderRadius(3 * scale),
+                    borderRadius: context.shellTheme.borderRadius(
+                      _GlyphRadii.batteryOuter * scale,
+                    ),
                   ),
                 ),
               ),
@@ -48,7 +57,9 @@ class BatteryMark extends StatelessWidget {
                 child: DecoratedBox(
                   decoration: BoxDecoration(
                     color: foreground,
-                    borderRadius: context.shellTheme.borderRadius(1 * scale),
+                    borderRadius: context.shellTheme.borderRadius(
+                      _GlyphRadii.batteryCap * scale,
+                    ),
                   ),
                 ),
               ),
@@ -60,7 +71,9 @@ class BatteryMark extends StatelessWidget {
                 child: DecoratedBox(
                   decoration: BoxDecoration(
                     color: foreground,
-                    borderRadius: context.shellTheme.borderRadius(2 * scale),
+                    borderRadius: context.shellTheme.borderRadius(
+                      _GlyphRadii.batteryFill * scale,
+                    ),
                   ),
                 ),
               ),
@@ -112,7 +125,9 @@ class BatteryIconMark extends StatelessWidget {
             child: DecoratedBox(
               decoration: BoxDecoration(
                 border: Border.all(color: foreground, width: 1.4 * scale),
-                borderRadius: context.shellTheme.borderRadius(3 * scale),
+                borderRadius: context.shellTheme.borderRadius(
+                  _GlyphRadii.batteryOuter * scale,
+                ),
               ),
             ),
           ),
@@ -124,7 +139,9 @@ class BatteryIconMark extends StatelessWidget {
             child: DecoratedBox(
               decoration: BoxDecoration(
                 color: foreground,
-                borderRadius: context.shellTheme.borderRadius(1 * scale),
+                borderRadius: context.shellTheme.borderRadius(
+                  _GlyphRadii.batteryCap * scale,
+                ),
               ),
             ),
           ),
@@ -136,7 +153,9 @@ class BatteryIconMark extends StatelessWidget {
             child: DecoratedBox(
               decoration: BoxDecoration(
                 color: foreground,
-                borderRadius: context.shellTheme.borderRadius(2 * scale),
+                borderRadius: context.shellTheme.borderRadius(
+                  _GlyphRadii.batteryFill * scale,
+                ),
               ),
             ),
           ),
@@ -194,7 +213,9 @@ class SignalGlyph extends StatelessWidget {
               height: (4.0 + i * 2.2) * scale,
               decoration: BoxDecoration(
                 color: glyphColor,
-                borderRadius: context.shellTheme.borderRadius(1.5 * scale),
+                borderRadius: context.shellTheme.borderRadius(
+                  _GlyphRadii.signalBar * scale,
+                ),
               ),
             ),
             if (i != 3) SizedBox(width: 2 * scale),

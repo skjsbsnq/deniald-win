@@ -123,9 +123,9 @@ class _ShellRuntimeBindingsState extends ConsumerState<ShellRuntimeBindings> {
       ref
           .read(displayLayoutProvider.notifier)
           .applyShellConfiguration(
-            side: layout.systemBarSide,
+            side: layout.effectiveSystemBarSide,
             outputNames: layout.systemBarOutputNames,
-            systemBarThickness: layout.systemBarThickness,
+            systemBarThickness: layout.effectiveSystemBarThickness,
             maximizePadding: layout.maximizePadding,
           );
     });

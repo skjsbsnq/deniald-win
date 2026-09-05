@@ -293,7 +293,9 @@ class _AppVolumeRowState extends State<_AppVolumeRow> {
               color: _focused
                   ? context.shellColors.surfaceContainerHigh
                   : context.shellColors.surfaceContainerLow,
-              borderRadius: context.shellTheme.borderRadius(18),
+              borderRadius: context.shellTheme.borderRadius(
+                ShellShapeScale.large,
+              ),
               border: Border.all(
                 color: _focused ? accent : context.shellColors.hairlineSoft,
               ),

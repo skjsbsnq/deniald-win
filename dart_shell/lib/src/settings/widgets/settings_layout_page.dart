@@ -19,6 +19,7 @@ class SettingsLayoutPage extends StatelessWidget {
     required this.onMinimizedWindowPlacementChanged,
     required this.onClipboardTrayEdgeChanged,
     required this.onClipboardTrayExtentChanged,
+    this.onUseChromeOsShelfChanged,
     required this.onReset,
     super.key,
   });
@@ -33,6 +34,7 @@ class SettingsLayoutPage extends StatelessWidget {
   onMinimizedWindowPlacementChanged;
   final ValueChanged<ClipboardTrayEdge> onClipboardTrayEdgeChanged;
   final ValueChanged<double> onClipboardTrayExtentChanged;
+  final ValueChanged<bool>? onUseChromeOsShelfChanged;
   final VoidCallback onReset;
 
   @override
@@ -81,6 +83,20 @@ class SettingsLayoutPage extends StatelessWidget {
         ),
         SettingsCardGroup(
           children: [
+            SettingsSection(
+              title: 'ChromeOS shelf',
+              child: SettingsToggle(
+                key: const ValueKey<String>(
+                  'settings-use-chromeos-shelf-toggle',
+                ),
+                label: 'Use ChromeOS shelf',
+                description:
+                    'Replace the classic system bar with a bottom shelf, application strip, and unified tray.',
+                value: settings.useChromeOsShelf,
+                onChanged: onUseChromeOsShelfChanged ?? (_) {},
+                enabled: onUseChromeOsShelfChanged != null,
+              ),
+            ),
             SystemBarPlacementCard(
               layout: displayLayout,
               onChanged: onSystemBarChanged,

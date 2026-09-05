@@ -50,7 +50,9 @@ class _ClipboardImageTile extends StatelessWidget {
           width: size.width,
           height: size.height,
           child: ClipRRect(
-            borderRadius: context.shellTheme.borderRadius(16),
+            borderRadius: context.shellTheme.borderRadius(
+              ShellShapeScale.large,
+            ),
             child: _ClipboardImagePreview(
               entry: entry,
               mimeType: mimeType,
@@ -166,7 +168,9 @@ class _ClipboardFileTile extends ConsumerWidget {
           SizedBox.square(
             dimension: 46,
             child: ClipRRect(
-              borderRadius: context.shellTheme.borderRadius(11),
+              borderRadius: context.shellTheme.borderRadius(
+                ShellShapeScale.medium,
+              ),
               child: ColoredBox(
                 color: accent.subtle,
                 child: thumbnail == null
@@ -333,7 +337,7 @@ BoxDecoration _clipboardNoteDecoration(
         ),
       ],
     ),
-    borderRadius: context.shellTheme.borderRadius(18),
+    borderRadius: context.shellTheme.borderRadius(ShellShapeScale.large),
     border: Border.all(
       color: accent.primary.withValues(
         alpha: entry.active

@@ -105,6 +105,55 @@ class Motion {
     stiffness: 460.0,
     damping: 34.0,
   );
+
+  /// Material 3 Expressive fast spatial spring.
+  ///
+  /// Low damping (0.6) produces intentional overshoot for small responsive
+  /// spatial transitions such as button presses and status indicators.
+  static const SpringDescription expressiveSpatialFast = SpringDescription(
+    mass: 1.0,
+    stiffness: 800.0,
+    damping: 33.9,
+  );
+
+  /// Material 3 Expressive default spatial spring.
+  ///
+  /// Balanced spring for layer and bubble expansion / dismissal.
+  static const SpringDescription expressiveSpatialDefault = SpringDescription(
+    mass: 1.0,
+    stiffness: 380.0,
+    damping: 31.2,
+  );
+
+  /// Material 3 Expressive slow spatial spring for larger surfaces.
+  static const SpringDescription expressiveSpatialSlow = SpringDescription(
+    mass: 1.0,
+    stiffness: 200.0,
+    damping: 22.6,
+  );
+
+  /// Material 3 Expressive fast effects spring (color and opacity).
+  ///
+  /// Critically damped (1.0) so changes settle briskly without oscillation.
+  static const SpringDescription expressiveEffectsFast = SpringDescription(
+    mass: 1.0,
+    stiffness: 3800.0,
+    damping: 123.3,
+  );
+
+  /// Material 3 Expressive default effects spring for state toggles.
+  static const SpringDescription expressiveEffectsDefault = SpringDescription(
+    mass: 1.0,
+    stiffness: 1600.0,
+    damping: 80.0,
+  );
+
+  /// Material 3 Expressive slow effects spring for ambient transitions.
+  static const SpringDescription expressiveEffectsSlow = SpringDescription(
+    mass: 1.0,
+    stiffness: 800.0,
+    damping: 56.6,
+  );
 }
 
 /// Clamps [value] to the unit interval `[0, 1]`.

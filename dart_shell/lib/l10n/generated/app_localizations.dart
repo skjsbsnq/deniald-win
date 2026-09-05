@@ -200,6 +200,12 @@ abstract class AppLocalizations {
   /// **'Idle'**
   String get batteryIdle;
 
+  /// Battery is topped off while external power is connected.
+  ///
+  /// In en, this message translates to:
+  /// **'Fully charged'**
+  String get batteryFullyCharged;
+
   /// Message shown when the battery crosses a low-charge warning threshold.
   ///
   /// In en, this message translates to:

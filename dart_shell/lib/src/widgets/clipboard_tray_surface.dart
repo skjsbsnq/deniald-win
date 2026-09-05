@@ -332,7 +332,9 @@ class _ClipboardClearAllButton extends StatelessWidget {
           disabledForegroundColor: context.shellColors.glyphInactive,
           backgroundColor: context.shellColors.surfaceContainerHigh,
           shape: RoundedRectangleBorder(
-            borderRadius: context.shellTheme.borderRadius(12),
+            borderRadius: context.shellTheme.borderRadius(
+              ShellShapeScale.medium,
+            ),
             side: BorderSide(color: context.shellColors.hairlineSoft),
           ),
         ),

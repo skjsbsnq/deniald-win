@@ -38,23 +38,29 @@ class ShellAccentPalette {
   ) {
     final primary = generated.primary;
     final container = generated.primaryContainer;
+    // M3E derives quiet roles from the same tonal palette instead of alpha
+    // blends: tone-based derivation keeps light and dark brightness
+    // symmetric, which alpha blending cannot.
     final mutedContainer = _tintedSurface(
       primary,
       colors,
       colors.brightness == Brightness.dark ? 0.22 : 0.12,
     );
-    final onContainer = _contrastForeground(container);
     return ShellAccentPalette._(
       primary: primary,
-      onPrimary: _contrastForeground(primary),
+      onPrimary: generated.onPrimary,
       container: container,
-      onContainer: onContainer,
-      onContainerSecondary: onContainer.withValues(alpha: 0.78),
+      onContainer: generated.onPrimaryContainer,
+      onContainerSecondary: generated.onPrimaryContainer.withValues(
+        alpha: 0.78,
+      ),
       mutedContainer: mutedContainer,
       onMutedContainer: _contrastForeground(mutedContainer),
-      subtle: primary.withValues(alpha: 0.10),
-      outline: primary.withValues(alpha: 0.34),
-      selection: primary.withValues(alpha: 0.38),
+      subtle: colors.brightness == Brightness.dark
+          ? primary.withValues(alpha: 0.10)
+          : _tintedSurface(primary, colors, 0.10),
+      outline: generated.outline,
+      selection: generated.primary.withValues(alpha: 0.38),
     );
   }
 
@@ -478,10 +484,13 @@ class _ShellThemeResolution {
       onSurfaceVariant: theme.colors.textSecondary,
       outline: theme.colors.hairline,
       outlineVariant: theme.colors.hairlineSoft,
+      surfaceContainerLowest: theme.colors.background,
       surfaceContainerLow: theme.colors.surfaceContainerLow,
       surfaceContainer: theme.colors.surfaceContainer,
       surfaceContainerHigh: theme.colors.surfaceContainerHigh,
       surfaceContainerHighest: theme.colors.surfaceContainerHighest,
+      surfaceDim: theme.colors.panelBackground,
+      surfaceBright: theme.colors.background,
       shadow: theme.colors.shadow,
     ),
     cardTheme: CardThemeData(
@@ -528,6 +537,63 @@ class _ShellThemeResolution {
         shape: WidgetStatePropertyAll<OutlinedBorder>(
           RoundedRectangleBorder(
             borderRadius: theme.borderRadius(ShellRadii.chip),
+          ),
+        ),
+      ),
+    ),
+    sliderTheme: SliderThemeData(
+      // RoundedRectSliderTrackShape already rounds the track ends to
+      // half its height, which reads as a full pill at M3 track heights.
+      trackShape: const RoundedRectSliderTrackShape(),
+    ),
+    segmentedButtonTheme: SegmentedButtonThemeData(
+      style: ButtonStyle(
+        shape: WidgetStatePropertyAll<OutlinedBorder>(
+          RoundedRectangleBorder(
+            borderRadius: theme.borderRadius(ShellShapeScale.full),
+          ),
+        ),
+      ),
+    ),
+    listTileTheme: ListTileThemeData(
+      shape: RoundedRectangleBorder(
+        borderRadius: theme.borderRadius(ShellShapeScale.medium),
+      ),
+    ),
+    checkboxTheme: CheckboxThemeData(
+      shape: RoundedRectangleBorder(
+        borderRadius: theme.borderRadius(ShellShapeScale.extraSmall),
+      ),
+    ),
+    chipTheme: ChipThemeData(
+      shape: RoundedRectangleBorder(
+        borderRadius: theme.borderRadius(ShellShapeScale.small),
+      ),
+    ),
+    tooltipTheme: TooltipThemeData(
+      decoration: BoxDecoration(
+        borderRadius: theme.borderRadius(ShellShapeScale.small),
+      ),
+    ),
+    dividerTheme: DividerThemeData(
+      color: theme.colors.hairlineSoft,
+      thickness: 1,
+    ),
+    iconButtonTheme: IconButtonThemeData(
+      style: ButtonStyle(
+        shape: WidgetStatePropertyAll<OutlinedBorder>(
+          RoundedRectangleBorder(
+            borderRadius: theme.borderRadius(ShellShapeScale.full),
+          ),
+        ),
+      ),
+    ),
+    progressIndicatorTheme: ProgressIndicatorThemeData(color: theme.accent),
+    menuTheme: MenuThemeData(
+      style: MenuStyle(
+        shape: WidgetStatePropertyAll<OutlinedBorder>(
+          RoundedRectangleBorder(
+            borderRadius: theme.borderRadius(ShellShapeScale.medium),
           ),
         ),
       ),
@@ -618,19 +684,26 @@ extension ShellThemeBuildContext on BuildContext {
 }
 
 Color _tintedSurface(Color accent, ShellColorScheme colors, double amount) {
-  return Color.alphaBlend(
-    accent.withValues(alpha: amount),
-    colors.surfaceContainerHigh.withValues(alpha: 1),
-  );
+  // The shell surface family carries a deliberate alpha channel for its
+  // translucent panels, so tinting blends over the flattened backing color
+  // and re-applies the original alpha to stay in the same family.
+  final backing = colors.surfaceContainerHigh.withValues(alpha: 1);
+  final tinted = Color.alphaBlend(accent.withValues(alpha: amount), backing);
+  return tinted.withValues(alpha: colors.surfaceContainerHigh.a);
 }
 
+/// The `content` variant keeps the wallpaper seed's hue and chroma on
+/// primary/primaryContainer while producing a complete tonal scheme, so the
+/// shell accent tracks the user's wallpaper. No surface override is passed:
+/// an override would only replace the single `surface` role and leave the
+/// generated surfaceContainer roles on a different hue, breaking tonal
+/// harmony.
 ColorScheme _accentColorScheme(Color source, ShellColorScheme colors) {
-  final primary = source.withValues(alpha: 1);
   return ColorScheme.fromSeed(
-    seedColor: primary,
+    seedColor: source.withValues(alpha: 1),
     brightness: colors.brightness,
-    surface: colors.background,
-  ).copyWith(primary: primary, onPrimary: _contrastForeground(primary));
+    dynamicSchemeVariant: DynamicSchemeVariant.content,
+  );
 }
 
 Color _contrastForeground(Color background) {

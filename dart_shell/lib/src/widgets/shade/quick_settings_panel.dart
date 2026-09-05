@@ -224,6 +224,10 @@ class _QuickSettingsTilesSection extends ConsumerWidget {
       onToggleRotation: quickSettingsController.toggleRotation,
       onToggleDnd: notificationController.toggleDoNotDisturb,
       onCycleProfile: quickSettingsController.cycleProfile,
+      onScreenshot: () {
+        ref.read(shellControllerProvider.notifier).closeEdgePanel();
+        quickSettingsController.takeScreenshot();
+      },
     );
   }
 }
@@ -338,7 +342,9 @@ class _StatusPill extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: context.shellColors.surfaceContainer,
-        borderRadius: context.shellTheme.borderRadius(22),
+        borderRadius: context.shellTheme.borderRadius(
+          ShellShapeScale.largeIncreased,
+        ),
         border: Border.all(color: context.shellColors.hairlineSoft),
       ),
       child: Padding(
@@ -388,7 +394,9 @@ class _ShadeHandle extends ConsumerWidget {
               child: DecoratedBox(
                 decoration: BoxDecoration(
                   color: context.shellColors.textTertiary,
-                  borderRadius: context.shellTheme.borderRadius(2),
+                  borderRadius: context.shellTheme.borderRadius(
+                    ShellShapeScale.extraSmall,
+                  ),
                 ),
                 child: const SizedBox(width: 44, height: 4),
               ),

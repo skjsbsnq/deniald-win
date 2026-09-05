@@ -519,7 +519,9 @@ class _MonitorPreview extends StatelessWidget {
     final bar = DecoratedBox(
       decoration: BoxDecoration(
         color: selected ? accent : context.shellColors.textTertiary,
-        borderRadius: context.shellTheme.borderRadius(2),
+        borderRadius: context.shellTheme.borderRadius(
+          ShellShapeScale.extraSmall,
+        ),
       ),
     );
     return AnimatedContainer(
@@ -529,7 +531,7 @@ class _MonitorPreview extends StatelessWidget {
       padding: const EdgeInsets.all(4),
       decoration: BoxDecoration(
         color: context.shellColors.windowFrameSurface,
-        borderRadius: context.shellTheme.borderRadius(7),
+        borderRadius: context.shellTheme.borderRadius(ShellShapeScale.small),
         border: Border.all(
           color: selected ? accent : context.shellColors.hairline,
         ),
@@ -549,7 +551,9 @@ class _MonitorPreview extends StatelessWidget {
             child: DecoratedBox(
               decoration: BoxDecoration(
                 color: context.shellColors.surfaceContainerHighest,
-                borderRadius: context.shellTheme.borderRadius(4),
+                borderRadius: context.shellTheme.borderRadius(
+                  ShellShapeScale.extraSmall,
+                ),
               ),
             ),
           ),

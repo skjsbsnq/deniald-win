@@ -17,7 +17,7 @@ Color desktopWindowBorderColor({
     return theme.accentPalette.container;
   }
   if (active && theme.focusedWindowBorderEnabled) {
-    return theme.accent;
+    return theme.accentPalette.primary;
   }
   return inactiveColor;
 }

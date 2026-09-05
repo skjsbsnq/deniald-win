@@ -91,6 +91,7 @@ class DesktopApplicationLauncher extends ConsumerStatefulWidget {
     required this.onDismiss,
     required this.onLaunch,
     required this.onLaunchLocal,
+    this.visible,
   });
 
   final FocusNode searchFocusNode;
@@ -101,6 +102,7 @@ class DesktopApplicationLauncher extends ConsumerStatefulWidget {
   final VoidCallback onDismiss;
   final ValueChanged<DesktopApp> onLaunch;
   final ValueChanged<LocalFlutterApplication> onLaunchLocal;
+  final bool? visible;
 
   @override
   ConsumerState<DesktopApplicationLauncher> createState() =>
@@ -108,13 +110,16 @@ class DesktopApplicationLauncher extends ConsumerStatefulWidget {
 }
 
 class _DesktopApplicationLauncherState
-    extends ConsumerState<DesktopApplicationLauncher> {
+    extends ConsumerState<DesktopApplicationLauncher>
+    with SingleTickerProviderStateMixin {
   static const double _tileExtent = 112;
   static const double _suggestedTileExtent = 96;
   static const double _tileSpacing = 8;
 
   late final TextEditingController _searchController;
   final ScrollController _gridController = ScrollController();
+  late final AnimationController _expandController;
+  bool _isOpen = false;
   String _lastSearchText = '';
   String? _selectedTargetId;
   bool _hasCachedDesktopApps = false;
@@ -138,6 +143,13 @@ class _DesktopApplicationLauncherState
     super.initState();
     _searchController = TextEditingController()
       ..addListener(_handleQueryChanged);
+    final initialOpen =
+        widget.visible ?? ref.read(desktopWorkspaceProvider).launcherOpen;
+    _isOpen = initialOpen;
+    _expandController = AnimationController.unbounded(
+      vsync: this,
+      value: initialOpen ? 1.0 : 0.0,
+    );
     _visibilitySubscription = ref.listenManual<bool>(
       desktopWorkspaceProvider.select((state) => state.launcherOpen),
       _handleVisibilityChanged,
@@ -145,8 +157,17 @@ class _DesktopApplicationLauncherState
   }
 
   @override
+  void didUpdateWidget(covariant DesktopApplicationLauncher oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.visible != null && widget.visible != oldWidget.visible) {
+      _updateVisibility(widget.visible!);
+    }
+  }
+
+  @override
   void dispose() {
     _visibilitySubscription.close();
+    _expandController.dispose();
     _searchController
       ..removeListener(_handleQueryChanged)
       ..dispose();
@@ -165,6 +186,7 @@ class _DesktopApplicationLauncherState
   }
 
   void _handleVisibilityChanged(bool? previous, bool visible) {
+    _updateVisibility(visible);
     final targets = _visibleTargets;
     final previousIndex = _selectedIndexFor(targets);
     final previousSelection = previousIndex < 0
@@ -177,10 +199,38 @@ class _DesktopApplicationLauncherState
       _setTileSelected(previousSelection, false);
       _setTileSelected(targets.first.selectionId, true);
     }
-    _resetGridScroll();
-    if (!visible && _searchController.text.isNotEmpty) {
+  }
+
+  void _updateVisibility(bool visible) {
+    if (_isOpen == visible) return;
+    _isOpen = visible;
+    if (visible) {
+      _resetForReopen();
+    }
+    springTo(
+      _expandController,
+      visible ? 1.0 : 0.0,
+      spring: Motion.expressiveSpatialDefault,
+      telemetryLabel: 'launcher_bubble_toggle',
+    );
+  }
+
+  /// Restores the launcher to a fresh state for the next show.
+  ///
+  /// The grid keeps its scroll offset and search text while the bubble
+  /// collapses, so closing no longer visibly snaps the list back to the top.
+  /// The reset happens on reopen instead: the search field is cleared while
+  /// the bubble is still collapsed, and the scroll offset is restored one
+  /// frame later, after the grid has re-attached.
+  void _resetForReopen() {
+    if (_searchController.text.isNotEmpty) {
       _searchController.clear();
     }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _isOpen) {
+        _resetGridScroll();
+      }
+    });
   }
 
   void _clearSearch() {
@@ -442,7 +492,7 @@ class _DesktopApplicationLauncherState
     unawaited(
       _gridController.animateTo(
         clampedTarget,
-        duration: Motion.tile,
+        duration: const Duration(milliseconds: 200),
         curve: Motion.standard,
       ),
     );
@@ -462,8 +512,12 @@ class _DesktopApplicationLauncherState
     final recentEntryIds = ref.watch(applicationRecentsProvider);
     final allApps = _resolveInstalledApps(context, slots, localRegistry);
     final apps = _resolveFilteredApps(allApps, _searchController.text);
+    final useChromeOsShelf = ref.watch(
+      shellSettingsProvider.select((s) => s.layout.useChromeOsShelf),
+    );
     final theme = ShellTheme.of(context);
     final l10n = context.l10n;
+    final bubbleRadius = theme.borderRadius(ShellShapeScale.large);
     return MouseRegion(
       onEnter: (_) => widget.onEnter(),
       onExit: (_) => widget.onExit(),
@@ -484,121 +538,156 @@ class _DesktopApplicationLauncherState
             const SingleActivator(LogicalKeyboardKey.arrowLeft): () =>
                 _moveSelection(_visibleTargets, -1),
           },
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: theme.panelColor(context.shellColors.panelBackground),
-              borderRadius: BorderRadius.circular(theme.panelRadius),
-              border: Border.all(color: context.shellColors.hairline),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _DesktopAppSearchField(
-                    controller: _searchController,
-                    focusNode: widget.searchFocusNode,
-                    onClear: _clearSearch,
-                    onSubmit: () => _launchSelected(_visibleTargets),
+          child: AnimatedBuilder(
+            animation: _expandController,
+            builder: (context, child) {
+              final progress = _expandController.value;
+              if (useChromeOsShelf && progress <= 0.001 && !_isOpen) {
+                return const SizedBox.shrink();
+              }
+              final clampedProgress = progress.clamp(0.0, 1.0);
+              final scale = math.max(0.0, 0.85 + 0.15 * progress);
+
+              Widget content = DecoratedBox(
+                decoration: BoxDecoration(
+                  color: theme.panelColor(context.shellColors.panelBackground),
+                  borderRadius: bubbleRadius,
+                  border: Border.all(
+                    color: context.shellColors.hairlineSoft,
+                    width: 1.0,
                   ),
-                  const SizedBox(height: 10),
-                  Expanded(
-                    child: LayoutBuilder(
-                      builder: (context, constraints) {
-                        final columnCount = _crossAxisCountFor(
-                          constraints.maxWidth,
-                        );
-                        final suggestedApps = _resolveSuggestedApps(
-                          apps,
-                          recentEntryIds,
-                          columnCount,
-                        );
-                        final navigationTargets = _resolveNavigationTargets(
-                          suggestedApps,
-                          apps,
-                          columnCount,
-                        );
-                        _visibleTargets = navigationTargets;
-                        return CustomScrollView(
-                          controller: _gridController,
-                          scrollCacheExtent: const ScrollCacheExtent.pixels(0),
-                          slivers: <Widget>[
-                            if (suggestedApps.isNotEmpty) ...<Widget>[
-                              SliverToBoxAdapter(
-                                child: _DesktopApplicationSuggestionsRow(
-                                  apps: suggestedApps,
-                                  selectedTargetId: _selectedTargetId,
-                                  tileKeyFor: _tileKey,
-                                  onLaunch: _launch,
+                ),
+                child: Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: child,
+                ),
+              );
+
+              if (useChromeOsShelf) {
+                content = SizedBox(
+                  width: _LauncherBubbleMetrics.width(
+                    MediaQuery.sizeOf(context),
+                  ),
+                  child: ShellBackdropBlur(
+                    strength: clampedProgress,
+                    borderRadius: bubbleRadius,
+                    child: content,
+                  ),
+                );
+                return Transform.scale(
+                  scale: scale,
+                  alignment: Alignment.bottomLeft,
+                  child: content,
+                );
+              }
+
+              return content;
+            },
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _DesktopAppSearchField(
+                  controller: _searchController,
+                  focusNode: widget.searchFocusNode,
+                  onClear: _clearSearch,
+                  onSubmit: () => _launchSelected(_visibleTargets),
+                ),
+                const SizedBox(height: 8),
+                Expanded(
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final columnCount = _crossAxisCountFor(
+                        constraints.maxWidth,
+                      );
+                      final suggestedApps = _resolveSuggestedApps(
+                        apps,
+                        recentEntryIds,
+                        columnCount,
+                      );
+                      final navigationTargets = _resolveNavigationTargets(
+                        suggestedApps,
+                        apps,
+                        columnCount,
+                      );
+                      _visibleTargets = navigationTargets;
+                      return CustomScrollView(
+                        controller: _gridController,
+                        scrollCacheExtent: const ScrollCacheExtent.pixels(0),
+                        slivers: <Widget>[
+                          if (suggestedApps.isNotEmpty) ...<Widget>[
+                            SliverToBoxAdapter(
+                              child: _DesktopApplicationSuggestionsRow(
+                                apps: suggestedApps,
+                                selectedTargetId: _selectedTargetId,
+                                tileKeyFor: _tileKey,
+                                onLaunch: _launch,
+                              ),
+                            ),
+                            SliverToBoxAdapter(
+                              child: Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: _tileSpacing,
+                                ),
+                                child: Divider(
+                                  key: desktopApplicationSuggestionsDividerKey,
+                                  height: 1,
+                                  thickness: 1,
+                                  color: context.shellColors.hairlineSoft
+                                      .withValues(alpha: 0.55),
                                 ),
                               ),
-                              SliverToBoxAdapter(
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: _tileSpacing,
-                                  ),
-                                  child: Divider(
-                                    key:
-                                        desktopApplicationSuggestionsDividerKey,
-                                    height: 1,
-                                    thickness: 1,
-                                    color: context.shellColors.hairlineSoft
-                                        .withValues(alpha: 0.55),
-                                  ),
-                                ),
-                              ),
-                            ],
-                            if (allApps.isEmpty)
-                              SliverFillRemaining(
-                                hasScrollBody: false,
-                                child: Center(
-                                  child: Text(l10n.desktopLoadingApplications),
-                                ),
-                              )
-                            else if (apps.isEmpty)
-                              const SliverFillRemaining(
-                                hasScrollBody: false,
-                                child: _DesktopAppSearchEmptyState(),
-                              )
-                            else
-                              SliverGrid(
-                                gridDelegate:
-                                    const SliverGridDelegateWithMaxCrossAxisExtent(
-                                      maxCrossAxisExtent: _tileExtent,
-                                      mainAxisExtent: _tileExtent,
-                                      crossAxisSpacing: _tileSpacing,
-                                      mainAxisSpacing: _tileSpacing,
-                                    ),
-                                delegate: SliverChildBuilderDelegate((
-                                  context,
-                                  index,
-                                ) {
-                                  final app = apps[index];
-                                  final targetId = _catalogLauncherTargetId(
-                                    app.navigationId,
-                                  );
-                                  return KeyedSubtree(
-                                    key: ValueKey<String>(
-                                      'desktop-app-${app.navigationId}',
-                                    ),
-                                    child: _DesktopAppTile(
-                                      key: _tileKey(targetId),
-                                      app: app,
-                                      selected: _selectedTargetId == null
-                                          ? suggestedApps.isEmpty && index == 0
-                                          : targetId == _selectedTargetId,
-                                      onTap: () => _launch(app),
-                                    ),
-                                  );
-                                }, childCount: apps.length),
-                              ),
+                            ),
                           ],
-                        );
-                      },
-                    ),
+                          if (allApps.isEmpty)
+                            SliverFillRemaining(
+                              hasScrollBody: false,
+                              child: Center(
+                                child: Text(l10n.desktopLoadingApplications),
+                              ),
+                            )
+                          else if (apps.isEmpty)
+                            const SliverFillRemaining(
+                              hasScrollBody: false,
+                              child: _DesktopAppSearchEmptyState(),
+                            )
+                          else
+                            SliverGrid(
+                              gridDelegate:
+                                  const SliverGridDelegateWithMaxCrossAxisExtent(
+                                    maxCrossAxisExtent: _tileExtent,
+                                    mainAxisExtent: _tileExtent,
+                                    crossAxisSpacing: _tileSpacing,
+                                    mainAxisSpacing: _tileSpacing,
+                                  ),
+                              delegate: SliverChildBuilderDelegate((
+                                context,
+                                index,
+                              ) {
+                                final app = apps[index];
+                                final targetId = _catalogLauncherTargetId(
+                                  app.navigationId,
+                                );
+                                return KeyedSubtree(
+                                  key: ValueKey<String>(
+                                    'desktop-app-${app.navigationId}',
+                                  ),
+                                  child: _DesktopAppTile(
+                                    key: _tileKey(targetId),
+                                    app: app,
+                                    selected: _selectedTargetId == null
+                                        ? suggestedApps.isEmpty && index == 0
+                                        : targetId == _selectedTargetId,
+                                    onTap: () => _launch(app),
+                                  ),
+                                );
+                              }, childCount: apps.length),
+                            ),
+                        ],
+                      );
+                    },
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ),

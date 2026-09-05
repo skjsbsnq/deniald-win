@@ -248,6 +248,7 @@ class ShellLayoutSettings {
     this.minimizedWindowPlacement = MinimizedWindowPlacement.desktop,
     this.clipboardTrayEdge = ClipboardTrayEdge.right,
     this.clipboardTrayExtent = clipboardTrayDefaultExtent,
+    this.useChromeOsShelf = false,
   });
 
   final DesktopWindowLayout windowLayout;
@@ -258,6 +259,20 @@ class ShellLayoutSettings {
   final MinimizedWindowPlacement minimizedWindowPlacement;
   final ClipboardTrayEdge clipboardTrayEdge;
   final double clipboardTrayExtent;
+  final bool useChromeOsShelf;
+
+  /// The effective system bar edge, placed at the bottom when ChromeOS shelf
+  /// is active.
+  SystemBarSide? get effectiveSystemBarSide =>
+      useChromeOsShelf ? SystemBarSide.bottom : systemBarSide;
+
+  /// The effective thickness allocated to the system bar or shelf.
+  ///
+  /// When ChromeOS shelf is active and [systemBarThickness] remains at its
+  /// default 32px bar baseline, defaults to 56px to fit launcher and app
+  /// controls comfortably.
+  double get effectiveSystemBarThickness =>
+      useChromeOsShelf && systemBarThickness <= 32 ? 56.0 : systemBarThickness;
 
   ShellLayoutSettings copyWith({
     DesktopWindowLayout? windowLayout,
@@ -269,6 +284,7 @@ class ShellLayoutSettings {
     MinimizedWindowPlacement? minimizedWindowPlacement,
     ClipboardTrayEdge? clipboardTrayEdge,
     double? clipboardTrayExtent,
+    bool? useChromeOsShelf,
   }) {
     return ShellLayoutSettings(
       windowLayout: windowLayout ?? this.windowLayout,
@@ -284,6 +300,7 @@ class ShellLayoutSettings {
           minimizedWindowPlacement ?? this.minimizedWindowPlacement,
       clipboardTrayEdge: clipboardTrayEdge ?? this.clipboardTrayEdge,
       clipboardTrayExtent: clipboardTrayExtent ?? this.clipboardTrayExtent,
+      useChromeOsShelf: useChromeOsShelf ?? this.useChromeOsShelf,
     );
   }
 
@@ -297,7 +314,8 @@ class ShellLayoutSettings {
         other.maximizePadding == maximizePadding &&
         other.minimizedWindowPlacement == minimizedWindowPlacement &&
         other.clipboardTrayEdge == clipboardTrayEdge &&
-        other.clipboardTrayExtent == clipboardTrayExtent;
+        other.clipboardTrayExtent == clipboardTrayExtent &&
+        other.useChromeOsShelf == useChromeOsShelf;
   }
 
   @override
@@ -310,6 +328,7 @@ class ShellLayoutSettings {
     minimizedWindowPlacement,
     clipboardTrayEdge,
     clipboardTrayExtent,
+    useChromeOsShelf,
   );
 }
 
@@ -913,6 +932,9 @@ class ShellSettings {
       if (layout.clipboardTrayExtent != before.clipboardTrayExtent) {
         section['clipboardTrayExtent'] = layout.clipboardTrayExtent;
       }
+      if (layout.useChromeOsShelf != before.useChromeOsShelf) {
+        section['useChromeOsShelf'] = layout.useChromeOsShelf;
+      }
       patch['layout'] = section;
     }
 
@@ -1038,6 +1060,7 @@ class ShellSettings {
         'minimizedWindowPlacement': layout.minimizedWindowPlacement.name,
         'clipboardTrayEdge': layout.clipboardTrayEdge.name,
         'clipboardTrayExtent': layout.clipboardTrayExtent,
+        'useChromeOsShelf': layout.useChromeOsShelf,
       },
       'overlays': <String, Object>{
         'launcher': _placementToJson(overlays.launcher),
@@ -1275,6 +1298,9 @@ class ShellSettings {
           clipboardTrayMinimumExtent,
           clipboardTrayMaximumExtent,
         ),
+        useChromeOsShelf: layoutJson['useChromeOsShelf'] is bool
+            ? layoutJson['useChromeOsShelf'] as bool
+            : defaults.layout.useChromeOsShelf,
       ),
       overlays: ShellOverlaySettings(
         launcher: _placement(

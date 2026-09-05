@@ -320,11 +320,11 @@ class _KeyboardTextField extends StatelessWidget {
         filled: true,
         fillColor: context.shellColors.surfaceContainerHigh,
         border: OutlineInputBorder(
-          borderRadius: context.shellTheme.borderRadius(12),
+          borderRadius: context.shellTheme.borderRadius(ShellShapeScale.medium),
           borderSide: BorderSide(color: context.shellColors.hairline),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: context.shellTheme.borderRadius(12),
+          borderRadius: context.shellTheme.borderRadius(ShellShapeScale.medium),
           borderSide: BorderSide(color: context.shellColors.hairline),
         ),
       ),

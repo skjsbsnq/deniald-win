@@ -237,7 +237,7 @@ class _ScreenshotSelectionSurfaceState
                               decoration: BoxDecoration(
                                 color: context.shellColors.surfaceContainerLow,
                                 borderRadius: context.shellTheme.borderRadius(
-                                  8,
+                                  ShellShapeScale.small,
                                 ),
                               ),
                               child: Padding(

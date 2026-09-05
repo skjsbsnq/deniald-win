@@ -23,7 +23,6 @@ class QuickSettingsTiles extends StatelessWidget {
     required this.bluetoothSubtitle,
     required this.bluetoothEnabled,
     required this.bluetoothBusy,
-    required this.rotationLock,
     required this.dnd,
     required this.dndReady,
     required this.profile,
@@ -31,9 +30,11 @@ class QuickSettingsTiles extends StatelessWidget {
     required this.onOpenWifi,
     required this.onToggleBluetooth,
     required this.onOpenBluetooth,
-    required this.onToggleRotation,
     required this.onToggleDnd,
     required this.onCycleProfile,
+    required this.onScreenshot,
+    this.rotationLock = false,
+    this.onToggleRotation,
   });
 
   final bool wifi;
@@ -52,20 +53,23 @@ class QuickSettingsTiles extends StatelessWidget {
   final VoidCallback onOpenWifi;
   final VoidCallback onToggleBluetooth;
   final VoidCallback onOpenBluetooth;
-  final VoidCallback onToggleRotation;
+  final VoidCallback? onToggleRotation;
   final VoidCallback onToggleDnd;
   final VoidCallback onCycleProfile;
+  final VoidCallback onScreenshot;
 
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
+    final isZh = Localizations.localeOf(context).languageCode == 'zh';
+    final screenshotTitle = isZh ? '截图' : 'Screenshot';
+
     return LayoutBuilder(
       builder: (context, constraints) {
-        const gap = 12.0;
-        final cell = ((constraints.maxWidth - gap * 3) / 4)
-            .clamp(58.0, double.infinity)
-            .toDouble();
-        final wide = cell * 2 + gap;
+        const gap = 8.0;
+        const tileHeight = 48.0;
+        final wide = (constraints.maxWidth - gap) / 2;
+        final compact = (wide - gap) / 2;
 
         return Column(
           children: [
@@ -73,40 +77,7 @@ class QuickSettingsTiles extends StatelessWidget {
               children: [
                 SizedBox(
                   width: wide,
-                  height: 72,
-                  child: QuickTile(
-                    icon: _profileIcon(profile),
-                    title: l10n.quickSettingsPerformance,
-                    subtitle: _profileLabel(profile, l10n),
-                    active: profile != PowerProfile.balanced,
-                    onTap: onCycleProfile,
-                    wide: true,
-                  ),
-                ),
-                const SizedBox(width: gap),
-                SizedBox(
-                  width: wide,
-                  height: 72,
-                  child: QuickTile(
-                    icon: Icons.notifications_off_rounded,
-                    title: l10n.quickSettingsSilent,
-                    subtitle: dndReady
-                        ? (dnd ? l10n.commonOn : l10n.quickSettingsNormal)
-                        : l10n.commonLoading,
-                    active: dnd,
-                    enabled: dndReady,
-                    onTap: onToggleDnd,
-                    wide: true,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: gap),
-            Row(
-              children: [
-                SizedBox(
-                  width: wide,
-                  height: 72,
+                  height: tileHeight,
                   child: QuickTile(
                     icon: Icons.wifi_rounded,
                     title: l10n.commonWifi,
@@ -122,7 +93,7 @@ class QuickSettingsTiles extends StatelessWidget {
                 const SizedBox(width: gap),
                 SizedBox(
                   width: wide,
-                  height: 72,
+                  height: tileHeight,
                   child: QuickTile(
                     icon: Icons.bluetooth_rounded,
                     title: l10n.commonBluetooth,
@@ -141,17 +112,40 @@ class QuickSettingsTiles extends StatelessWidget {
             Row(
               children: [
                 SizedBox(
-                  width: constraints.maxWidth,
-                  height: 68,
+                  width: wide,
+                  height: tileHeight,
                   child: QuickTile(
-                    icon: Icons.screen_rotation_rounded,
-                    title: l10n.quickSettingsRotation,
-                    subtitle: rotationLock
-                        ? l10n.quickSettingsLocked
-                        : l10n.quickSettingsAutomatic,
-                    active: !rotationLock,
-                    onTap: onToggleRotation,
+                    icon: _profileIcon(profile),
+                    title: l10n.quickSettingsPerformance,
+                    subtitle: _profileLabel(profile, l10n),
+                    active: profile != PowerProfile.balanced,
+                    onTap: onCycleProfile,
                     wide: true,
+                  ),
+                ),
+                const SizedBox(width: gap),
+                SizedBox(
+                  width: compact,
+                  height: tileHeight,
+                  child: QuickTile(
+                    icon: Icons.notifications_off_rounded,
+                    title: l10n.quickSettingsSilent,
+                    active: dnd,
+                    enabled: dndReady,
+                    onTap: onToggleDnd,
+                    wide: false,
+                  ),
+                ),
+                const SizedBox(width: gap),
+                SizedBox(
+                  width: compact,
+                  height: tileHeight,
+                  child: QuickTile(
+                    icon: Icons.screenshot_monitor_rounded,
+                    title: screenshotTitle,
+                    active: false,
+                    onTap: onScreenshot,
+                    wide: false,
                   ),
                 ),
               ],
@@ -200,18 +194,15 @@ class _QuickTileState extends State<QuickTile> {
   Widget build(BuildContext context) {
     final theme = ShellTheme.of(context);
     final accent = theme.accentPalette;
-    final background = theme.cardColor(
-      widget.active ? accent.primary : context.shellColors.tileOff,
-    );
+    final background = widget.active
+        ? accent.primary
+        : context.shellColors.surfaceContainerHigh;
     final foreground = widget.active
         ? accent.onPrimary
-        : context.shellColors.panelText;
+        : context.shellColors.textPrimary;
     final secondary = widget.active
-        ? accent.onPrimary.withValues(alpha: 0.78)
-        : context.shellColors.textTertiary;
-    final radius = theme.scaledRadius(
-      widget.wide ? ShellRadii.tileWide : ShellRadii.tile,
-    );
+        ? accent.onPrimary.withValues(alpha: 0.82)
+        : context.shellColors.textSecondary;
 
     return Semantics(
       button: true,
@@ -249,10 +240,12 @@ class _QuickTileState extends State<QuickTile> {
                 ? Duration.zero
                 : Motion.tile,
             curve: Motion.standard,
-            padding: EdgeInsets.symmetric(horizontal: widget.wide ? 18 : 10),
+            padding: EdgeInsets.symmetric(horizontal: widget.wide ? 12 : 6),
             decoration: BoxDecoration(
               color: background,
-              borderRadius: BorderRadius.circular(radius),
+              borderRadius: context.shellTheme.borderRadius(
+                ShellShapeScale.large,
+              ),
               border: Border.all(
                 color: _focused
                     ? accent.primary
@@ -279,10 +272,10 @@ class _QuickTileState extends State<QuickTile> {
           active: widget.active,
           busy: widget.busy,
           foreground: foreground,
-          size: 42,
-          iconSize: 24,
+          size: 32,
+          iconSize: 18,
         ),
-        const SizedBox(width: 12),
+        const SizedBox(width: 8),
         Expanded(
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -294,24 +287,24 @@ class _QuickTileState extends State<QuickTile> {
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   color: foreground,
-                  fontSize: 15,
-                  height: 1,
-                  fontWeight: FontWeight.w700,
+                  fontSize: 13,
+                  height: 1.1,
+                  fontWeight: FontWeight.w600,
                   letterSpacing: 0,
                   decoration: TextDecoration.none,
                 ),
               ),
               if (widget.subtitle != null) ...[
-                const SizedBox(height: 6),
+                const SizedBox(height: 2),
                 Text(
                   widget.subtitle!,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: secondary,
-                    fontSize: 13,
-                    height: 1,
-                    fontWeight: FontWeight.w600,
+                    fontSize: 11,
+                    height: 1.1,
+                    fontWeight: FontWeight.w400,
                     letterSpacing: 0,
                     decoration: TextDecoration.none,
                   ),
@@ -321,7 +314,7 @@ class _QuickTileState extends State<QuickTile> {
           ),
         ),
         if (widget.onDetails != null) ...[
-          const SizedBox(width: 6),
+          const SizedBox(width: 4),
           _TileDetailsButton(
             label: context.l10n.quickSettingsOpenDetails(widget.title),
             foreground: foreground,
@@ -341,19 +334,19 @@ class _QuickTileState extends State<QuickTile> {
           active: widget.active,
           busy: widget.busy,
           foreground: foreground,
-          size: 34,
-          iconSize: 21,
+          size: 26,
+          iconSize: 16,
         ),
-        const SizedBox(height: 7),
+        const SizedBox(height: 2),
         Text(
           widget.title,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
             color: foreground,
-            fontSize: 12,
-            height: 1,
-            fontWeight: FontWeight.w700,
+            fontSize: 11,
+            height: 1.0,
+            fontWeight: FontWeight.w600,
             letterSpacing: 0,
             decoration: TextDecoration.none,
           ),
@@ -382,11 +375,14 @@ class _TileIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = context.shellTheme;
+    final accent = theme.accentPalette;
+    final iconBg = active
+        ? accent.onPrimary.withValues(alpha: 0.18)
+        : context.shellColors.surfaceContainerHighest;
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: active
-            ? context.shellTheme.accentPalette.subtle
-            : context.shellColors.tileIcon,
+        color: iconBg,
         borderRadius: context.shellTheme.borderRadius(size / 2),
       ),
       child: SizedBox(
@@ -453,14 +449,16 @@ class _TileDetailsButtonState extends State<_TileDetailsButton> {
               color: _focused
                   ? context.shellColors.surfaceContainerHighest
                   : ShellMediaColors.transparentDark,
-              borderRadius: context.shellTheme.borderRadius(10),
+              borderRadius: context.shellTheme.borderRadius(
+                ShellShapeScale.medium,
+              ),
               border: _focused ? Border.all(color: accent) : null,
             ),
             child: SizedBox.square(
-              dimension: 34,
+              dimension: 26,
               child: Icon(
                 Icons.chevron_right_rounded,
-                size: 21,
+                size: 16,
                 color: widget.foreground,
               ),
             ),

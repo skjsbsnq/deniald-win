@@ -198,13 +198,48 @@ class _NavigationDestination extends StatefulWidget {
   State<_NavigationDestination> createState() => _NavigationDestinationState();
 }
 
-class _NavigationDestinationState extends State<_NavigationDestination> {
+class _NavigationDestinationState extends State<_NavigationDestination>
+    with SingleTickerProviderStateMixin {
   var _hovered = false;
   var _focused = false;
+  late final AnimationController _selectionController;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectionController = AnimationController(
+      vsync: this,
+      value: widget.selected ? 1.0 : 0.0,
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant _NavigationDestination oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.selected != widget.selected) {
+      if (MediaQuery.disableAnimationsOf(context)) {
+        _selectionController.value = widget.selected ? 1.0 : 0.0;
+      } else {
+        springTo(
+          _selectionController,
+          widget.selected ? 1.0 : 0.0,
+          spring: Motion.expressiveEffectsDefault,
+          telemetryLabel: 'settings_navigation_effects',
+        );
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _selectionController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final accent = ShellTheme.of(context).accent;
+    final palette = ShellTheme.of(context).accentPalette;
+    final selected = widget.selected;
     final pageLabel = widget.page.label(context);
     final motionDuration = MediaQuery.disableAnimationsOf(context)
         ? Duration.zero
@@ -214,14 +249,16 @@ class _NavigationDestinationState extends State<_NavigationDestination> {
       maxLines: 1,
       overflow: TextOverflow.ellipsis,
       style: ShellText.cardTitle.copyWith(
-        color: widget.selected
-            ? context.shellColors.textPrimary
-            : context.shellColors.textSecondary,
+        color: Color.lerp(
+          context.shellColors.textSecondary,
+          palette.onContainer,
+          _selectionController.value.clamp(0.0, 1.0),
+        ),
       ),
     );
     return Semantics(
       button: true,
-      selected: widget.selected,
+      selected: selected,
       label: pageLabel,
       child: FocusableActionDetector(
         mouseCursor: ShellMouseCursors.link,
@@ -242,62 +279,78 @@ class _NavigationDestinationState extends State<_NavigationDestination> {
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
           onTap: widget.onPressed,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: widget.selected
-                  ? accent.withAlpha(36)
-                  : ShellMediaColors.transparentDark,
-              borderRadius: context.shellTheme.borderRadius(12),
-              border: Border.all(
-                color: widget.selected
-                    ? accent.withAlpha(112)
-                    : ShellMediaColors.transparentDark,
-              ),
-            ),
-            child: Stack(
-              children: [
-                Positioned.fill(
-                  child: IgnorePointer(
-                    child: AnimatedOpacity(
-                      duration: motionDuration,
-                      curve: Motion.standard,
-                      opacity: _hovered || _focused ? 1 : 0,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: widget.selected
-                              ? accent.withAlpha(20)
-                              : context.shellColors.surfaceContainerHigh,
-                          borderRadius: context.shellTheme.borderRadius(12),
-                          border: _focused ? Border.all(color: accent) : null,
+          child: AnimatedBuilder(
+            animation: _selectionController,
+            builder: (context, _) {
+              final t = _selectionController.value.clamp(0.0, 1.0);
+              return DecoratedBox(
+                decoration: BoxDecoration(
+                  color: Color.lerp(
+                    ShellMediaColors.transparentDark,
+                    palette.container,
+                    t,
+                  ),
+                  borderRadius: context.shellTheme.borderRadius(
+                    ShellShapeScale.full,
+                  ),
+                  border: Border.all(
+                    color: Color.lerp(
+                      ShellMediaColors.transparentDark,
+                      palette.outline,
+                      t,
+                    )!,
+                  ),
+                ),
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: AnimatedOpacity(
+                          duration: motionDuration,
+                          curve: Motion.standard,
+                          opacity: _hovered || _focused ? 1 : 0,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: selected
+                                  ? palette.container.withAlpha(20)
+                                  : context.shellColors.surfaceContainerHigh,
+                              borderRadius: context.shellTheme.borderRadius(
+                                ShellShapeScale.full,
+                              ),
+                              border: _focused
+                                  ? Border.all(color: palette.primary)
+                                  : null,
+                            ),
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ),
-                Padding(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: widget.compact ? 11 : 10,
-                    vertical: widget.compact ? 8 : 9,
-                  ),
-                  child: Row(
-                    mainAxisSize: widget.compact
-                        ? MainAxisSize.min
-                        : MainAxisSize.max,
-                    children: [
-                      Icon(
-                        widget.page.icon,
-                        size: 17,
-                        color: widget.selected
-                            ? accent
-                            : context.shellColors.textTertiary,
+                    Padding(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: widget.compact ? 11 : 10,
+                        vertical: widget.compact ? 8 : 9,
                       ),
-                      const SizedBox(width: 8),
-                      if (widget.compact) label else Expanded(child: label),
-                    ],
-                  ),
+                      child: Row(
+                        mainAxisSize: widget.compact
+                            ? MainAxisSize.min
+                            : MainAxisSize.max,
+                        children: [
+                          Icon(
+                            widget.page.icon,
+                            size: 17,
+                            color: selected
+                                ? palette.primary
+                                : context.shellColors.textTertiary,
+                          ),
+                          const SizedBox(width: 8),
+                          if (widget.compact) label else Expanded(child: label),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              );
+            },
           ),
         ),
       ),

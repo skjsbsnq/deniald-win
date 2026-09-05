@@ -44,79 +44,6 @@ class _BatteryStatusCard extends ConsumerWidget {
   }
 }
 
-/// Rebuilds the GPU group without rebuilding the neighbouring cards.
-class _GpuStatusCards extends ConsumerWidget {
-  const _GpuStatusCards({
-    required this.accent,
-    required this.horizontal,
-    required this.cpuVisible,
-  });
-
-  final WallpaperAccent accent;
-  final bool horizontal;
-  final bool cpuVisible;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final gpus = ref.watch(gpuUsageProvider);
-    return Flex(
-      direction: horizontal ? Axis.horizontal : Axis.vertical,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        for (int i = 0; i < gpus.length; i += 1)
-          _SystemBarEntrance(
-            key: ValueKey('system-bar-gpu-${gpus[i].id}'),
-            index: (cpuVisible ? 1 : 0) + (gpus.length - i),
-            horizontal: horizontal,
-            child: Padding(
-              padding: horizontal
-                  ? const EdgeInsets.only(right: DesktopSystemBar._cardGap)
-                  : const EdgeInsets.only(bottom: DesktopSystemBar._cardGap),
-              child: _SystemBarCard(
-                accent: accent,
-                child: _MeterModule(
-                  accent: accent,
-                  label: gpus[i].label,
-                  series: gpus[i].series,
-                ),
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-/// Rebuilds the CPU meter only when a fresh sample is published.
-class _CpuStatusCard extends ConsumerWidget {
-  const _CpuStatusCard({required this.accent, required this.horizontal});
-
-  final WallpaperAccent accent;
-  final bool horizontal;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    return _SystemBarEntrance(
-      key: const ValueKey('system-bar-cpu'),
-      index: 1,
-      horizontal: horizontal,
-      child: Padding(
-        padding: horizontal
-            ? const EdgeInsets.only(right: DesktopSystemBar._cardGap)
-            : const EdgeInsets.only(bottom: DesktopSystemBar._cardGap),
-        child: _SystemBarCard(
-          accent: accent,
-          child: _MeterModule(
-            accent: accent,
-            label: context.l10n.metricCpu,
-            series: ref.watch(cpuUsageProvider),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 /// Rebuilds the clock card only at the minute boundary.
 class _ClockStatusModule extends ConsumerWidget {
   const _ClockStatusModule({required this.accent});
@@ -426,7 +353,7 @@ class _MediaPlaybackPopup extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = ShellTheme.of(context);
-    final radius = theme.borderRadius(24);
+    final radius = theme.borderRadius(ShellRadii.tile);
     final position = playback.positionAt(now);
     final length = playback.length;
     final progress = length > Duration.zero
@@ -514,7 +441,9 @@ class _MediaPlaybackPopup extends StatelessWidget {
                       value:
                           '${_formatMediaTime(position)} / ${_formatMediaTime(length)}',
                       child: ClipRRect(
-                        borderRadius: context.shellTheme.borderRadius(99),
+                        borderRadius: context.shellTheme.borderRadius(
+                          ShellShapeScale.full,
+                        ),
                         child: LinearProgressIndicator(
                           minHeight: 4,
                           value: progress,
@@ -712,7 +641,7 @@ class _MediaArtwork extends ConsumerWidget {
       child: SizedBox.square(
         dimension: size,
         child: ClipRRect(
-          borderRadius: context.shellTheme.borderRadius(18),
+          borderRadius: context.shellTheme.borderRadius(ShellShapeScale.large),
           child: artwork,
         ),
       ),

@@ -418,7 +418,7 @@ class DesktopWindowSwitcherBackdrop extends StatelessWidget {
 
 /// Input capture and restrained chrome only. Window surfaces stay in the
 /// desktop scene and are never recreated here.
-class DesktopWindowSwitcherLayer extends StatelessWidget {
+class DesktopWindowSwitcherLayer extends StatefulWidget {
   const DesktopWindowSwitcherLayer({
     required this.switcher,
     required this.selectedWindow,
@@ -431,8 +431,56 @@ class DesktopWindowSwitcherLayer extends StatelessWidget {
   final Rect stageBounds;
 
   @override
+  State<DesktopWindowSwitcherLayer> createState() =>
+      _DesktopWindowSwitcherLayerState();
+}
+
+class _DesktopWindowSwitcherLayerState extends State<DesktopWindowSwitcherLayer>
+    with SingleTickerProviderStateMixin {
+  // Travel between the hidden label position (-52) and its resting bottom
+  // inset (24).
+  static const double _chipSlideTravel = 76.0;
+
+  late final AnimationController _reveal = AnimationController.unbounded(
+    vsync: this,
+    value: widget.switcher.expandedChromeVisible ? 1.0 : 0.0,
+  );
+
+  @override
+  void didUpdateWidget(covariant DesktopWindowSwitcherLayer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final expanded = widget.switcher.expandedChromeVisible;
+    if (expanded == oldWidget.switcher.expandedChromeVisible) {
+      return;
+    }
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _reveal
+        ..stop()
+        ..value = expanded ? 1.0 : 0.0;
+      return;
+    }
+    springTo(
+      _reveal,
+      expanded ? 1.0 : 0.0,
+      spring: Motion.expressiveSpatialFast,
+      telemetryLabel: expanded
+          ? 'window_switcher_chrome_expand'
+          : 'window_switcher_chrome_collapse',
+    );
+  }
+
+  @override
+  void dispose() {
+    _reveal.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final switcher = widget.switcher;
+    final selectedWindow = widget.selectedWindow;
+    final stageBounds = widget.stageBounds;
     final expanded = switcher.expandedChromeVisible;
     final chromeTheme = context.shellTheme.copyWith(
       colors: _windowSwitcherColors,
@@ -465,65 +513,76 @@ class DesktopWindowSwitcherLayer extends StatelessWidget {
                           duration: duration,
                           curve: Motion.md3Emphasized,
                           left: (stageBounds.width - labelWidth) / 2.0,
-                          bottom: expanded ? 24.0 : -52.0,
+                          bottom: 24.0,
                           width: labelWidth,
                           height: 40.0,
-                          child: ExcludeSemantics(
-                            excluding: !expanded,
-                            child: Semantics(
-                              liveRegion: true,
-                              label: selectedWindow == null
-                                  ? null
-                                  : context.l10n.windowSwitcherSelected(
-                                      localizedWindowTitle(
-                                        context,
-                                        selectedWindow!,
+                          child: AnimatedBuilder(
+                            animation: _reveal,
+                            builder: (context, child) => Transform.translate(
+                              offset: Offset(
+                                0,
+                                _chipSlideTravel * (1.0 - _reveal.value),
+                              ),
+                              child: child,
+                            ),
+                            child: ExcludeSemantics(
+                              excluding: !expanded,
+                              child: Semantics(
+                                liveRegion: true,
+                                label: selectedWindow == null
+                                    ? null
+                                    : context.l10n.windowSwitcherSelected(
+                                        localizedWindowTitle(
+                                          context,
+                                          selectedWindow,
+                                        ),
                                       ),
+                                child: DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    color: chromeTheme.cardColor(
+                                      _windowSwitcherColors.panelBackground,
                                     ),
-                              child: DecoratedBox(
-                                decoration: BoxDecoration(
-                                  color: chromeTheme.cardColor(
-                                    _windowSwitcherColors.panelBackground,
+                                    borderRadius: chromeTheme.borderRadius(
+                                      ShellShapeScale.extraLarge,
+                                    ),
                                   ),
-                                  borderRadius: chromeTheme.borderRadius(
-                                    ShellRadii.chip,
-                                  ),
-                                ),
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 18.0,
-                                  ),
-                                  child: Row(
-                                    mainAxisAlignment: MainAxisAlignment.center,
-                                    children: [
-                                      Text(
-                                        context.l10n.windowSwitcherPosition(
-                                          switcher.selectedIndex + 1,
-                                          switcher.objectIds.length,
-                                        ),
-                                        style: ShellText.cardTitle.copyWith(
-                                          color: _windowSwitcherColors
-                                              .textSecondary,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 12.0),
-                                      Flexible(
-                                        child: Text(
-                                          selectedWindow == null
-                                              ? ''
-                                              : localizedWindowTitle(
-                                                  context,
-                                                  selectedWindow!,
-                                                ),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 18.0,
+                                    ),
+                                    child: Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Text(
+                                          context.l10n.windowSwitcherPosition(
+                                            switcher.selectedIndex + 1,
+                                            switcher.objectIds.length,
+                                          ),
                                           style: ShellText.cardTitle.copyWith(
                                             color: _windowSwitcherColors
-                                                .textPrimary,
+                                                .textSecondary,
                                           ),
                                         ),
-                                      ),
-                                    ],
+                                        const SizedBox(width: 12.0),
+                                        Flexible(
+                                          child: Text(
+                                            selectedWindow == null
+                                                ? ''
+                                                : localizedWindowTitle(
+                                                    context,
+                                                    selectedWindow,
+                                                  ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: ShellText.cardTitle.copyWith(
+                                              color: _windowSwitcherColors
+                                                  .textPrimary,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ),

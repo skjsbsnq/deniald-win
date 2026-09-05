@@ -364,7 +364,9 @@ class _DashboardCard extends StatelessWidget {
         color: context.shellTheme.cardColor(
           context.shellColors.surfaceContainerLow,
         ),
-        borderRadius: context.shellTheme.borderRadius(20),
+        borderRadius: context.shellTheme.borderRadius(
+          ShellShapeScale.largeIncreased,
+        ),
         border: Border.all(color: context.shellColors.hairlineSoft),
       ),
       child: Padding(padding: const EdgeInsets.all(16), child: child),

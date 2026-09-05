@@ -20,7 +20,11 @@ class DesktopAppSvgLoader extends SvgLoader<void> {
   DesktopAppSvgLoader(
     this.path, [
     Color currentColor = ShellBrandColors.fallbackAppIcon,
-  ]) : super(theme: SvgTheme(currentColor: currentColor));
+    ColorMapper? colorMapper,
+  ]) : super(
+         theme: SvgTheme(currentColor: currentColor),
+         colorMapper: colorMapper,
+       );
 
   final String path;
 
@@ -84,6 +88,57 @@ class AppIconImage extends StatelessWidget {
           errorBuilder: (_, _, _) => const _FallbackAppIcon(),
         );
       },
+    );
+  }
+}
+
+/// Re-colors a monochrome symbolic icon SVG into a foreground color.
+///
+/// Freedesktop symbolic icons carry a dark literal fill (`#232323`-style)
+/// that is meant to be re-tinted by the toolkit before display. Rendering
+/// them as-is puts near-black strokes on the equally dark shelf. This mapper
+/// maps every non-transparent fill/stroke to [foreground].
+@immutable
+class _SymbolicColorMapper extends ColorMapper {
+  const _SymbolicColorMapper(this.foreground);
+
+  final Color foreground;
+
+  @override
+  Color substitute(
+    String? id,
+    String elementName,
+    String attributeName,
+    Color color,
+  ) {
+    if (color.a == 0) {
+      return color;
+    }
+    return foreground.withValues(alpha: color.a);
+  }
+}
+
+/// A resolved symbolic icon rendered with a single foreground tint.
+class SymbolicIconImage extends StatelessWidget {
+  const SymbolicIconImage({
+    super.key,
+    required this.iconPath,
+    required this.foreground,
+  });
+
+  final String? iconPath;
+  final Color foreground;
+
+  @override
+  Widget build(BuildContext context) {
+    final path = iconPath;
+    if (path == null || !path.toLowerCase().endsWith('.svg')) {
+      return AppIconImage(iconPath: iconPath);
+    }
+    return SvgPicture(
+      DesktopAppSvgLoader(path, foreground, _SymbolicColorMapper(foreground)),
+      fit: BoxFit.contain,
+      errorBuilder: (_, _, _) => AppIconImage(iconPath: iconPath),
     );
   }
 }

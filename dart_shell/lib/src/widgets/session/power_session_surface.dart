@@ -338,7 +338,7 @@ class _SessionActionTileState extends State<_SessionActionTile> {
                     ? context.shellColors.surfaceContainerHigh
                     : context.shellColors.tileOff,
                 borderRadius: context.shellTheme.borderRadius(
-                  ShellRadii.tileWide,
+                  ShellShapeScale.full,
                 ),
                 border: Border.all(
                   color: _focused
@@ -535,7 +535,7 @@ class _PowerNotice extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: context.shellColors.surfaceContainerHigh,
-        borderRadius: context.shellTheme.borderRadius(13),
+        borderRadius: context.shellTheme.borderRadius(ShellShapeScale.medium),
         border: Border.all(color: context.shellColors.hairlineSoft),
       ),
       child: Padding(
@@ -633,7 +633,9 @@ class _PowerIconButtonState extends State<_PowerIconButton> {
             child: DecoratedBox(
               decoration: BoxDecoration(
                 color: context.shellColors.surfaceContainerHigh,
-                borderRadius: context.shellTheme.borderRadius(12),
+                borderRadius: context.shellTheme.borderRadius(
+                  ShellShapeScale.full,
+                ),
                 border: Border.all(
                   color: _focused
                       ? accent.primary
@@ -707,7 +709,9 @@ class _PowerTextButtonState extends State<_PowerTextButton> {
               color: widget.emphasized
                   ? accent.container
                   : context.shellColors.surfaceContainerHighest,
-              borderRadius: context.shellTheme.borderRadius(12),
+              borderRadius: context.shellTheme.borderRadius(
+                ShellShapeScale.full,
+              ),
               border: Border.all(
                 color: _focused
                     ? accent.primary

@@ -63,6 +63,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get batteryIdle => 'Idle';
 
   @override
+  String get batteryFullyCharged => 'Fully charged';
+
+  @override
   String batteryLowNotificationBody(int percent) {
     return 'Battery is at $percent%. Connect a charger.';
   }

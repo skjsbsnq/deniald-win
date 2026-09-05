@@ -63,6 +63,8 @@ import '../widgets/shell_wallpaper.dart';
 import '../widgets/window_surface_tree.dart';
 import '../widgets/shade/range_bar.dart';
 import '../wallpaper/state/wallpaper_controller.dart';
+import 'shelf/shelf_layer.dart';
+import 'shelf/unified_tray_bubble.dart';
 import '../wallpaper/widgets/wallpaper_selector_surface.dart';
 import 'desktop_overview_preview_interaction.dart';
 import 'desktop_audio_device_dropdown.dart';
@@ -640,32 +642,7 @@ class _DesktopShellState extends ConsumerState<DesktopShell> {
   }
 
   void _openSettingsPage(SettingsPageId? page) {
-    final environment = ref.read(startupEnvironmentProvider);
-    if (environment.flag('DENIA_EMBED_SETTINGS')) {
-      if (page != null) {
-        ref.read(settingsPageOpenRequestProvider.notifier).request(page);
-      }
-      _launchLocalApp(denialSettingsApplication);
-      return;
-    }
-    _closePanels();
-    for (final window in ref.read(shellControllerProvider).openAppWindows) {
-      if (isDenialSettingsApplicationId(window.appId)) {
-        _activateWindow(window);
-        if (page == null) {
-          return;
-        }
-        break;
-      }
-    }
-    final binary = environment['DENIAL_SETTINGS_BINARY']?.trim();
-    final executable = binary == null || binary.isEmpty
-        ? '/usr/bin/denial-settings'
-        : binary;
-    ref.read(denialBridgeProvider).launchApplication(<String>[
-      executable,
-      if (page != null) '--page=${page.name}',
-    ]);
+    launchSettingsPage(ref, context, page);
   }
 
   Future<void> _showWallpaperSelector() async {
