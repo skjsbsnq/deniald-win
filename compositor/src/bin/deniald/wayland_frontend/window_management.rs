@@ -342,6 +342,9 @@ pub(in super::super) fn apply_window_commands(
                 WindowCommand::Focus { .. } => {
                     activate_local_flutter_window(state, window_id);
                 }
+                WindowCommand::Minimize { .. } => {
+                    minimize_toplevel_by_id(state, window_id);
+                }
                 WindowCommand::Configure { geometry, .. } => {
                     if state
                         .wayland
@@ -389,6 +392,9 @@ pub(in super::super) fn apply_window_commands(
             }
             WindowCommand::Focus { .. } => {
                 activate_window(state, &window, SERIAL_COUNTER.next_serial());
+            }
+            WindowCommand::Minimize { .. } => {
+                minimize_window(state, &window);
             }
             WindowCommand::Configure {
                 geometry,

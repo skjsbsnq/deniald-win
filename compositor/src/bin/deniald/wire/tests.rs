@@ -270,6 +270,182 @@ fn xembed_tray_command(kind: fb::XEmbedTrayCommandKind, window_id: u32, x: i32, 
 }
 
 #[test]
+fn minimize_window_request_queues_a_command_and_rejects_a_zero_id() {
+    let mut bridge = bridge();
+    assert!(
+        bridge
+            .handle(&window_request(
+                fb::WindowRequestKind::MinimizeWindow,
+                0,
+                42,
+                None,
+            ))
+            .unwrap()
+            .is_none()
+    );
+    assert_eq!(
+        bridge.drain_window_commands().collect::<Vec<_>>(),
+        vec![WindowCommand::Minimize { window_id: 42 }]
+    );
+
+    assert!(matches!(
+        bridge.handle(&window_request(
+            fb::WindowRequestKind::MinimizeWindow,
+            0,
+            0,
+            None,
+        )),
+        Err(WireError::Identity)
+    ));
+}
+
+#[test]
+fn system_bar_request_applies_maximize_padding_to_the_work_area() {
+    let mut builder = FlatBufferBuilder::new();
+    let monitor_ids = builder.create_vector(&[7i64, 9]);
+    let request = fb::WindowRequest::create(
+        &mut builder,
+        &fb::WindowRequestArgs {
+            kind: fb::WindowRequestKind::ConfigureSystemBar,
+            system_bar_side: fb::SystemBarSide::Right,
+            system_bar_monitor_ids: Some(monitor_ids),
+            system_bar_thickness: 56.0,
+            maximize_padding: 12.5,
+            ..Default::default()
+        },
+    );
+    let envelope = fb::Envelope::create(
+        &mut builder,
+        &fb::EnvelopeArgs {
+            protocol_version: PROTOCOL_VERSION,
+            sequence: 4,
+            request_id: 41,
+            payload_type: fb::Payload::WindowRequest,
+            payload: Some(request.as_union_value()),
+        },
+    );
+    fb::finish_envelope_buffer(&mut builder, envelope);
+    let bytes = builder.finished_data().to_vec();
+
+    let mut bridge = bridge();
+    let response = bridge.handle(&bytes).unwrap().unwrap().to_vec();
+    let envelope = fb::root_as_envelope(&response).unwrap();
+    let response = envelope.payload_as_window_response().unwrap();
+    let layout = response.display_layout().unwrap();
+    assert_eq!(envelope.request_id(), 41);
+    assert_eq!(layout.maximize_padding(), 12.5);
+    assert_eq!(bridge.work_area.maximize_padding, 12.5);
+    assert_eq!(bridge.work_area.system_bar.thickness, 56.0);
+
+    // Zero is the append-only "keep the native value" default: an older
+    // sender must not reset work-area shaping by omission.
+    let mut builder = FlatBufferBuilder::new();
+    let monitor_ids = builder.create_vector(&[7i64]);
+    let request = fb::WindowRequest::create(
+        &mut builder,
+        &fb::WindowRequestArgs {
+            kind: fb::WindowRequestKind::ConfigureSystemBar,
+            system_bar_side: fb::SystemBarSide::Right,
+            system_bar_monitor_ids: Some(monitor_ids),
+            system_bar_thickness: 64.0,
+            ..Default::default()
+        },
+    );
+    let envelope = fb::Envelope::create(
+        &mut builder,
+        &fb::EnvelopeArgs {
+            protocol_version: PROTOCOL_VERSION,
+            sequence: 5,
+            request_id: 42,
+            payload_type: fb::Payload::WindowRequest,
+            payload: Some(request.as_union_value()),
+        },
+    );
+    fb::finish_envelope_buffer(&mut builder, envelope);
+    assert!(bridge.handle(builder.finished_data()).unwrap().is_some());
+    assert_eq!(bridge.work_area.maximize_padding, 12.5);
+    assert_eq!(bridge.work_area.system_bar.thickness, 64.0);
+}
+
+#[test]
+fn dart_golden_wire_fixtures_decode_through_the_native_bridge() {
+    // These are the exact bytes the committed Dart generator produces; the
+    // native replay is the byte-level baseline for the Flutter-to-Rust
+    // direction that hand-maintained generated code needs the most.
+    let golden_root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../protocol/golden");
+
+    for label in ["empty", "one", "eight", "many"] {
+        let bytes = std::fs::read(golden_root.join(format!("dart_input_{label}.denw")))
+            .expect("dart input golden fixture is present");
+        let mut subject = bridge();
+        assert!(
+            subject.handle(&bytes).is_ok(),
+            "dart input golden {label} must verify natively"
+        );
+    }
+
+    let bytes = std::fs::read(golden_root.join("dart_system_bar.denw"))
+        .expect("dart system bar golden fixture is present");
+    let mut subject = bridge();
+    let response = subject.handle(&bytes).unwrap().unwrap().to_vec();
+    let envelope = fb::root_as_envelope(&response).unwrap();
+    let response = envelope.payload_as_window_response().unwrap();
+    let layout = response.display_layout().unwrap();
+    assert_eq!(envelope.request_id(), 41);
+    assert_eq!(layout.system_bar_side(), fb::SystemBarSide::Right);
+    assert_eq!(layout.system_bar_thickness(), 56.0);
+    assert_eq!(layout.maximize_padding(), 12.5);
+    assert_eq!(subject.work_area.system_bar.thickness, 56.0);
+    assert_eq!(subject.work_area.maximize_padding, 12.5);
+
+    let bytes = std::fs::read(golden_root.join("dart_window_request_minimize.denw"))
+        .expect("dart minimize golden fixture is present");
+    let mut subject = bridge();
+    assert!(subject.handle(&bytes).unwrap().is_none());
+    assert_eq!(
+        subject.drain_window_commands().collect::<Vec<_>>(),
+        vec![WindowCommand::Minimize { window_id: 42 }]
+    );
+}
+
+#[test]
+fn system_bar_request_rejects_a_thickness_beyond_the_configuration_bound() {
+    let mut builder = FlatBufferBuilder::new();
+    let monitor_ids = builder.create_vector(&[9i64]);
+    let request = fb::WindowRequest::create(
+        &mut builder,
+        &fb::WindowRequestArgs {
+            kind: fb::WindowRequestKind::ConfigureSystemBar,
+            system_bar_side: fb::SystemBarSide::Bottom,
+            system_bar_monitor_ids: Some(monitor_ids),
+            system_bar_thickness: MAX_SYSTEM_BAR_THICKNESS + 1.0,
+            ..Default::default()
+        },
+    );
+    let envelope = fb::Envelope::create(
+        &mut builder,
+        &fb::EnvelopeArgs {
+            protocol_version: PROTOCOL_VERSION,
+            sequence: 4,
+            request_id: 41,
+            payload_type: fb::Payload::WindowRequest,
+            payload: Some(request.as_union_value()),
+        },
+    );
+    fb::finish_envelope_buffer(&mut builder, envelope);
+
+    let mut bridge = bridge();
+    assert!(matches!(
+        bridge.handle(builder.finished_data()),
+        Err(WireError::Geometry)
+    ));
+    assert_eq!(
+        bridge.work_area.system_bar.thickness,
+        WorkAreaOptions::default().system_bar.thickness,
+    );
+}
+
+#[test]
 fn enforces_message_collection_and_command_queue_limits() {
     let mut bridge = bridge();
     assert!(matches!(

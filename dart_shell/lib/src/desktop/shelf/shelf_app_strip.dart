@@ -91,7 +91,12 @@ class _ShelfAppStripState extends ConsumerState<ShelfAppStrip> {
     final first = windows.first;
     if (windows.length == 1) {
       if (first.objectId == foregroundObjectId) {
+        // Optimistic local minimize keeps the visual response immediate; the
+        // native minimize through the bridge releases keyboard focus,
+        // suspends the client and echoes the action event that clears the
+        // stale foreground state which otherwise wedges the next press.
         ref.read(desktopWorkspaceProvider.notifier).minimize(first.objectId);
+        ref.read(denialBridgeProvider).minimizeWindow(first);
       } else {
         ref.read(desktopWorkspaceProvider.notifier).activate(first.objectId);
         ref.read(shellControllerProvider.notifier).focusWindow(first);

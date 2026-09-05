@@ -140,6 +140,7 @@ void main() {
       side: model.SystemBarSide.right,
       monitorIds: const <int>[7, 9],
       thickness: 56.0,
+      maximizePadding: 12.5,
     );
 
     expect(bytes, isNotNull);
@@ -150,6 +151,7 @@ void main() {
     expect(request.systemBarSide, SystemBarSide.Right);
     expect(request.systemBarMonitorIds, <int>[7, 9]);
     expect(request.systemBarThickness, 56.0);
+    expect(request.maximizePadding, 12.5);
     expect(
       bytes,
       File('../protocol/golden/dart_system_bar.denw').readAsBytesSync(),
@@ -171,6 +173,36 @@ void main() {
         thickness: 0.0,
       ),
       isNull,
+    );
+    expect(
+      codec.encodeSystemBarConfiguration(
+        requestId: 42,
+        side: model.SystemBarSide.right,
+        monitorIds: const <int>[7],
+        thickness: 56.0,
+        maximizePadding: -1.0,
+      ),
+      isNull,
+    );
+  });
+
+  test('shelf minimize request targets a window id', () {
+    final codec = DenialWireCodec();
+    final bytes = codec.encodeWindowRequest(
+      WindowRequestKind.MinimizeWindow,
+      windowId: 42,
+    );
+
+    final envelope = Envelope(bytes);
+    expect(envelope.payloadType, PayloadTypeId.WindowRequest);
+    final request = envelope.payload as WindowRequest;
+    expect(request.kind, WindowRequestKind.MinimizeWindow);
+    expect(request.windowId, 42);
+    expect(
+      bytes,
+      File(
+        '../protocol/golden/dart_window_request_minimize.denw',
+      ).readAsBytesSync(),
     );
   });
 

@@ -3,7 +3,9 @@ import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../config/startup_environment.dart';
 import '../input/input_layout.dart';
+import '../input/input_layout_debug.dart';
 import '../input/shell_interaction_registry.dart';
 import '../models/denial_window.dart';
 import '../state/desktop_window_switcher.dart';
@@ -26,6 +28,7 @@ class _DesktopInputLayoutPublisherState
       DesktopWindowConfigureTracker();
   bool _scheduled = false;
   int _epoch = 0;
+  bool _debugInputRegions = false;
   InputLayoutSnapshot? _lastSnapshot;
   _DesktopInputLayoutSource? _lastSource;
 
@@ -41,6 +44,9 @@ class _DesktopInputLayoutPublisherState
     );
     ref.watch(desktopWindowSwitcherProvider);
     ref.watch(shellInteractionRegistryProvider);
+    _debugInputRegions = inputRegionDebugEnabled(
+      ref.watch(startupEnvironmentProvider),
+    );
     _schedulePublish(
       MediaQuery.sizeOf(context),
       MediaQuery.devicePixelRatioOf(context),
@@ -262,6 +268,9 @@ class _DesktopInputLayoutPublisherState
     }
     _epoch = snapshot.epoch;
     _lastSnapshot = snapshot;
+    if (_debugInputRegions) {
+      ref.read(debugInputLayoutSnapshotProvider.notifier).publish(snapshot);
+    }
     return true;
   }
 

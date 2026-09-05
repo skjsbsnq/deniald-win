@@ -168,7 +168,8 @@ enum WindowRequestKind {
   FocusWindow(3),
   ConfigureWindow(4),
   CreateLocalWindow(5),
-  ConfigureSystemBar(6);
+  ConfigureSystemBar(6),
+  MinimizeWindow(7);
 
   final int value;
   const WindowRequestKind(this.value);
@@ -189,6 +190,8 @@ enum WindowRequestKind {
         return WindowRequestKind.CreateLocalWindow;
       case 6:
         return WindowRequestKind.ConfigureSystemBar;
+      case 7:
+        return WindowRequestKind.MinimizeWindow;
       default:
         throw StateError('Invalid value $value for bit flag enum');
     }
@@ -198,7 +201,7 @@ enum WindowRequestKind {
       value == null ? null : WindowRequestKind.fromValue(value);
 
   static const int minValue = 0;
-  static const int maxValue = 6;
+  static const int maxValue = 7;
   static const fb.Reader<WindowRequestKind> reader = _WindowRequestKindReader();
 }
 
@@ -2922,10 +2925,12 @@ class WindowRequest {
   int get flags => const fb.Uint32Reader().vTableGet(_bc, _bcOffset, 18, 0);
   double get systemBarThickness =>
       const fb.Float64Reader().vTableGet(_bc, _bcOffset, 20, 0.0);
+  double get maximizePadding =>
+      const fb.Float64Reader().vTableGet(_bc, _bcOffset, 22, 0.0);
 
   @override
   String toString() {
-    return 'WindowRequest{kind: ${kind}, windowId: ${windowId}, geometry: ${geometry}, appId: ${appId}, title: ${title}, systemBarSide: ${systemBarSide}, systemBarMonitorIds: ${systemBarMonitorIds}, flags: ${flags}, systemBarThickness: ${systemBarThickness}}';
+    return 'WindowRequest{kind: ${kind}, windowId: ${windowId}, geometry: ${geometry}, appId: ${appId}, title: ${title}, systemBarSide: ${systemBarSide}, systemBarMonitorIds: ${systemBarMonitorIds}, flags: ${flags}, systemBarThickness: ${systemBarThickness}, maximizePadding: ${maximizePadding}}';
   }
 }
 
@@ -2943,7 +2948,7 @@ class WindowRequestBuilder {
   final fb.Builder fbBuilder;
 
   void begin() {
-    fbBuilder.startTable(9);
+    fbBuilder.startTable(10);
   }
 
   int addKind(WindowRequestKind? kind) {
@@ -2991,6 +2996,11 @@ class WindowRequestBuilder {
     return fbBuilder.offset;
   }
 
+  int addMaximizePadding(double? maximizePadding) {
+    fbBuilder.addFloat64(9, maximizePadding);
+    return fbBuilder.offset;
+  }
+
   int finish() {
     return fbBuilder.endTable();
   }
@@ -3006,6 +3016,7 @@ class WindowRequestObjectBuilder extends fb.ObjectBuilder {
   final List<int>? _systemBarMonitorIds;
   final int? _flags;
   final double? _systemBarThickness;
+  final double? _maximizePadding;
 
   WindowRequestObjectBuilder({
     WindowRequestKind? kind,
@@ -3017,6 +3028,7 @@ class WindowRequestObjectBuilder extends fb.ObjectBuilder {
     List<int>? systemBarMonitorIds,
     int? flags,
     double? systemBarThickness,
+    double? maximizePadding,
   })  : _kind = kind,
         _windowId = windowId,
         _geometry = geometry,
@@ -3025,7 +3037,8 @@ class WindowRequestObjectBuilder extends fb.ObjectBuilder {
         _systemBarSide = systemBarSide,
         _systemBarMonitorIds = systemBarMonitorIds,
         _flags = flags,
-        _systemBarThickness = systemBarThickness;
+        _systemBarThickness = systemBarThickness,
+        _maximizePadding = maximizePadding;
 
   /// Finish building, and store into the [fbBuilder].
   @override
@@ -3037,7 +3050,7 @@ class WindowRequestObjectBuilder extends fb.ObjectBuilder {
     final int? systemBarMonitorIdsOffset = _systemBarMonitorIds == null
         ? null
         : fbBuilder.writeListInt64(_systemBarMonitorIds!);
-    fbBuilder.startTable(9);
+    fbBuilder.startTable(10);
     fbBuilder.addUint8(0, _kind?.value);
     fbBuilder.addUint64(1, _windowId);
     if (_geometry != null) {
@@ -3049,6 +3062,7 @@ class WindowRequestObjectBuilder extends fb.ObjectBuilder {
     fbBuilder.addOffset(6, systemBarMonitorIdsOffset);
     fbBuilder.addUint32(7, _flags);
     fbBuilder.addFloat64(8, _systemBarThickness);
+    fbBuilder.addFloat64(9, _maximizePadding);
     return fbBuilder.endTable();
   }
 

@@ -44,7 +44,8 @@ enum WindowRequestKind : ubyte {
   FocusWindow = 3,
   ConfigureWindow = 4,
   CreateLocalWindow = 5,
-  ConfigureSystemBar = 6
+  ConfigureSystemBar = 6,
+  MinimizeWindow = 7
 }
 
 enum WindowResponseKind : ubyte {
@@ -415,6 +416,11 @@ table WindowRequest {
   // Appended for wire compatibility: zero keeps the native-configured
   // thickness.
   system_bar_thickness:double = 0.0;
+  // ConfigureSystemBar only. Logical breathing room between a maximized
+  // window and every bar-free output edge, mirroring DisplayLayout's own
+  // field. Appended for wire compatibility: zero keeps the native-configured
+  // padding.
+  maximize_padding:double = 0.0;
 }
 
 table WindowResponse {

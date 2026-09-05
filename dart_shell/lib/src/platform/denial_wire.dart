@@ -224,6 +224,7 @@ class DenialWireCodec {
     required SystemBarSide side,
     required List<int> monitorIds,
     required double thickness,
+    double maximizePadding = 0,
   }) {
     if (requestId <= 0 ||
         side == SystemBarSide.hidden ||
@@ -232,7 +233,9 @@ class DenialWireCodec {
         monitorIds.any((monitorId) => monitorId < 0) ||
         monitorIds.toSet().length != monitorIds.length ||
         !thickness.isFinite ||
-        thickness <= 0.0) {
+        thickness <= 0.0 ||
+        !maximizePadding.isFinite ||
+        maximizePadding < 0.0) {
       return null;
     }
     final wireSide = switch (side) {
@@ -250,6 +253,7 @@ class DenialWireCodec {
         side: wireSide,
         monitorIds: List<int>.unmodifiable(monitorIds),
         thickness: thickness,
+        maximizePadding: maximizePadding,
       ),
       requestId: requestId,
     );

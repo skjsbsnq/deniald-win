@@ -377,10 +377,10 @@ impl flatbuffers::SimpleToVerifyInSlice for WindowOpacityClass {}
 #[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
 pub const ENUM_MIN_WINDOW_REQUEST_KIND: u8 = 0;
 #[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
-pub const ENUM_MAX_WINDOW_REQUEST_KIND: u8 = 6;
+pub const ENUM_MAX_WINDOW_REQUEST_KIND: u8 = 7;
 #[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
 #[allow(non_camel_case_types)]
-pub const ENUM_VALUES_WINDOW_REQUEST_KIND: [WindowRequestKind; 7] = [
+pub const ENUM_VALUES_WINDOW_REQUEST_KIND: [WindowRequestKind; 8] = [
   WindowRequestKind::ListWindows,
   WindowRequestKind::GetDisplayLayout,
   WindowRequestKind::CloseWindow,
@@ -388,6 +388,7 @@ pub const ENUM_VALUES_WINDOW_REQUEST_KIND: [WindowRequestKind; 7] = [
   WindowRequestKind::ConfigureWindow,
   WindowRequestKind::CreateLocalWindow,
   WindowRequestKind::ConfigureSystemBar,
+  WindowRequestKind::MinimizeWindow,
 ];
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
@@ -402,9 +403,10 @@ impl WindowRequestKind {
   pub const ConfigureWindow: Self = Self(4);
   pub const CreateLocalWindow: Self = Self(5);
   pub const ConfigureSystemBar: Self = Self(6);
+  pub const MinimizeWindow: Self = Self(7);
 
   pub const ENUM_MIN: u8 = 0;
-  pub const ENUM_MAX: u8 = 6;
+  pub const ENUM_MAX: u8 = 7;
   pub const ENUM_VALUES: &'static [Self] = &[
     Self::ListWindows,
     Self::GetDisplayLayout,
@@ -413,6 +415,7 @@ impl WindowRequestKind {
     Self::ConfigureWindow,
     Self::CreateLocalWindow,
     Self::ConfigureSystemBar,
+    Self::MinimizeWindow,
   ];
   /// Returns the variant's name or "" if unknown.
   pub fn variant_name(self) -> Option<&'static str> {
@@ -424,6 +427,7 @@ impl WindowRequestKind {
       Self::ConfigureWindow => Some("ConfigureWindow"),
       Self::CreateLocalWindow => Some("CreateLocalWindow"),
       Self::ConfigureSystemBar => Some("ConfigureSystemBar"),
+      Self::MinimizeWindow => Some("MinimizeWindow"),
       _ => None,
     }
   }
@@ -5198,6 +5202,7 @@ impl<'a> WindowRequest<'a> {
   pub const VT_SYSTEM_BAR_MONITOR_IDS: flatbuffers::VOffsetT = 16;
   pub const VT_FLAGS: flatbuffers::VOffsetT = 18;
   pub const VT_SYSTEM_BAR_THICKNESS: flatbuffers::VOffsetT = 20;
+  pub const VT_MAXIMIZE_PADDING: flatbuffers::VOffsetT = 22;
 
   #[inline]
   pub unsafe fn init_from_table(table: flatbuffers::Table<'a>) -> Self {
@@ -5212,6 +5217,7 @@ impl<'a> WindowRequest<'a> {
     builder.add_window_id(args.window_id);
     builder.add_flags(args.flags);
     builder.add_system_bar_thickness(args.system_bar_thickness);
+    builder.add_maximize_padding(args.maximize_padding);
     if let Some(x) = args.system_bar_monitor_ids { builder.add_system_bar_monitor_ids(x); }
     if let Some(x) = args.title { builder.add_title(x); }
     if let Some(x) = args.app_id { builder.add_app_id(x); }
@@ -5285,6 +5291,13 @@ impl<'a> WindowRequest<'a> {
     // which contains a valid value in this slot
     unsafe { self._tab.get::<f64>(WindowRequest::VT_SYSTEM_BAR_THICKNESS, Some(0.0)).unwrap()}
   }
+  #[inline]
+  pub fn maximize_padding(&self) -> f64 {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<f64>(WindowRequest::VT_MAXIMIZE_PADDING, Some(0.0)).unwrap()}
+  }
 }
 
 impl flatbuffers::Verifiable for WindowRequest<'_> {
@@ -5302,6 +5315,8 @@ impl flatbuffers::Verifiable for WindowRequest<'_> {
      .visit_field::<SystemBarSide>("system_bar_side", Self::VT_SYSTEM_BAR_SIDE, false)?
      .visit_field::<flatbuffers::ForwardsUOffset<flatbuffers::Vector<'_, i64>>>("system_bar_monitor_ids", Self::VT_SYSTEM_BAR_MONITOR_IDS, false)?
      .visit_field::<u32>("flags", Self::VT_FLAGS, false)?
+     .visit_field::<f64>("system_bar_thickness", Self::VT_SYSTEM_BAR_THICKNESS, false)?
+     .visit_field::<f64>("maximize_padding", Self::VT_MAXIMIZE_PADDING, false)?
      .finish();
     Ok(())
   }
@@ -5316,6 +5331,7 @@ pub struct WindowRequestArgs<'a> {
     pub system_bar_monitor_ids: Option<flatbuffers::WIPOffset<flatbuffers::Vector<'a, i64>>>,
     pub flags: u32,
     pub system_bar_thickness: f64,
+    pub maximize_padding: f64,
 }
 impl<'a> Default for WindowRequestArgs<'a> {
   #[inline]
@@ -5330,6 +5346,7 @@ impl<'a> Default for WindowRequestArgs<'a> {
       system_bar_monitor_ids: None,
       flags: 0,
       system_bar_thickness: 0.0,
+      maximize_padding: 0.0,
     }
   }
 }
@@ -5376,6 +5393,10 @@ impl<'a: 'b, 'b, A: flatbuffers::Allocator + 'a> WindowRequestBuilder<'a, 'b, A>
     self.fbb_.push_slot::<f64>(WindowRequest::VT_SYSTEM_BAR_THICKNESS, system_bar_thickness, 0.0);
   }
   #[inline]
+  pub fn add_maximize_padding(&mut self, maximize_padding: f64) {
+    self.fbb_.push_slot::<f64>(WindowRequest::VT_MAXIMIZE_PADDING, maximize_padding, 0.0);
+  }
+  #[inline]
   pub fn new(_fbb: &'b mut flatbuffers::FlatBufferBuilder<'a, A>) -> WindowRequestBuilder<'a, 'b, A> {
     let start = _fbb.start_table();
     WindowRequestBuilder {
@@ -5402,6 +5423,7 @@ impl core::fmt::Debug for WindowRequest<'_> {
       ds.field("system_bar_monitor_ids", &self.system_bar_monitor_ids());
       ds.field("flags", &self.flags());
       ds.field("system_bar_thickness", &self.system_bar_thickness());
+      ds.field("maximize_padding", &self.maximize_padding());
       ds.finish()
   }
 }

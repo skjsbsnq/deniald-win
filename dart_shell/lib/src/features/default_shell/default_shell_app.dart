@@ -6,6 +6,7 @@ import '../../desktop/desktop_shell.dart';
 import '../../wallpaper/state/wallpaper_controller.dart';
 import '../../wallpaper/widgets/mobile_wallpaper_selector_layer.dart';
 import '../../widgets/connectivity/bluetooth_detail_surface.dart';
+import '../../widgets/input_region_debug_overlay.dart';
 import '../../widgets/notification_banner.dart';
 import '../../widgets/system_level_hud.dart';
 import '../mobile/mobile_application_scene.dart';
@@ -33,7 +34,11 @@ class DenialShellApp extends StatelessWidget {
       ),
       desktop: DenialShellScene(
         content: DesktopShell(),
-        overlays: <Widget>[SystemLevelHudLayer(), NotificationBannerLayer()],
+        overlays: <Widget>[
+          SystemLevelHudLayer(),
+          NotificationBannerLayer(),
+          InputRegionDebugOverlay(),
+        ],
       ),
       pairingSurfaceBuilder: _buildPairingSurface,
       onLocked: _closeFeatureSurfaces,

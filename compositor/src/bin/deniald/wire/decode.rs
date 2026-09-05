@@ -190,10 +190,25 @@ impl WireBridge {
                 // Zero keeps the native-configured thickness for older
                 // senders; the embedded shell forwards its effective shelf
                 // height so a client-requested maximize configure reserves
-                // the same strip the shell's own placements avoid.
+                // the same strip the shell's own placements avoid. The same
+                // bound as the output-configuration parser keeps a hostile
+                // value from polluting the work area.
                 let thickness = request.system_bar_thickness();
                 if thickness.is_finite() && thickness > 0.0 {
+                    if thickness > MAX_SYSTEM_BAR_THICKNESS {
+                        return Err(WireError::Geometry);
+                    }
                     self.work_area.system_bar.thickness = thickness;
+                }
+                // Same append-only convention as the thickness above: zero
+                // keeps the native-configured maximize padding so older
+                // senders never change work-area shaping on their own.
+                let maximize_padding = request.maximize_padding();
+                if maximize_padding.is_finite()
+                    && maximize_padding > 0.0
+                    && maximize_padding <= MAX_MAXIMIZE_PADDING
+                {
+                    self.work_area.maximize_padding = maximize_padding;
                 }
                 self.pending_work_area = Some(self.work_area.clone());
 
@@ -211,6 +226,7 @@ impl WireBridge {
             }
             kind @ (fb::WindowRequestKind::CloseWindow
             | fb::WindowRequestKind::FocusWindow
+            | fb::WindowRequestKind::MinimizeWindow
             | fb::WindowRequestKind::ConfigureWindow) => {
                 if self.pending_window_commands.len() >= MAX_PENDING_WINDOW_COMMANDS {
                     return Err(WireError::Count);
@@ -222,6 +238,7 @@ impl WireBridge {
                 let command = match kind {
                     fb::WindowRequestKind::CloseWindow => WindowCommand::Close { window_id },
                     fb::WindowRequestKind::FocusWindow => WindowCommand::Focus { window_id },
+                    fb::WindowRequestKind::MinimizeWindow => WindowCommand::Minimize { window_id },
                     fb::WindowRequestKind::ConfigureWindow => {
                         const EXACT: u32 = 1 << 0;
                         const LAYOUT_DROP: u32 = 1 << 1;

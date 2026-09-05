@@ -750,6 +750,7 @@ class DenialBridge {
     required SystemBarSide side,
     required List<int> monitorIds,
     required double thickness,
+    double maximizePadding = 0,
   }) {
     final requestId = _nextRequestId++;
     final bytes = _wireCodec.encodeSystemBarConfiguration(
@@ -757,6 +758,7 @@ class DenialBridge {
       side: side,
       monitorIds: monitorIds,
       thickness: thickness,
+      maximizePadding: maximizePadding,
     );
     if (bytes == null) {
       return Future<DisplayLayout?>.value(null);
@@ -1367,6 +1369,21 @@ class DenialBridge {
     _sendWire(
       _wireCodec.encodeWindowRequest(
         wire.WindowRequestKind.FocusWindow,
+        windowId: window.windowId,
+      ),
+    );
+  }
+
+  /// Minimizes the window on the native side. The echoed minimize action
+  /// event remains the single source of truth for shell state, so callers
+  /// may apply an optimistic local minimize for latency before this returns.
+  void minimizeWindow(DenialWindow window) {
+    if (window.windowId <= 0) {
+      return;
+    }
+    _sendWire(
+      _wireCodec.encodeWindowRequest(
+        wire.WindowRequestKind.MinimizeWindow,
         windowId: window.windowId,
       ),
     );

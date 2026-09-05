@@ -19,6 +19,25 @@ void main() {
   File(
     '${output.path}/dart_system_bar.denw',
   ).writeAsBytesSync(_systemBarConfiguration());
+  File(
+    '${output.path}/dart_window_request_minimize.denw',
+  ).writeAsBytesSync(_windowRequestMinimize());
+}
+
+List<int> _windowRequestMinimize() {
+  return wire.EnvelopeObjectBuilder(
+    protocolVersion: 1,
+    sequence: 1,
+    requestId: 0,
+    payloadType: wire.PayloadTypeId.WindowRequest,
+    payload: wire.WindowRequestObjectBuilder(
+      kind: wire.WindowRequestKind.MinimizeWindow,
+      windowId: 42,
+      // The codec always passes flags explicitly, which keeps the zero in the
+      // vtable; mirror that so the golden pins the real wire bytes.
+      flags: 0,
+    ),
+  ).toBytes('DENW');
 }
 
 List<int> _systemBarConfiguration() {
@@ -31,6 +50,7 @@ List<int> _systemBarConfiguration() {
       side: wire.SystemBarSide.Right,
       monitorIds: const <int>[7, 9],
       thickness: 56.0,
+      maximizePadding: 12.5,
     ),
   ).toBytes('DENW');
 }
@@ -129,20 +149,23 @@ class _AlignedSystemBarRequestObjectBuilder extends fb.ObjectBuilder {
     required this.side,
     required this.monitorIds,
     required this.thickness,
+    required this.maximizePadding,
   });
 
   final wire.SystemBarSide side;
   final List<int> monitorIds;
   final double thickness;
+  final double maximizePadding;
 
   @override
   int finish(fb.Builder builder) {
     final monitorIdsOffset = _writeAlignedInt64Vector(builder, monitorIds);
-    builder.startTable(9);
+    builder.startTable(10);
     builder.addUint8(0, wire.WindowRequestKind.ConfigureSystemBar.value);
     builder.addUint8(5, side.value);
     builder.addOffset(6, monitorIdsOffset);
     builder.addFloat64(8, thickness);
+    builder.addFloat64(9, maximizePadding);
     return builder.endTable();
   }
 

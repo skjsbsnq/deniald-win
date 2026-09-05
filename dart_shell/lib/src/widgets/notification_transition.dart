@@ -118,28 +118,35 @@ class _NotificationTransitionState extends State<_NotificationTransition>
           ? (actionKey) => widget.onAction!(widget.notification.id, actionKey)
           : null,
     );
-    final cardRegion = interactive
-        ? ShellInputRegion(
-            debugLabel: 'Notification ${widget.notification.id}',
-            child: card,
-          )
-        : IgnorePointer(child: card);
-
-    return ClipRect(
-      child: SizeTransition(
-        sizeFactor: _curved,
-        alignment: widget.entryOffset.dy > 0
-            ? AlignmentDirectional.bottomStart
-            : AlignmentDirectional.topStart,
-        child: SlideTransition(
-          position: position,
-          child: Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: RepaintBoundary(
-              child: ShellBackdropBlur(
-                blur: theme.effectivePanelOpacity < 1.0,
-                borderRadius: theme.borderRadius(ShellRadii.notification),
-                child: cardRegion,
+    // The input region must sit outside the entry animation and the card's
+    // RepaintBoundary. A paint-bounds reporter inside them only ever sees the
+    // animation's first pose: the repaint wave stops at the boundary while
+    // the transitions keep animating, so the stale rectangle leaves the
+    // banner unclickable over client windows until an unrelated repaint.
+    // Outside, the reporter re-reads its transform every relayout, tracking
+    // the entry animation and stacked-banner reordering frame by frame.
+    return ShellInputRegion(
+      debugLabel: 'Notification ${widget.notification.id}',
+      active: interactive,
+      child: IgnorePointer(
+        ignoring: !interactive,
+        child: ClipRect(
+          child: SizeTransition(
+            sizeFactor: _curved,
+            alignment: widget.entryOffset.dy > 0
+                ? AlignmentDirectional.bottomStart
+                : AlignmentDirectional.topStart,
+            child: SlideTransition(
+              position: position,
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: RepaintBoundary(
+                  child: ShellBackdropBlur(
+                    blur: theme.effectivePanelOpacity < 1.0,
+                    borderRadius: theme.borderRadius(ShellRadii.notification),
+                    child: card,
+                  ),
+                ),
               ),
             ),
           ),

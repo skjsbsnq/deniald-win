@@ -19,7 +19,10 @@ use super::native_shortcut::{
 use super::notification_server::{
     Notification, NotificationEvent, NotificationEventKind, NotificationUrgency,
 };
-use super::options::{SystemBarOptions, SystemBarSide, WorkAreaOptions};
+use super::options::{
+    MAX_MAXIMIZE_PADDING, MAX_SYSTEM_BAR_THICKNESS, SystemBarOptions, SystemBarSide,
+    WorkAreaOptions,
+};
 use super::settings::{KeyboardLayout, KeyboardSettings, MouseSettings, TouchpadSettings};
 use super::xembed_tray::{
     XEmbedTrayAction, XEmbedTrayCommand, XEmbedTrayEvent, XEmbedTrayEventKind,
@@ -116,6 +119,9 @@ pub enum WindowCommand {
     Focus {
         window_id: u64,
     },
+    Minimize {
+        window_id: u64,
+    },
     Configure {
         window_id: u64,
         geometry: WindowGeometry,
@@ -208,6 +214,7 @@ impl WindowCommand {
             Self::CreateLocal { .. } => None,
             Self::Close { window_id }
             | Self::Focus { window_id }
+            | Self::Minimize { window_id }
             | Self::Configure { window_id, .. } => Some(*window_id),
         }
     }

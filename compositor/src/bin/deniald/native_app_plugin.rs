@@ -1075,6 +1075,9 @@ impl NativeAppPluginManager {
                 }
                 self.scene_dirty = true;
             }
+            // The ABI v1 plugin protocol has no minimize command, matching the
+            // gesture and shortcut paths which also leave plugin windows alone.
+            wire::WindowCommand::Minimize { .. } => return Ok(false),
             wire::WindowCommand::CreateLocal { .. } => return Ok(false),
         }
         Ok(true)
