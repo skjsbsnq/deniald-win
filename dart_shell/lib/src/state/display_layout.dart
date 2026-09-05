@@ -167,6 +167,7 @@ class DisplayLayoutController extends Notifier<DisplayLayout?>
       resolved = await _bridge.configureSystemBar(
         side: side,
         monitorIds: ordered,
+        thickness: previous.systemBarThickness,
       );
     } on Object {
       resolved = null;
@@ -254,9 +255,15 @@ class DisplayLayoutController extends Notifier<DisplayLayout?>
     DisplayLayout native,
     DisplayLayout configured,
   ) {
+    // Automatic hosting resolves to the same monitor set the native side
+    // derives, so publishing it merely pins the current resolution and a
+    // later topology sync re-publishes. Skipping it would strand the native
+    // work area on its file-configured default, whose side and thickness do
+    // not match the embedded shelf — client-requested maximizes then cover
+    // the shelf and misalign with shell placements.
     if (_configuredSide == null ||
-        _configuredOutputNames.isEmpty ||
         (native.systemBarSide == configured.systemBarSide &&
+            native.systemBarThickness == configured.systemBarThickness &&
             native.effectiveSystemBarMonitorIds.toSet().containsAll(
               configured.effectiveSystemBarMonitorIds,
             ) &&
@@ -272,6 +279,7 @@ class DisplayLayoutController extends Notifier<DisplayLayout?>
       await _bridge.configureSystemBar(
         side: configured.systemBarSide,
         monitorIds: configured.effectiveSystemBarMonitorIds,
+        thickness: configured.systemBarThickness,
       );
     } on Object {
       // Persisted policy is applied locally even when the native bridge is

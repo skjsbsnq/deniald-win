@@ -749,12 +749,14 @@ class DenialBridge {
   Future<DisplayLayout?> configureSystemBar({
     required SystemBarSide side,
     required List<int> monitorIds,
+    required double thickness,
   }) {
     final requestId = _nextRequestId++;
     final bytes = _wireCodec.encodeSystemBarConfiguration(
       requestId: requestId,
       side: side,
       monitorIds: monitorIds,
+      thickness: thickness,
     );
     if (bytes == null) {
       return Future<DisplayLayout?>.value(null);

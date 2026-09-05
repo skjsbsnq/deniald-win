@@ -187,6 +187,14 @@ impl WireBridge {
                 }
                 self.work_area.system_bar.outputs = outputs;
                 self.work_area.system_bar.side = side;
+                // Zero keeps the native-configured thickness for older
+                // senders; the embedded shell forwards its effective shelf
+                // height so a client-requested maximize configure reserves
+                // the same strip the shell's own placements avoid.
+                let thickness = request.system_bar_thickness();
+                if thickness.is_finite() && thickness > 0.0 {
+                    self.work_area.system_bar.thickness = thickness;
+                }
                 self.pending_work_area = Some(self.work_area.clone());
 
                 let sequence = self.take_sequence();

@@ -30,6 +30,7 @@ List<int> _systemBarConfiguration() {
     payload: _AlignedSystemBarRequestObjectBuilder(
       side: wire.SystemBarSide.Right,
       monitorIds: const <int>[7, 9],
+      thickness: 56.0,
     ),
   ).toBytes('DENW');
 }
@@ -127,18 +128,21 @@ class _AlignedSystemBarRequestObjectBuilder extends fb.ObjectBuilder {
   _AlignedSystemBarRequestObjectBuilder({
     required this.side,
     required this.monitorIds,
+    required this.thickness,
   });
 
   final wire.SystemBarSide side;
   final List<int> monitorIds;
+  final double thickness;
 
   @override
   int finish(fb.Builder builder) {
     final monitorIdsOffset = _writeAlignedInt64Vector(builder, monitorIds);
-    builder.startTable(7);
+    builder.startTable(9);
     builder.addUint8(0, wire.WindowRequestKind.ConfigureSystemBar.value);
     builder.addUint8(5, side.value);
     builder.addOffset(6, monitorIdsOffset);
+    builder.addFloat64(8, thickness);
     return builder.endTable();
   }
 

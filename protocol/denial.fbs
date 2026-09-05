@@ -409,6 +409,12 @@ table WindowRequest {
   // applies its rectangle normally, while managed layouts resolve its centre
   // to a layout-owned tile operation. The two bits are mutually exclusive.
   flags:uint;
+  // ConfigureSystemBar only. Logical thickness the native work area must
+  // reserve across the bar side so a client-requested maximize configure
+  // lands on the same rect the embedded shell places maximized windows into.
+  // Appended for wire compatibility: zero keeps the native-configured
+  // thickness.
+  system_bar_thickness:double = 0.0;
 }
 
 table WindowResponse {

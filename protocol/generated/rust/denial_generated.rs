@@ -5197,6 +5197,7 @@ impl<'a> WindowRequest<'a> {
   pub const VT_SYSTEM_BAR_SIDE: flatbuffers::VOffsetT = 14;
   pub const VT_SYSTEM_BAR_MONITOR_IDS: flatbuffers::VOffsetT = 16;
   pub const VT_FLAGS: flatbuffers::VOffsetT = 18;
+  pub const VT_SYSTEM_BAR_THICKNESS: flatbuffers::VOffsetT = 20;
 
   #[inline]
   pub unsafe fn init_from_table(table: flatbuffers::Table<'a>) -> Self {
@@ -5210,6 +5211,7 @@ impl<'a> WindowRequest<'a> {
     let mut builder = WindowRequestBuilder::new(_fbb);
     builder.add_window_id(args.window_id);
     builder.add_flags(args.flags);
+    builder.add_system_bar_thickness(args.system_bar_thickness);
     if let Some(x) = args.system_bar_monitor_ids { builder.add_system_bar_monitor_ids(x); }
     if let Some(x) = args.title { builder.add_title(x); }
     if let Some(x) = args.app_id { builder.add_app_id(x); }
@@ -5276,6 +5278,13 @@ impl<'a> WindowRequest<'a> {
     // which contains a valid value in this slot
     unsafe { self._tab.get::<u32>(WindowRequest::VT_FLAGS, Some(0)).unwrap()}
   }
+  #[inline]
+  pub fn system_bar_thickness(&self) -> f64 {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<f64>(WindowRequest::VT_SYSTEM_BAR_THICKNESS, Some(0.0)).unwrap()}
+  }
 }
 
 impl flatbuffers::Verifiable for WindowRequest<'_> {
@@ -5306,6 +5315,7 @@ pub struct WindowRequestArgs<'a> {
     pub system_bar_side: SystemBarSide,
     pub system_bar_monitor_ids: Option<flatbuffers::WIPOffset<flatbuffers::Vector<'a, i64>>>,
     pub flags: u32,
+    pub system_bar_thickness: f64,
 }
 impl<'a> Default for WindowRequestArgs<'a> {
   #[inline]
@@ -5319,6 +5329,7 @@ impl<'a> Default for WindowRequestArgs<'a> {
       system_bar_side: SystemBarSide::Top,
       system_bar_monitor_ids: None,
       flags: 0,
+      system_bar_thickness: 0.0,
     }
   }
 }
@@ -5361,6 +5372,10 @@ impl<'a: 'b, 'b, A: flatbuffers::Allocator + 'a> WindowRequestBuilder<'a, 'b, A>
     self.fbb_.push_slot::<u32>(WindowRequest::VT_FLAGS, flags, 0);
   }
   #[inline]
+  pub fn add_system_bar_thickness(&mut self, system_bar_thickness: f64) {
+    self.fbb_.push_slot::<f64>(WindowRequest::VT_SYSTEM_BAR_THICKNESS, system_bar_thickness, 0.0);
+  }
+  #[inline]
   pub fn new(_fbb: &'b mut flatbuffers::FlatBufferBuilder<'a, A>) -> WindowRequestBuilder<'a, 'b, A> {
     let start = _fbb.start_table();
     WindowRequestBuilder {
@@ -5386,6 +5401,7 @@ impl core::fmt::Debug for WindowRequest<'_> {
       ds.field("system_bar_side", &self.system_bar_side());
       ds.field("system_bar_monitor_ids", &self.system_bar_monitor_ids());
       ds.field("flags", &self.flags());
+      ds.field("system_bar_thickness", &self.system_bar_thickness());
       ds.finish()
   }
 }

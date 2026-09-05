@@ -223,13 +223,16 @@ class DenialWireCodec {
     required int requestId,
     required SystemBarSide side,
     required List<int> monitorIds,
+    required double thickness,
   }) {
     if (requestId <= 0 ||
         side == SystemBarSide.hidden ||
         monitorIds.isEmpty ||
         monitorIds.length > denialWireMaxWindows ||
         monitorIds.any((monitorId) => monitorId < 0) ||
-        monitorIds.toSet().length != monitorIds.length) {
+        monitorIds.toSet().length != monitorIds.length ||
+        !thickness.isFinite ||
+        thickness <= 0.0) {
       return null;
     }
     final wireSide = switch (side) {
@@ -246,6 +249,7 @@ class DenialWireCodec {
       _AlignedSystemBarRequestObjectBuilder(
         side: wireSide,
         monitorIds: List<int>.unmodifiable(monitorIds),
+        thickness: thickness,
       ),
       requestId: requestId,
     );

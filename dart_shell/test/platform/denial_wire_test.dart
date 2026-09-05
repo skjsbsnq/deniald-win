@@ -139,6 +139,7 @@ void main() {
       requestId: 41,
       side: model.SystemBarSide.right,
       monitorIds: const <int>[7, 9],
+      thickness: 56.0,
     );
 
     expect(bytes, isNotNull);
@@ -148,6 +149,7 @@ void main() {
     expect(request.kind, WindowRequestKind.ConfigureSystemBar);
     expect(request.systemBarSide, SystemBarSide.Right);
     expect(request.systemBarMonitorIds, <int>[7, 9]);
+    expect(request.systemBarThickness, 56.0);
     expect(
       bytes,
       File('../protocol/golden/dart_system_bar.denw').readAsBytesSync(),
@@ -157,6 +159,16 @@ void main() {
         requestId: 42,
         side: model.SystemBarSide.hidden,
         monitorIds: const <int>[7],
+        thickness: 56.0,
+      ),
+      isNull,
+    );
+    expect(
+      codec.encodeSystemBarConfiguration(
+        requestId: 42,
+        side: model.SystemBarSide.right,
+        monitorIds: const <int>[7],
+        thickness: 0.0,
       ),
       isNull,
     );
