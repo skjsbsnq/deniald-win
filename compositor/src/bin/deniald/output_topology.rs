@@ -16,6 +16,10 @@ pub(super) struct RuntimeOutputConfiguration {
     pub(super) modes: BTreeMap<String, OutputModePreference>,
     pub(super) scales_120: BTreeMap<String, u32>,
     pub(super) transforms: BTreeMap<String, OutputTransform>,
+    /// User-configured `subpixel=NAME,…` overrides. Absent entries keep the
+    /// kernel-reported value, which is usually `Unknown` for panels whose
+    /// driver does not expose EDID subpixel layout.
+    pub(super) subpixels: BTreeMap<String, OutputSubpixel>,
     /// Transient device rotation from iio-sensor-proxy. `transforms` remains
     /// the persistent panel-mount baseline.
     pub(super) sensor_rotation: OutputTransform,
@@ -60,6 +64,7 @@ impl RuntimeOutputConfiguration {
             modes,
             scales_120: options.scales_120.clone(),
             transforms: options.transforms.clone(),
+            subpixels: options.subpixels.clone(),
             sensor_rotation: OutputTransform::Normal,
             vrr_outputs: options.vrr_outputs.clone(),
             disabled_outputs: options.disabled_outputs.clone(),
@@ -233,6 +238,12 @@ pub(super) fn configured_outputs(
                 transform,
                 vrr_enabled,
                 subpixel: connector.info.subpixel(),
+                size_mm: connector
+                    .info
+                    .size()
+                    .map_or(OutputSizeMm::default(), |(width, height)| {
+                        OutputSizeMm::new(width, height)
+                    }),
             })
         })
         .collect()
@@ -792,6 +803,21 @@ pub(super) fn update_topology_for_outputs(
     Ok(topology.snapshot())
 }
 
+/// The subpixel geometry a topology spec should carry: an explicit
+/// `subpixel=NAME,…` override wins over the connector-reported value, which
+/// is usually `Unknown` for panels whose driver exposes no EDID layout.
+fn resolved_subpixel(
+    configuration: &RuntimeOutputConfiguration,
+    name: &str,
+    reported: OutputSubpixel,
+) -> OutputSubpixel {
+    configuration
+        .subpixels
+        .get(name)
+        .copied()
+        .unwrap_or(reported)
+}
+
 fn subpixel_spec(subpixel: connector::SubPixel) -> OutputSubpixel {
     match subpixel {
         connector::SubPixel::HorizontalRgb => OutputSubpixel::HorizontalRgb,
@@ -831,7 +857,14 @@ fn output_specs(
                 scale_120,
                 refresh_millihz: u32::try_from(mode.refresh)?,
                 transform: output.transform,
-                subpixel: subpixel_spec(output.subpixel),
+                // An explicit `subpixel=NAME,…` directive wins over whatever
+                // the connector reported; eDP panels commonly report nothing.
+                subpixel: resolved_subpixel(
+                    configuration,
+                    &output.name,
+                    subpixel_spec(output.subpixel),
+                ),
+                size_mm: output.size_mm,
             },
             configured_position.is_some(),
         ));
@@ -884,5 +917,78 @@ impl HorizontalOutputPlacement {
                 .ok_or("output layout overflow")?,
         );
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn configuration_for(subpixels: &[(&str, OutputSubpixel)]) -> RuntimeOutputConfiguration {
+        let mut configuration = RuntimeOutputConfiguration::from_options(&Options::terminal());
+        configuration.subpixels = subpixels
+            .iter()
+            .map(|(name, subpixel)| ((*name).to_owned(), *subpixel))
+            .collect();
+        configuration
+    }
+
+    #[test]
+    fn subpixel_overrides_win_over_connector_reports() {
+        let configuration = configuration_for(&[("eDP-2", OutputSubpixel::HorizontalRgb)]);
+        assert_eq!(
+            resolved_subpixel(&configuration, "eDP-2", OutputSubpixel::VerticalBgr),
+            OutputSubpixel::HorizontalRgb
+        );
+    }
+
+    #[test]
+    fn connector_reports_pass_through_without_an_override() {
+        let configuration = configuration_for(&[]);
+        assert_eq!(
+            resolved_subpixel(&configuration, "eDP-2", OutputSubpixel::Unknown),
+            OutputSubpixel::Unknown
+        );
+        assert_eq!(
+            resolved_subpixel(&configuration, "DP-1", OutputSubpixel::HorizontalBgr),
+            OutputSubpixel::HorizontalBgr
+        );
+    }
+
+    #[test]
+    fn subpixel_overrides_do_not_leak_across_connectors() {
+        let configuration = configuration_for(&[("DP-1", OutputSubpixel::VerticalRgb)]);
+        assert_eq!(
+            resolved_subpixel(&configuration, "eDP-2", OutputSubpixel::Unknown),
+            OutputSubpixel::Unknown
+        );
+    }
+
+    #[test]
+    fn subpixel_spec_maps_every_kernel_layout() {
+        assert_eq!(
+            subpixel_spec(connector::SubPixel::HorizontalRgb),
+            OutputSubpixel::HorizontalRgb
+        );
+        assert_eq!(
+            subpixel_spec(connector::SubPixel::HorizontalBgr),
+            OutputSubpixel::HorizontalBgr
+        );
+        assert_eq!(
+            subpixel_spec(connector::SubPixel::VerticalRgb),
+            OutputSubpixel::VerticalRgb
+        );
+        assert_eq!(
+            subpixel_spec(connector::SubPixel::VerticalBgr),
+            OutputSubpixel::VerticalBgr
+        );
+        assert_eq!(
+            subpixel_spec(connector::SubPixel::None),
+            OutputSubpixel::None
+        );
+        assert_eq!(
+            subpixel_spec(connector::SubPixel::Unknown),
+            OutputSubpixel::Unknown
+        );
     }
 }

@@ -183,6 +183,21 @@ pub enum OutputSubpixel {
     None,
 }
 
+/// Physical panel dimensions in millimeters as the DRM connector reports
+/// them. `wl_output.geometry` needs these for client DPI heuristics; `(0, 0)`
+/// is the legacy placeholder panels without an EDID-size expose.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct OutputSizeMm {
+    pub width: u32,
+    pub height: u32,
+}
+
+impl OutputSizeMm {
+    pub const fn new(width: u32, height: u32) -> Self {
+        Self { width, height }
+    }
+}
+
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct OutputSpec {
     pub id: OutputId,
@@ -193,6 +208,7 @@ pub struct OutputSpec {
     pub refresh_millihz: u32,
     pub transform: OutputTransform,
     pub subpixel: OutputSubpixel,
+    pub size_mm: OutputSizeMm,
 }
 
 impl OutputSpec {

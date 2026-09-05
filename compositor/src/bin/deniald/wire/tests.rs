@@ -2,7 +2,8 @@
 
 use super::*;
 use denial_core::topology::{
-    LogicalPoint, OutputSpec, OutputSubpixel, OutputTransform, PixelSize, TopologyManager,
+    LogicalPoint, OutputSizeMm, OutputSpec, OutputSubpixel, OutputTransform, PixelSize,
+    TopologyManager,
 };
 
 fn bridge() -> WireBridge {
@@ -16,6 +17,7 @@ fn bridge() -> WireBridge {
             refresh_millihz: 60_000,
             transform: OutputTransform::Normal,
             subpixel: OutputSubpixel::Unknown,
+            size_mm: OutputSizeMm::default(),
         },
         OutputSpec {
             id: OutputId(9),
@@ -26,6 +28,7 @@ fn bridge() -> WireBridge {
             refresh_millihz: 180_000,
             transform: OutputTransform::Normal,
             subpixel: OutputSubpixel::Unknown,
+            size_mm: OutputSizeMm::default(),
         },
     ])
     .unwrap();

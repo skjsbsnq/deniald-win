@@ -40,6 +40,18 @@ fn output_candidate_is_better(candidate: OutputCandidateScore, best: OutputCandi
                 || (candidate.overlap == best.overlap && candidate.distance < best.distance)))
 }
 
+/// Physical `wl_output` identity for a topology spec: connector-reported
+/// panel size and transform-corrected subpixel geometry.
+pub(super) fn physical_properties_for_output(spec: &OutputSpec) -> PhysicalProperties {
+    PhysicalProperties {
+        size: (spec.size_mm.width as i32, spec.size_mm.height as i32).into(),
+        subpixel: subpixel_for_output(spec),
+        make: "Denial".into(),
+        model: spec.name.clone(),
+        serial_number: format!("connector-{}", spec.id.0),
+    }
+}
+
 /// Maps a topology spec's connector-reported subpixel geometry onto the
 /// `wl_output.subpixel` value clients should observe. `wl_output` describes
 /// the transformed logical orientation, so rotated panels flip the axis and
@@ -258,9 +270,38 @@ impl WaylandFrontend {
             ));
             let capture_source = Rectangle::from_size(capture_size);
             if let Some(existing) = self.outputs.iter_mut().find(|entry| entry.id == spec.id) {
-                configure_output(&existing.output, spec)?;
-                self.space
-                    .map_output(&existing.output, (spec.position.x, spec.position.y));
+                // wl_output geometry is only sent at bind time or when the
+                // location/transform changes, and smithay exposes no setter
+                // for physical properties. When the kernel reports new
+                // subpixel geometry or panel dimensions, replace the global
+                // so clients re-bind and observe the corrected values.
+                let previous_physical = existing.output.physical_properties();
+                let next_physical = physical_properties_for_output(spec);
+                let physical_changed = previous_physical.subpixel != next_physical.subpixel
+                    || previous_physical.size != next_physical.size;
+                if physical_changed {
+                    let stale_global = existing.global.clone();
+                    existing.output.leave_all();
+                    self.space.unmap_output(&existing.output);
+                    self.display_handle
+                        .remove_global::<RuntimeState>(stale_global);
+                    let output =
+                        Output::new(spec.name.clone(), physical_properties_for_output(spec));
+                    configure_output(&output, spec)?;
+                    let global = output.create_global::<RuntimeState>(&self.display_handle);
+                    self.space
+                        .map_output(&output, (spec.position.x, spec.position.y));
+                    info!(
+                        output = spec.name,
+                        "recreated Wayland output global with refreshed physical properties"
+                    );
+                    existing.output = output;
+                    existing.global = global;
+                } else {
+                    configure_output(&existing.output, spec)?;
+                    self.space
+                        .map_output(&existing.output, (spec.position.x, spec.position.y));
+                }
                 existing.transform = spec.transform;
                 existing.logical_geometry = output_logical_bounds(spec);
                 existing.capture_source = capture_source;
@@ -268,16 +309,7 @@ impl WaylandFrontend {
                 continue;
             }
 
-            let output = Output::new(
-                spec.name.clone(),
-                PhysicalProperties {
-                    size: (0, 0).into(),
-                    subpixel: subpixel_for_output(spec),
-                    make: "Denial".into(),
-                    model: spec.name.clone(),
-                    serial_number: format!("connector-{}", spec.id.0),
-                },
-            );
+            let output = Output::new(spec.name.clone(), physical_properties_for_output(spec));
             configure_output(&output, spec)?;
             let global = output.create_global::<RuntimeState>(&self.display_handle);
             self.space
@@ -663,9 +695,15 @@ pub(super) fn configure_output(output: &Output, spec: &OutputSpec) -> Result<(),
             .into(),
         refresh: i32::try_from(spec.refresh_millihz)?,
     };
-    for previous in output.modes() {
-        if previous != mode {
-            output.delete_mode(previous);
+    // Topology commits are frequent (every scale or layout edit), while the
+    // advertised mode set rarely changes. Deleting and re-adding identical
+    // modes re-announces a mode event burst to every client, so only touch
+    // the set when it actually differs from the published single mode.
+    if output.current_mode() != Some(mode) || output.modes() != vec![mode] {
+        for previous in output.modes() {
+            if previous != mode {
+                output.delete_mode(previous);
+            }
         }
     }
     output.change_current_state(

@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
-use denial_core::topology::{LogicalPoint, OutputTransform, SCALE_BASE};
+use denial_core::topology::{LogicalPoint, OutputSubpixel, OutputTransform, SCALE_BASE};
 #[cfg(feature = "flutter")]
 use denial_flutter_engine::RendererBackend;
 
@@ -114,6 +114,7 @@ pub(super) struct Options {
     pub(super) refresh_millihz: BTreeMap<String, u32>,
     pub(super) scales_120: BTreeMap<String, u32>,
     pub(super) transforms: BTreeMap<String, OutputTransform>,
+    pub(super) subpixels: BTreeMap<String, OutputSubpixel>,
     pub(super) vrr_outputs: BTreeSet<String>,
     pub(super) disabled_outputs: BTreeSet<String>,
     pub(super) next_positions: BTreeMap<String, LogicalPoint>,
@@ -141,7 +142,7 @@ pub(super) enum RuntimeLimit {
 }
 
 impl Options {
-    fn terminal() -> Self {
+    pub(super) fn terminal() -> Self {
         Self {
             device: PathBuf::from(DEFAULT_DEVICE),
             render_device: None,
@@ -154,6 +155,7 @@ impl Options {
             refresh_millihz: BTreeMap::new(),
             scales_120: BTreeMap::new(),
             transforms: BTreeMap::new(),
+            subpixels: BTreeMap::new(),
             vrr_outputs: BTreeSet::new(),
             disabled_outputs: BTreeSet::new(),
             next_positions: BTreeMap::new(),
@@ -189,6 +191,7 @@ impl Options {
         let mut refresh_millihz = BTreeMap::new();
         let mut scales_120 = BTreeMap::new();
         let mut transforms = BTreeMap::new();
+        let mut subpixels = BTreeMap::new();
         let mut vrr_outputs = BTreeSet::new();
         let mut disabled_outputs = BTreeSet::new();
         let mut next_positions = BTreeMap::new();
@@ -383,6 +386,7 @@ impl Options {
             refresh_millihz = configured.refresh_millihz;
             scales_120 = configured.scales_120;
             transforms = configured.transforms;
+            subpixels = configured.subpixels;
             vrr_outputs = configured.vrr_outputs;
             disabled_outputs = configured.disabled_outputs;
             system_bar = configured.system_bar;
@@ -470,6 +474,7 @@ impl Options {
             refresh_millihz,
             scales_120,
             transforms,
+            subpixels,
             vrr_outputs,
             disabled_outputs,
             next_positions,
@@ -602,6 +607,7 @@ struct OutputConfig {
     refresh_millihz: BTreeMap<String, u32>,
     scales_120: BTreeMap<String, u32>,
     transforms: BTreeMap<String, OutputTransform>,
+    subpixels: BTreeMap<String, OutputSubpixel>,
     vrr_outputs: BTreeSet<String>,
     disabled_outputs: BTreeSet<String>,
     system_bar: Option<SystemBarOptions>,
@@ -765,6 +771,30 @@ fn parse_output_transform_entry(value: &str) -> Result<(String, OutputTransform)
     Ok((name.to_owned(), transform))
 }
 
+const SUBPIXEL_SPEC_HELP: &str =
+    "output subpixel must use subpixel=NAME,unknown|none|rgb|bgr|vrgb|vbgr";
+
+fn parse_output_subpixel_entry(value: &str) -> Result<(String, OutputSubpixel), Box<dyn Error>> {
+    let mut fields = value.split(',').map(str::trim);
+    let name = fields
+        .next()
+        .filter(|name| !name.is_empty())
+        .ok_or(SUBPIXEL_SPEC_HELP)?;
+    let subpixel = match fields.next() {
+        Some("unknown") => OutputSubpixel::Unknown,
+        Some("none") => OutputSubpixel::None,
+        Some("rgb") => OutputSubpixel::HorizontalRgb,
+        Some("bgr") => OutputSubpixel::HorizontalBgr,
+        Some("vrgb") => OutputSubpixel::VerticalRgb,
+        Some("vbgr") => OutputSubpixel::VerticalBgr,
+        _ => return Err(SUBPIXEL_SPEC_HELP.into()),
+    };
+    if fields.next().is_some() {
+        return Err(SUBPIXEL_SPEC_HELP.into());
+    }
+    Ok((name.to_owned(), subpixel))
+}
+
 fn format_output_transform(transform: OutputTransform) -> &'static str {
     match transform {
         OutputTransform::Normal => "normal",
@@ -886,6 +916,26 @@ fn parse_output_config(contents: &str) -> Result<OutputConfig, String> {
                 ));
             }
             config.transforms.insert(name, transform);
+            continue;
+        }
+        if let Some((key, spec)) = line.split_once('=')
+            && key.trim() == "subpixel"
+        {
+            let (name, subpixel) = parse_output_subpixel_entry(spec)
+                .map_err(|error| format!("line {}: {error}", index + 1))?;
+            if config.subpixels.contains_key(&name) {
+                return Err(format!(
+                    "line {}: duplicate subpixel for output {name}",
+                    index + 1
+                ));
+            }
+            if config.subpixels.len() == MAX_CONFIGURED_OUTPUTS {
+                return Err(format!(
+                    "line {}: output config exceeds the {MAX_CONFIGURED_OUTPUTS}-output subpixel limit",
+                    index + 1
+                ));
+            }
+            config.subpixels.insert(name, subpixel);
             continue;
         }
         if let Some((key, output)) = line.split_once('=')
@@ -1318,7 +1368,9 @@ fn output_directive_name(raw_line: &str) -> Option<&str> {
     let (key, value) = line.split_once('=')?;
     let key = key.trim();
     match key {
-        "primary" | "system_bar" | "maximize_padding" => None,
+        // Subpixel overrides are user-authored hints, never managed output
+        // control state, so persistence rewrites must carry them through.
+        "primary" | "system_bar" | "maximize_padding" | "subpixel" => None,
         "disabled" | "vrr" => Some(value.trim()),
         "mode" | "scale" | "transform" => value.split(',').next().map(str::trim),
         _ => Some(key),
@@ -1334,4 +1386,58 @@ fn format_output_scale(scale_120: u32) -> String {
         value.pop();
     }
     value
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn subpixel_directive_parses_every_layout() {
+        let config = parse_output_config(
+            "eDP-1=0,0\nsubpixel=eDP-1,rgb\nsubpixel=DP-1,vbgr\nsubpixel=DP-2,none\n",
+        )
+        .expect("valid output config");
+        assert_eq!(
+            config.subpixels.get("eDP-1"),
+            Some(&OutputSubpixel::HorizontalRgb)
+        );
+        assert_eq!(
+            config.subpixels.get("DP-1"),
+            Some(&OutputSubpixel::VerticalBgr)
+        );
+        assert_eq!(config.subpixels.get("DP-2"), Some(&OutputSubpixel::None));
+    }
+
+    #[test]
+    fn subpixel_directive_rejects_unknown_values_and_duplicates() {
+        assert!(parse_output_config("subpixel=eDP-1,rgb,extra\n").is_err());
+        assert!(parse_output_config("subpixel=eDP-1,lcd\n").is_err());
+        assert!(parse_output_config("subpixel=,rgb\n").is_err());
+        assert!(parse_output_config("subpixel=eDP-1,rgb\nsubpixel=eDP-1,bgr\n").is_err());
+    }
+
+    #[test]
+    fn subpixel_directive_survives_persistence_rewrites() {
+        let original = "primary=eDP-2\nsubpixel=eDP-2,rgb\neDP-2=0,0\nmode=eDP-2,2560,1600,239998\nscale=eDP-2,1.5\n";
+        let outputs = [PersistedOutput {
+            name: "eDP-2".into(),
+            enabled: true,
+            x: 0,
+            y: 0,
+            width: 2560,
+            height: 1600,
+            refresh_millihz: 239_998,
+            scale_120: 180,
+            transform: OutputTransform::Normal,
+            adaptive_sync: true,
+        }];
+        let rendered =
+            render_persisted_output_config(original, &outputs, Some("eDP-2")).expect("render");
+        let reparsed = parse_output_config(&rendered).expect("reparsed");
+        assert_eq!(
+            reparsed.subpixels.get("eDP-2"),
+            Some(&OutputSubpixel::HorizontalRgb)
+        );
+    }
 }

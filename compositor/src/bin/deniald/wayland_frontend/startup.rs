@@ -129,13 +129,7 @@ impl WaylandFrontend {
                 .ok_or("Wayland output is missing from the atlas plan")?;
             let output = Output::new(
                 spec.name.clone(),
-                PhysicalProperties {
-                    size: (0, 0).into(),
-                    subpixel: super::topology::subpixel_for_output(spec),
-                    make: "Denial".into(),
-                    model: spec.name.clone(),
-                    serial_number: format!("connector-{}", spec.id.0),
-                },
+                super::topology::physical_properties_for_output(spec),
             );
             configure_output(&output, spec)?;
             let global = output.create_global::<RuntimeState>(&display_handle);

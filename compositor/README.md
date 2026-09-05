@@ -160,7 +160,12 @@ the highest refresh rate. Use
 `transform=NAME,normal|90|180|270|flipped|flipped-90|flipped-180|flipped-270`
 for rotation and reflection. Add `vrr=NAME` for each output that should use
 variable refresh rate, or `disabled=NAME` to leave a connected output outside
-the KMS and Wayland topology. Flutter projects transformed outputs directly
+the KMS and Wayland topology. Use `subpixel=NAME,unknown|none|rgb|bgr|vrgb|vbgr`
+to override the subpixel geometry advertised on `wl_output`; eDP panels
+commonly report nothing to the kernel, and clients such as Chromium-family
+browsers use the value to decide between LCD subpixel and grayscale text
+antialiasing. Flutter's own shell text and GTK4 clients antialias in grayscale
+regardless, so the directive only affects LCD-subpixel-aware clients. Flutter projects transformed outputs directly
 into their native, unrotated scanout buffers; the KMS mode and primary-plane
 rotation remain unchanged, including for 90/270-degree transforms. Denial
 validates mode and VRR changes with an atomic `TEST_ONLY` commit before

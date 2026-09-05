@@ -277,6 +277,7 @@ pub(super) fn run_flutter_event_loop(
     events.synchronize_flutter_pointer_position();
     let mut raster_frames = 0u64;
     let mut delivered_vsyncs = 0u64;
+    let mut raster_failures = 0u64;
     let mut retired_output_flips = 0u64;
     let mut flutter = Some(flutter);
     let mut scheduler = output_scheduler::OutputScheduler::new(
@@ -318,7 +319,7 @@ pub(super) fn run_flutter_event_loop(
     cpu_scheduling::contain_unregistered_priority_threads();
     cpu_scheduling::promote_compositor_thread();
 
-    loop {
+    'iter: loop {
         if events
             .lifecycle
             .requires_kms_service(drm.is_active(), events.device_removed)
@@ -597,13 +598,30 @@ pub(super) fn run_flutter_event_loop(
                 match frame_action {
                     frame_scheduler::FrameAction::Skip => {}
                     frame_scheduler::FrameAction::Render { flutter_output } => {
-                        if runtime.render_authorized_outputs(
+                        match runtime.render_authorized_outputs(
                             frame_scheduler.render_requests(),
                             frame_scheduler.render_texture_ids(),
                             flutter_output,
-                        )? {
-                            frame_scheduler.flutter_frame_dispatched();
-                            delivered_vsyncs = delivered_vsyncs.saturating_add(1);
+                        ) {
+                            Ok(true) => {
+                                frame_scheduler.flutter_frame_dispatched();
+                                delivered_vsyncs = delivered_vsyncs.saturating_add(1);
+                            }
+                            Ok(false) => {}
+                            Err(error) => {
+                                // A transient raster failure (typically a
+                                // framebuffer-incomplete state while a live
+                                // scale change re-created the atlas) must not
+                                // end the session. render_authorized_outputs
+                                // already restored the vsync baton and
+                                // cancelled its output authorizations on
+                                // error, so the frame clock simply tries
+                                // again on the next tick.
+                                warn!(%error, "frame raster authorization failed; retrying on the next frame tick");
+                                raster_failures = raster_failures.saturating_add(1);
+                                frame_scheduler.mark_all_dirty();
+                                continue 'iter;
+                            }
                         }
                     }
                 }
@@ -1351,7 +1369,7 @@ pub(super) fn run_flutter_event_loop(
                     && !kms_reconfigure_requested
                 {
                     let staged_configuration = output_configuration.clone();
-                    apply_resident_output_geometry(
+                    let rollback = apply_resident_output_geometry(
                         scanouts,
                         swapchain,
                         topology,
@@ -1363,7 +1381,17 @@ pub(super) fn run_flutter_event_loop(
                         flutter.as_mut().ok_or(
                             "Flutter runtime disappeared during resident geometry rollback",
                         )?,
-                    )?;
+                    );
+                    if let Err(error) = rollback {
+                        // This branch restores the previous geometry after a
+                        // confirmation timeout. Failing it must not take down
+                        // the login: the staged configuration stays rejected
+                        // and a later rescan retries the rollback, matching
+                        // the forward path's error handling above.
+                        warn!(%error, "resident geometry rollback was rejected; retrying on the next topology rescan");
+                        events.topology_dirty = true;
+                        continue;
+                    }
                     frame_scheduler.reconfigure(scanouts, Instant::now());
                     events.scanout_rebased = false;
                     continue;
@@ -1771,6 +1799,7 @@ pub(super) fn run_flutter_event_loop(
         raster_frames,
         output_page_flips,
         delivered_vsyncs,
+        raster_failures,
         elapsed_ms = elapsed.as_secs_f64() * 1_000.0,
         raster_frames_per_second = raster_frames as f64 / elapsed.as_secs_f64(),
         finite = duration.is_some(),

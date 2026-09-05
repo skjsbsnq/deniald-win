@@ -43,6 +43,9 @@ pub(super) struct ConnectedOutput {
     /// `wl_output.subpixel` so text renderers can enable subpixel AA instead
     /// of the visibly softer grayscale fallback.
     pub(super) subpixel: connector::SubPixel,
+    /// Kernel-reported physical panel size in millimeters. Forwarded through
+    /// `wl_output.geometry` so clients can derive DPI heuristics.
+    pub(super) size_mm: OutputSizeMm,
 }
 
 pub(super) struct Scanout {
