@@ -16,11 +16,13 @@ class UnifiedTrayButton extends ConsumerStatefulWidget {
   const UnifiedTrayButton({
     required this.expanded,
     required this.onPressed,
+    this.clockExpanded = false,
     this.onClockPressed,
     super.key,
   });
 
   final bool expanded;
+  final bool clockExpanded;
   final VoidCallback onPressed;
   final VoidCallback? onClockPressed;
 
@@ -91,22 +93,31 @@ class _UnifiedTrayButtonState extends ConsumerState<UnifiedTrayButton> {
     final hasBattery = capacity != null;
 
     // Both capsules idle on a solid accent container like the reference
-    // design; hover keeps the shared panel highlight and no border is drawn.
-    final statusBgColor = _statusHovered
-        ? colors.panelHighlight
-        : theme.accentPalette.container;
+    // design; when opened (expanded), the active capsule transitions to the
+    // primary accent; hover keeps the shared panel highlight and no border is drawn.
+    final statusBgColor = widget.expanded
+        ? theme.accentPalette.primary
+        : (_statusHovered
+              ? colors.panelHighlight
+              : theme.accentPalette.container);
 
-    final statusFgColor = _statusHovered
-        ? colors.textPrimary
-        : theme.accentPalette.onContainer;
+    final statusFgColor = widget.expanded
+        ? theme.accentPalette.onPrimary
+        : (_statusHovered
+              ? colors.textPrimary
+              : theme.accentPalette.onContainer);
 
-    final clockBgColor = _clockHovered
-        ? colors.panelHighlight
-        : theme.accentPalette.container;
+    final clockBgColor = widget.clockExpanded
+        ? theme.accentPalette.primary
+        : (_clockHovered
+              ? colors.panelHighlight
+              : theme.accentPalette.container);
 
-    final clockFgColor = _clockHovered
-        ? colors.textPrimary
-        : theme.accentPalette.onContainer;
+    final clockFgColor = widget.clockExpanded
+        ? theme.accentPalette.onPrimary
+        : (_clockHovered
+              ? colors.textPrimary
+              : theme.accentPalette.onContainer);
 
     return Row(
       mainAxisSize: MainAxisSize.min,

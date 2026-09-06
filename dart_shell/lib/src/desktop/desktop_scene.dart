@@ -519,9 +519,10 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
   int _nextCloseId = 1;
   _DesktopHomeLayoutCache? _homeLayoutCache;
   _DesktopSceneTopologyCache? _topologyCache;
-  // Tray expansion is notifier-backed so toggling it rebuilds only the tray
-  // button and the bubble instead of the whole desktop scene.
+  // Tray and calendar expansions are notifier-backed so toggling them
+  // rebuilds only the tray button and the bubbles instead of the whole desktop scene.
   final ValueNotifier<bool> _shelfTrayExpanded = ValueNotifier<bool>(false);
+  final ValueNotifier<bool> _shelfCalendarExpanded = ValueNotifier<bool>(false);
 
   @override
   void initState() {
@@ -756,6 +757,7 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
     _minimizeLayerHandoff.dispose();
     _minimizedPlacementTransition.dispose();
     _shelfTrayExpanded.dispose();
+    _shelfCalendarExpanded.dispose();
     _minimizedPlacementExitFrames.clear();
     for (final closing in _closingWindows.values) {
       widget.onCloseLeaseComplete(closing.window.windowId);
@@ -920,15 +922,26 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
                               height: bar.rect.height,
                               onLauncherPressed: () {
                                 _shelfTrayExpanded.value = false;
+                                _shelfCalendarExpanded.value = false;
                                 onOpenLauncher();
                               },
                               trayExpanded: _shelfTrayExpanded,
                               onTrayPressed: () {
                                 if (!_shelfTrayExpanded.value) {
                                   onDismissLauncher();
+                                  _shelfCalendarExpanded.value = false;
                                 }
                                 _shelfTrayExpanded.value =
                                     !_shelfTrayExpanded.value;
+                              },
+                              calendarExpanded: _shelfCalendarExpanded,
+                              onClockPressed: () {
+                                if (!_shelfCalendarExpanded.value) {
+                                  onDismissLauncher();
+                                  _shelfTrayExpanded.value = false;
+                                }
+                                _shelfCalendarExpanded.value =
+                                    !_shelfCalendarExpanded.value;
                               },
                             )
                           : DesktopSystemBar(
@@ -1040,6 +1053,36 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
                                 visible: trayVisible,
                                 onDismiss: () =>
                                     _shelfTrayExpanded.value = false,
+                                shelfHeight: visibleSystemBars.isNotEmpty
+                                    ? visibleSystemBars.first.rect.height
+                                    : 56.0,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+                    ),
+                  if (useChromeOsShelf)
+                    Positioned.fill(
+                      child: ValueListenableBuilder<bool>(
+                        valueListenable: _shelfCalendarExpanded,
+                        builder: (context, shelfCalendarExpanded, _) {
+                          final calendarVisible =
+                              shelfCalendarExpanded && !desktop.overviewActive;
+                          return ShellInputRegion(
+                            debugLabel: 'Unified calendar bubble',
+                            active: calendarVisible,
+                            pointerPolicy: ShellPointerPolicy.fullScene,
+                            keyboardPolicy: ShellKeyboardPolicy.none,
+                            child: IgnorePointer(
+                              ignoring: !shelfCalendarExpanded,
+                              child: UnifiedCalendarBubble(
+                                key: const ValueKey<String>(
+                                  'shelf-unified-calendar-bubble',
+                                ),
+                                visible: calendarVisible,
+                                onDismiss: () =>
+                                    _shelfCalendarExpanded.value = false,
                                 shelfHeight: visibleSystemBars.isNotEmpty
                                     ? visibleSystemBars.first.rect.height
                                     : 56.0,

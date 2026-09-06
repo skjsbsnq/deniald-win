@@ -64,6 +64,7 @@ import '../widgets/window_surface_tree.dart';
 import '../widgets/shade/range_bar.dart';
 import '../wallpaper/state/wallpaper_controller.dart';
 import 'shelf/shelf_layer.dart';
+import 'shelf/unified_calendar_bubble.dart';
 import 'shelf/unified_tray_bubble.dart';
 import '../wallpaper/widgets/wallpaper_selector_surface.dart';
 import 'desktop_overview_preview_interaction.dart';

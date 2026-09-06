@@ -18,6 +18,8 @@ class ShelfLayer extends ConsumerWidget {
     this.onLauncherPressed,
     required this.trayExpanded,
     this.onTrayPressed,
+    this.calendarExpanded,
+    this.onClockPressed,
     super.key,
   });
 
@@ -30,6 +32,11 @@ class ShelfLayer extends ConsumerWidget {
   /// complete shelf with its app strip and tray icons.
   final ValueListenable<bool> trayExpanded;
   final VoidCallback? onTrayPressed;
+
+  /// Listenable so calendar expansion rebuilds the clock button without
+  /// invalidating the rest of the shelf.
+  final ValueListenable<bool>? calendarExpanded;
+  final VoidCallback? onClockPressed;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -73,11 +80,28 @@ class ShelfLayer extends ConsumerWidget {
                     const SizedBox(width: 8.0),
                     ValueListenableBuilder<bool>(
                       valueListenable: trayExpanded,
-                      builder: (context, expanded, _) => UnifiedTrayButton(
-                        key: const ValueKey('shelf-tray-button'),
-                        expanded: expanded,
-                        onPressed: onTrayPressed ?? () {},
-                      ),
+                      builder: (context, expanded, _) {
+                        final calendar = calendarExpanded;
+                        if (calendar != null) {
+                          return ValueListenableBuilder<bool>(
+                            valueListenable: calendar,
+                            builder: (context, clockExpanded, _) =>
+                                UnifiedTrayButton(
+                                  key: const ValueKey('shelf-tray-button'),
+                                  expanded: expanded,
+                                  clockExpanded: clockExpanded,
+                                  onPressed: onTrayPressed ?? () {},
+                                  onClockPressed: onClockPressed,
+                                ),
+                          );
+                        }
+                        return UnifiedTrayButton(
+                          key: const ValueKey('shelf-tray-button'),
+                          expanded: expanded,
+                          onPressed: onTrayPressed ?? () {},
+                          onClockPressed: onClockPressed,
+                        );
+                      },
                     ),
                   ],
                 ),
