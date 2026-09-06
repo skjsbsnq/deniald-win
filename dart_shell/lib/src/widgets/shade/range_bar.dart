@@ -140,35 +140,29 @@ class _RangeBarState extends State<RangeBar> {
         final colors = context.shellColors;
         final radius = theme.borderRadius(widget.height / 2);
 
-        const splitGap = 4.0;
-        final isNearEmpty = clamped <= 0.02;
-        final isNearFull = clamped >= 0.98;
+        // M3E split-pill track: the thumb is a tall accent bar straddling the
+        // fill boundary, so the two track segments are separate pills with a
+        // gap wide enough to seat it and the thumb overhangs the track.
+        const thumbWidth = 5.0;
+        const splitGap = 8.0;
+        final thumbHeight = widget.height + 12.0;
+        final fillX = (totalWidth * clamped).clamp(0.0, totalWidth);
 
-        final double activeWidth;
-        final double inactiveWidth;
-        if (isNearEmpty) {
-          activeWidth = 0.0;
-          inactiveWidth = totalWidth;
-        } else if (isNearFull) {
-          activeWidth = totalWidth;
-          inactiveWidth = 0.0;
-        } else {
-          activeWidth = (totalWidth * clamped - splitGap / 2).clamp(
-            0.0,
-            totalWidth,
-          );
-          inactiveWidth = (totalWidth - activeWidth - splitGap).clamp(
-            0.0,
-            totalWidth,
-          );
-        }
+        final activeWidth = fillX - splitGap / 2;
+        final inactiveLeft = activeWidth > 0 ? fillX + splitGap / 2 : 0.0;
+        final inactiveWidth = activeWidth > 0
+            ? totalWidth - inactiveLeft
+            : totalWidth;
+        final seatThumbInside = inactiveWidth <= 0;
+        final thumbLeft = seatThumbInside
+            ? totalWidth - thumbWidth
+            : (fillX - thumbWidth / 2).clamp(0.0, totalWidth - thumbWidth);
 
-        final showDot = !isNearFull && inactiveWidth > 40.0;
         final dotX = totalWidth * 0.82;
         final showDotAtX =
-            showDot &&
-            (dotX > (activeWidth + splitGap + 8.0)) &&
-            (dotX < totalWidth - 12.0);
+            inactiveWidth > 40.0 &&
+            dotX > inactiveLeft + 8.0 &&
+            dotX < totalWidth - 12.0;
 
         final iconOnActive = activeWidth >= 28.0;
         final iconColor = iconOnActive
@@ -206,6 +200,7 @@ class _RangeBarState extends State<RangeBar> {
             child: SizedBox(
               height: widget.height,
               child: Stack(
+                clipBehavior: Clip.none,
                 children: [
                   if (activeWidth > 0)
                     Positioned(
@@ -250,6 +245,18 @@ class _RangeBarState extends State<RangeBar> {
                         ),
                       ),
                     ),
+                  Positioned(
+                    left: thumbLeft,
+                    top: (widget.height - thumbHeight) / 2,
+                    child: Container(
+                      width: thumbWidth,
+                      height: thumbHeight,
+                      decoration: BoxDecoration(
+                        color: widget.activeColor,
+                        borderRadius: theme.borderRadius(thumbWidth / 2),
+                      ),
+                    ),
+                  ),
                   Positioned(
                     left: 12.0,
                     top: 0,

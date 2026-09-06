@@ -524,7 +524,9 @@ class _DesktopApplicationLauncherState
     );
     final theme = ShellTheme.of(context);
     final l10n = context.l10n;
-    final bubbleRadius = theme.borderRadius(ShellShapeScale.large);
+    // Panels are peer top-level surfaces and share the extraLarge shape with
+    // the unified tray bubble, so the two frosted materials read alike.
+    final bubbleRadius = theme.borderRadius(ShellShapeScale.extraLarge);
     return MouseRegion(
       onEnter: (_) => widget.onEnter(),
       onExit: (_) => widget.onExit(),

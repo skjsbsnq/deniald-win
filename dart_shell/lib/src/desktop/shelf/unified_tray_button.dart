@@ -90,41 +90,23 @@ class _UnifiedTrayButtonState extends ConsumerState<UnifiedTrayButton> {
     final capacity = battery.capacity;
     final hasBattery = capacity != null;
 
-    final isExpanded = widget.expanded;
-
-    final statusBgColor = isExpanded
-        ? theme.accentPalette.container
-        : _statusHovered
+    // Both capsules idle on a solid accent container like the reference
+    // design; hover keeps the shared panel highlight and no border is drawn.
+    final statusBgColor = _statusHovered
         ? colors.panelHighlight
-        : colors.surfaceContainerHigh.withValues(alpha: 0.60);
+        : theme.accentPalette.container;
 
-    final statusFgColor = isExpanded
-        ? theme.accentPalette.onContainer
-        : colors.textPrimary;
+    final statusFgColor = _statusHovered
+        ? colors.textPrimary
+        : theme.accentPalette.onContainer;
 
-    final statusBorder = Border.all(
-      color: isExpanded
-          ? theme.accentPalette.primary.withValues(alpha: 0.45)
-          : colors.hairlineSoft.withValues(alpha: 0.50),
-      width: 1.0,
-    );
-
-    final clockBgColor = isExpanded
-        ? theme.accentPalette.container
-        : _clockHovered
+    final clockBgColor = _clockHovered
         ? colors.panelHighlight
-        : colors.surfaceContainerHigh.withValues(alpha: 0.60);
+        : theme.accentPalette.container;
 
-    final clockFgColor = isExpanded
-        ? theme.accentPalette.onContainer
-        : colors.textPrimary;
-
-    final clockBorder = Border.all(
-      color: isExpanded
-          ? theme.accentPalette.primary.withValues(alpha: 0.45)
-          : colors.hairlineSoft.withValues(alpha: 0.50),
-      width: 1.0,
-    );
+    final clockFgColor = _clockHovered
+        ? colors.textPrimary
+        : theme.accentPalette.onContainer;
 
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -139,12 +121,11 @@ class _UnifiedTrayButtonState extends ConsumerState<UnifiedTrayButton> {
             child: AnimatedContainer(
               duration: Motion.pill,
               curve: Curves.easeOut,
-              height: 32,
+              height: 40,
               padding: const EdgeInsets.symmetric(horizontal: 12),
               decoration: BoxDecoration(
                 color: statusBgColor,
-                borderRadius: theme.borderRadius(ShellShapeScale.full),
-                border: statusBorder,
+                borderRadius: theme.borderRadius(ShellShapeScale.medium),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -159,9 +140,7 @@ class _UnifiedTrayButtonState extends ConsumerState<UnifiedTrayButton> {
                           vertical: 1,
                         ),
                         decoration: BoxDecoration(
-                          color: statusFgColor.withValues(
-                            alpha: widget.expanded ? 0.14 : 0.16,
-                          ),
+                          color: statusFgColor.withValues(alpha: 0.15),
                           borderRadius: theme.borderRadius(
                             ShellShapeScale.full,
                           ),
@@ -206,11 +185,6 @@ class _UnifiedTrayButtonState extends ConsumerState<UnifiedTrayButton> {
                       size: 16,
                       color: statusFgColor,
                     ),
-                    const SizedBox(width: 6),
-                    Text(
-                      '$capacity%',
-                      style: ShellText.trayClock.copyWith(color: statusFgColor),
-                    ),
                   ],
                 ],
               ),
@@ -228,12 +202,11 @@ class _UnifiedTrayButtonState extends ConsumerState<UnifiedTrayButton> {
             child: AnimatedContainer(
               duration: Motion.pill,
               curve: Curves.easeOut,
-              height: 32,
+              height: 40,
               padding: const EdgeInsets.symmetric(horizontal: 14),
               decoration: BoxDecoration(
                 color: clockBgColor,
-                borderRadius: theme.borderRadius(ShellShapeScale.full),
-                border: clockBorder,
+                borderRadius: theme.borderRadius(ShellShapeScale.medium),
               ),
               child: Center(
                 child: Text(

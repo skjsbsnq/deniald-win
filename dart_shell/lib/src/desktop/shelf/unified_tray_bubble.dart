@@ -119,10 +119,12 @@ class _UnifiedTrayBubbleState extends ConsumerState<UnifiedTrayBubble>
                     borderRadius: bubbleRadius,
                     child: DecoratedBox(
                       decoration: BoxDecoration(
-                        color: theme.panelColor(colors.surfaceContainerLow),
+                        // The launcher bubble shares this exact material so
+                        // both panels read as one frosted surface.
+                        color: theme.panelColor(colors.panelBackground),
                         borderRadius: bubbleRadius,
                         border: Border.all(
-                          color: colors.hairlineSoft.withValues(alpha: 0.70),
+                          color: colors.hairlineSoft,
                           width: 1.0,
                         ),
                       ),

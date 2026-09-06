@@ -243,8 +243,10 @@ class _QuickTileState extends State<QuickTile> {
             padding: EdgeInsets.symmetric(horizontal: widget.wide ? 12 : 6),
             decoration: BoxDecoration(
               color: background,
+              // Full roundness turns wide tiles into pills and the square
+              // compact tiles into circles, matching the M3E shape language.
               borderRadius: context.shellTheme.borderRadius(
-                ShellShapeScale.large,
+                ShellShapeScale.full,
               ),
               border: Border.all(
                 color: _focused
@@ -272,8 +274,10 @@ class _QuickTileState extends State<QuickTile> {
           active: widget.active,
           busy: widget.busy,
           foreground: foreground,
-          size: 32,
-          iconSize: 18,
+          // Active tiles carry the icon directly on the pill like the
+          // reference design; inactive tiles get a full-height icon chip.
+          size: widget.active ? 24 : 40,
+          iconSize: widget.active ? 24 : 20,
         ),
         const SizedBox(width: 8),
         Expanded(
@@ -326,32 +330,16 @@ class _QuickTileState extends State<QuickTile> {
   }
 
   Widget _buildSmall(Color foreground) {
-    return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        _TileIcon(
-          icon: widget.icon,
-          active: widget.active,
-          busy: widget.busy,
-          foreground: foreground,
-          size: 26,
-          iconSize: 16,
-        ),
-        const SizedBox(height: 2),
-        Text(
-          widget.title,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            color: foreground,
-            fontSize: 11,
-            height: 1.0,
-            fontWeight: FontWeight.w600,
-            letterSpacing: 0,
-            decoration: TextDecoration.none,
-          ),
-        ),
-      ],
+    return Center(
+      child: widget.busy
+          ? Padding(
+              padding: const EdgeInsets.all(14),
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: foreground,
+              ),
+            )
+          : Icon(widget.icon, size: 20, color: foreground),
     );
   }
 }
@@ -377,6 +365,15 @@ class _TileIcon extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = context.shellTheme;
     final accent = theme.accentPalette;
+    if (active && !busy) {
+      return SizedBox(
+        width: size,
+        height: size,
+        child: Center(
+          child: Icon(icon, color: foreground, size: iconSize),
+        ),
+      );
+    }
     final iconBg = active
         ? accent.onPrimary.withValues(alpha: 0.18)
         : context.shellColors.surfaceContainerHighest;
@@ -450,7 +447,7 @@ class _TileDetailsButtonState extends State<_TileDetailsButton> {
                   ? context.shellColors.surfaceContainerHighest
                   : ShellMediaColors.transparentDark,
               borderRadius: context.shellTheme.borderRadius(
-                ShellShapeScale.medium,
+                ShellShapeScale.full,
               ),
               border: _focused ? Border.all(color: accent) : null,
             ),
