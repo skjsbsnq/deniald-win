@@ -1012,7 +1012,10 @@ impl XwmHandler for RuntimeState {
                 .reconcile_window_layout(&element);
         }
         #[cfg(feature = "flutter")]
-        queue_x11_action(self, &window, WindowAction::Restore);
+        // Leaving IconicState is a visibility change only; Restore would be
+        // re-read by the workspace as an unmaximize request for a maximized
+        // window that the user just un-minimized.
+        queue_x11_action(self, &window, WindowAction::Unminimize);
         self.scene_sync.mark_dirty();
     }
 

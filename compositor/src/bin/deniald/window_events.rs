@@ -40,9 +40,13 @@ pub(super) struct PendingWindowEventQueue {
 impl PendingWindowEventQueue {
     pub(super) fn push_activation(&mut self, window_id: u64, restore_minimized: bool) {
         if restore_minimized {
+            // Pure visibility: the echo arrives after Flutter already cleared
+            // its local minimized flag, so a Restore here would be re-read by
+            // the workspace as an unmaximize request and drop a maximized
+            // window's state on dock/switcher reactivation.
             self.push(PendingWindowEvent::Action(
                 window_id,
-                wire::WindowAction::Restore,
+                wire::WindowAction::Unminimize,
             ));
         }
         self.push(PendingWindowEvent::Activated(window_id));
@@ -131,5 +135,35 @@ impl PendingWindowEventQueue {
     pub(super) fn clear(&mut self) {
         self.events.clear();
         self.overflow_reported = false;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn activation_of_a_minimized_window_echoes_unminimize_not_restore() {
+        // The queue decides which action the activation echo carries. Restore
+        // here would be re-read by the Dart workspace as an unmaximize request
+        // and drop a maximized window's state when the user reactivates it
+        // from the shelf or switcher.
+        let mut queue = PendingWindowEventQueue::default();
+        queue.push_activation(42, true);
+        assert_eq!(
+            queue.drain_events(),
+            vec![
+                PendingWindowEvent::Action(42, wire::WindowAction::Unminimize),
+                PendingWindowEvent::Activated(42),
+            ]
+        );
+
+        // A plain activation stays a single Activated event.
+        let mut queue = PendingWindowEventQueue::default();
+        queue.push_activation(42, false);
+        assert_eq!(
+            queue.drain_events(),
+            vec![PendingWindowEvent::Activated(42)]
+        );
     }
 }

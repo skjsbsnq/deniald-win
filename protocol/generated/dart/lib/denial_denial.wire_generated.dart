@@ -299,7 +299,8 @@ enum WindowActionKind {
   Maximize(1),
   Restore(2),
   ToggleMaximize(3),
-  ToggleFullscreen(4);
+  ToggleFullscreen(4),
+  Unminimize(5);
 
   final int value;
   const WindowActionKind(this.value);
@@ -316,6 +317,8 @@ enum WindowActionKind {
         return WindowActionKind.ToggleMaximize;
       case 4:
         return WindowActionKind.ToggleFullscreen;
+      case 5:
+        return WindowActionKind.Unminimize;
       default:
         throw StateError('Invalid value $value for bit flag enum');
     }
@@ -325,7 +328,7 @@ enum WindowActionKind {
       value == null ? null : WindowActionKind.fromValue(value);
 
   static const int minValue = 0;
-  static const int maxValue = 4;
+  static const int maxValue = 5;
   static const fb.Reader<WindowActionKind> reader = _WindowActionKindReader();
 }
 

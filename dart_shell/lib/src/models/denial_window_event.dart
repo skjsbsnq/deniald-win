@@ -36,6 +36,11 @@ enum DenialWindowAction {
   restore,
   toggleMaximize,
   toggleFullscreen,
+
+  /// The window is leaving the minimized set. A pure visibility change: it
+  /// must never unmaximize or unfullscreen the window (unlike [restore],
+  /// which returns a window to its unmaximized geometry).
+  unminimize,
 }
 
 @immutable

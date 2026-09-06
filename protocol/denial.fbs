@@ -64,7 +64,12 @@ enum WindowActionKind : ubyte {
   Maximize = 1,
   Restore = 2,
   ToggleMaximize = 3,
-  ToggleFullscreen = 4
+  ToggleFullscreen = 4,
+  // Distinguishes "surface is leaving the minimized set" (a pure visibility
+  // change echoed alongside activation) from Restore, which returns a window
+  // to its unmaximized/unfullscreened geometry. Append-only: existing values
+  // keep their wire encoding.
+  Unminimize = 5
 }
 
 enum ShellActionKind : ubyte {

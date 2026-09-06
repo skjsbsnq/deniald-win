@@ -416,6 +416,18 @@ bool _reduceWindowEvent(Ref ref, DenialWindowEvent event) {
         case DenialWindowAction.minimize:
           workspace.minimize(target.objectId);
           ref.read(shellControllerProvider.notifier).releaseWindowFocus(target);
+        case DenialWindowAction.unminimize:
+          // Pure visibility: the local activation has already cleared the
+          // minimized flag by the time this echo arrives, so this only needs
+          // to stay idempotent and must never fall into the restore path,
+          // which would unmaximize a maximized window.
+          if (ref
+                  .read(desktopWorkspaceProvider)
+                  .placements[target.objectId]
+                  ?.minimized ??
+              false) {
+            workspace.activate(target.objectId);
+          }
         case DenialWindowAction.maximize:
           workspace.maximize(
             target.objectId,

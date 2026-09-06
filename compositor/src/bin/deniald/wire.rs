@@ -230,6 +230,10 @@ pub enum WindowAction {
     #[allow(dead_code)]
     ToggleMaximize,
     ToggleFullscreen,
+    /// A surface is leaving the minimized set. Unlike Restore this is a pure
+    /// visibility change and must never unmaximize a window: activation of a
+    /// previously minimized window stays maximized across the restore.
+    Unminimize,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -322,6 +326,7 @@ impl WindowAction {
             Self::Restore => fb::WindowActionKind::Restore,
             Self::ToggleMaximize => fb::WindowActionKind::ToggleMaximize,
             Self::ToggleFullscreen => fb::WindowActionKind::ToggleFullscreen,
+            Self::Unminimize => fb::WindowActionKind::Unminimize,
         }
     }
 }

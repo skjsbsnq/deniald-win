@@ -660,15 +660,16 @@ impl flatbuffers::SimpleToVerifyInSlice for WindowEventKind {}
 #[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
 pub const ENUM_MIN_WINDOW_ACTION_KIND: u8 = 0;
 #[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
-pub const ENUM_MAX_WINDOW_ACTION_KIND: u8 = 4;
+pub const ENUM_MAX_WINDOW_ACTION_KIND: u8 = 5;
 #[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
 #[allow(non_camel_case_types)]
-pub const ENUM_VALUES_WINDOW_ACTION_KIND: [WindowActionKind; 5] = [
+pub const ENUM_VALUES_WINDOW_ACTION_KIND: [WindowActionKind; 6] = [
   WindowActionKind::Minimize,
   WindowActionKind::Maximize,
   WindowActionKind::Restore,
   WindowActionKind::ToggleMaximize,
   WindowActionKind::ToggleFullscreen,
+  WindowActionKind::Unminimize,
 ];
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
@@ -681,15 +682,17 @@ impl WindowActionKind {
   pub const Restore: Self = Self(2);
   pub const ToggleMaximize: Self = Self(3);
   pub const ToggleFullscreen: Self = Self(4);
+  pub const Unminimize: Self = Self(5);
 
   pub const ENUM_MIN: u8 = 0;
-  pub const ENUM_MAX: u8 = 4;
+  pub const ENUM_MAX: u8 = 5;
   pub const ENUM_VALUES: &'static [Self] = &[
     Self::Minimize,
     Self::Maximize,
     Self::Restore,
     Self::ToggleMaximize,
     Self::ToggleFullscreen,
+    Self::Unminimize,
   ];
   /// Returns the variant's name or "" if unknown.
   pub fn variant_name(self) -> Option<&'static str> {
@@ -699,6 +702,7 @@ impl WindowActionKind {
       Self::Restore => Some("Restore"),
       Self::ToggleMaximize => Some("ToggleMaximize"),
       Self::ToggleFullscreen => Some("ToggleFullscreen"),
+      Self::Unminimize => Some("Unminimize"),
       _ => None,
     }
   }

@@ -600,6 +600,20 @@ fn encodes_atomic_cursor_states_and_rejects_invalid_values_without_sequence_gaps
 }
 
 #[test]
+fn activation_of_a_minimized_window_echoes_unminimize_on_the_wire() {
+    // The wire encoding of the new variant round-trips through the envelope.
+    let mut bridge = bridge();
+    let bytes = bridge
+        .encode_window_action(42, WindowAction::Unminimize)
+        .unwrap();
+    let envelope = fb::root_as_envelope(bytes).unwrap();
+    let event = envelope.payload_as_window_event().unwrap();
+    assert_eq!(event.kind(), fb::WindowEventKind::Action);
+    assert_eq!(event.window_id(), 42);
+    assert_eq!(event.action(), fb::WindowActionKind::Unminimize);
+}
+
+#[test]
 fn malformed_truncated_and_mutated_corpus_never_panics() {
     fn exercise(bytes: &[u8]) {
         let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {

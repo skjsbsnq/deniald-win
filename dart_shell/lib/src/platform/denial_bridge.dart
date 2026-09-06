@@ -2818,6 +2818,7 @@ class DenialBridge {
           DenialWindowAction.toggleMaximize,
         wire.WindowActionKind.ToggleFullscreen =>
           DenialWindowAction.toggleFullscreen,
+        wire.WindowActionKind.Unminimize => DenialWindowAction.unminimize,
       };
       _windowEvents.add(
         DenialWindowActionEvent(windowId: event.windowId, action: action),
