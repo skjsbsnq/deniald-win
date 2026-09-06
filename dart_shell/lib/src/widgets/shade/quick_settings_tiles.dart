@@ -35,6 +35,7 @@ class QuickSettingsTiles extends StatelessWidget {
     required this.onScreenshot,
     this.rotationLock = false,
     this.onToggleRotation,
+    this.onToggleDarkTheme,
   });
 
   final bool wifi;
@@ -54,6 +55,7 @@ class QuickSettingsTiles extends StatelessWidget {
   final VoidCallback onToggleBluetooth;
   final VoidCallback onOpenBluetooth;
   final VoidCallback? onToggleRotation;
+  final VoidCallback? onToggleDarkTheme;
   final VoidCallback onToggleDnd;
   final VoidCallback onCycleProfile;
   final VoidCallback onScreenshot;
@@ -274,10 +276,8 @@ class _QuickTileState extends State<QuickTile> {
           active: widget.active,
           busy: widget.busy,
           foreground: foreground,
-          // Active tiles carry the icon directly on the pill like the
-          // reference design; inactive tiles get a full-height icon chip.
-          size: widget.active ? 24 : 40,
-          iconSize: widget.active ? 24 : 20,
+          size: 24,
+          iconSize: 24,
         ),
         const SizedBox(width: 8),
         Expanded(
@@ -363,9 +363,7 @@ class _TileIcon extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = context.shellTheme;
-    final accent = theme.accentPalette;
-    if (active && !busy) {
+    if (!busy) {
       return SizedBox(
         width: size,
         height: size,
@@ -374,26 +372,14 @@ class _TileIcon extends StatelessWidget {
         ),
       );
     }
-    final iconBg = active
-        ? accent.onPrimary.withValues(alpha: 0.18)
-        : context.shellColors.surfaceContainerHighest;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: iconBg,
-        borderRadius: context.shellTheme.borderRadius(size / 2),
-      ),
-      child: SizedBox(
-        width: size,
-        height: size,
-        child: busy
-            ? Padding(
-                padding: EdgeInsets.all(size * 0.27),
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color: foreground,
-                ),
-              )
-            : Icon(icon, color: foreground, size: iconSize),
+    return SizedBox(
+      width: size,
+      height: size,
+      child: Center(
+        child: Padding(
+          padding: EdgeInsets.all(size * 0.27),
+          child: CircularProgressIndicator(strokeWidth: 2, color: foreground),
+        ),
       ),
     );
   }
@@ -416,6 +402,7 @@ class _TileDetailsButton extends StatefulWidget {
 
 class _TileDetailsButtonState extends State<_TileDetailsButton> {
   bool _focused = false;
+  bool _hovered = false;
 
   @override
   Widget build(BuildContext context) {
@@ -426,6 +413,7 @@ class _TileDetailsButtonState extends State<_TileDetailsButton> {
       child: FocusableActionDetector(
         mouseCursor: SystemMouseCursors.click,
         onShowFocusHighlight: (focused) => setState(() => _focused = focused),
+        onShowHoverHighlight: (hovered) => setState(() => _hovered = hovered),
         shortcuts: const <ShortcutActivator, Intent>{
           SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
           SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
@@ -443,8 +431,8 @@ class _TileDetailsButtonState extends State<_TileDetailsButton> {
           onTap: widget.onPressed,
           child: DecoratedBox(
             decoration: BoxDecoration(
-              color: _focused
-                  ? context.shellColors.surfaceContainerHighest
+              color: (_focused || _hovered)
+                  ? widget.foreground.withValues(alpha: 0.14)
                   : ShellMediaColors.transparentDark,
               borderRadius: context.shellTheme.borderRadius(
                 ShellShapeScale.full,

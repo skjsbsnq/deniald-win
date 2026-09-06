@@ -125,7 +125,7 @@ class _UnifiedTrayButtonState extends ConsumerState<UnifiedTrayButton> {
               padding: const EdgeInsets.symmetric(horizontal: 12),
               decoration: BoxDecoration(
                 color: statusBgColor,
-                borderRadius: theme.borderRadius(ShellShapeScale.medium),
+                borderRadius: theme.borderRadius(ShellShapeScale.full),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -206,7 +206,7 @@ class _UnifiedTrayButtonState extends ConsumerState<UnifiedTrayButton> {
               padding: const EdgeInsets.symmetric(horizontal: 14),
               decoration: BoxDecoration(
                 color: clockBgColor,
-                borderRadius: theme.borderRadius(ShellShapeScale.medium),
+                borderRadius: theme.borderRadius(ShellShapeScale.full),
               ),
               child: Center(
                 child: Text(

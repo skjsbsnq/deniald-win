@@ -13,7 +13,6 @@ import '../../state/bluetooth.dart';
 import '../../state/desktop_notifications.dart';
 import '../../state/network_connectivity.dart';
 import '../../state/quick_settings.dart';
-import '../../state/system_status.dart';
 import '../../theme/motion.dart';
 import '../../theme/shell_theme.dart';
 import '../../theme/tokens.dart';
@@ -119,9 +118,8 @@ class _UnifiedTrayBubbleState extends ConsumerState<UnifiedTrayBubble>
                     borderRadius: bubbleRadius,
                     child: DecoratedBox(
                       decoration: BoxDecoration(
-                        // The launcher bubble shares this exact material so
-                        // both panels read as one frosted surface.
-                        color: theme.panelColor(colors.panelBackground),
+                        // Frosted surface blending with desktop background tones.
+                        color: theme.panelColor(colors.surfaceContainerLow),
                         borderRadius: bubbleRadius,
                         border: Border.all(
                           color: colors.hairlineSoft,
@@ -400,6 +398,18 @@ class _TrayHeader extends ConsumerWidget {
             onDismiss?.call();
           },
         ),
+        const SizedBox(width: 8),
+        _TrayHeaderActionButton(
+          icon: Icons.edit_rounded,
+          onPressed: () {
+            launchSettingsPage(
+              ref,
+              context,
+              SettingsPageId.appearance,
+              onDispatched: onDismiss,
+            );
+          },
+        ),
       ],
     );
   }
@@ -416,31 +426,26 @@ class _TrayStatusChips extends ConsumerWidget {
     final l10n = context.l10n;
     final isZh = Localizations.localeOf(context).languageCode == 'zh';
 
-    final battery = ref.watch(batteryProvider);
-    final capacity = battery.capacity;
+    final network = ref.watch(networkConnectivityProvider);
+    final networkSnapshot = network.snapshot;
+    final isWifiConnected =
+        networkSnapshot.wirelessEnabled &&
+        (networkSnapshot.status == NetworkConnectivityStatus.online ||
+            networkSnapshot.status == NetworkConnectivityStatus.captivePortal ||
+            networkSnapshot.status == NetworkConnectivityStatus.local);
+    final ssid = networkSnapshot.connectedNetwork?.ssid;
 
-    final String batteryText;
-    final IconData batteryIcon;
-    if (capacity != null) {
-      if (battery.charging) {
-        batteryIcon = Icons.battery_charging_full_rounded;
-        batteryText = '$capacity% · ${l10n.batteryCharging}';
-      } else if (battery.full || battery.acOnline) {
-        batteryIcon = Icons.battery_full_rounded;
-        batteryText = '$capacity% · ${l10n.batteryFullyCharged}';
-      } else {
-        batteryIcon = capacity >= 95
-            ? Icons.battery_full_rounded
-            : capacity >= 50
-            ? Icons.battery_5_bar_rounded
-            : capacity >= 20
-            ? Icons.battery_2_bar_rounded
-            : Icons.battery_alert_rounded;
-        batteryText = '$capacity% · ${l10n.batteryDischarging}';
-      }
+    final String networkLabel;
+    final IconData networkIcon;
+    if (isWifiConnected && ssid != null && ssid.isNotEmpty) {
+      networkIcon = Icons.vpn_key_rounded;
+      networkLabel = isZh ? '已连接: $ssid' : 'Connected: $ssid';
+    } else if (networkSnapshot.wirelessEnabled) {
+      networkIcon = Icons.vpn_key_rounded;
+      networkLabel = isZh ? '网络已安全连接' : 'This device is connected';
     } else {
-      batteryIcon = Icons.bolt_rounded;
-      batteryText = isZh ? '交流电源已连接' : 'AC Power Connected';
+      networkIcon = Icons.wifi_off_rounded;
+      networkLabel = isZh ? '网络未连接' : 'Disconnected';
     }
 
     final activeAppsCount = ref.watch(
@@ -454,15 +459,17 @@ class _TrayStatusChips extends ConsumerWidget {
     return Row(
       children: [
         _TrayStatusChip(
-          icon: batteryIcon,
-          label: batteryText,
+          icon: networkIcon,
+          label: networkLabel,
           onPressed: () {
-            launchSettingsPage(
-              ref,
-              context,
-              SettingsPageId.power,
-              onDispatched: onDismiss,
-            );
+            ref
+                .read(shellSurfaceControllerProvider.notifier)
+                .show(
+                  keyName: 'wifi-details',
+                  debugLabel: 'Wi-Fi details',
+                  builder: (_, handle) =>
+                      WifiDetailSurface(onClose: handle.close),
+                );
           },
         ),
         const SizedBox(width: 8),
@@ -620,7 +627,7 @@ class _TrayStatusChipState extends State<_TrayStatusChip> {
             decoration: BoxDecoration(
               color: _hovered
                   ? colors.panelHighlight
-                  : colors.surfaceContainerHigh,
+                  : colors.surfaceContainerHighest,
               borderRadius: radius,
               border: Border.all(color: colors.hairlineSoft),
             ),

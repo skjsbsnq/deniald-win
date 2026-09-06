@@ -140,29 +140,52 @@ class _RangeBarState extends State<RangeBar> {
         final colors = context.shellColors;
         final radius = theme.borderRadius(widget.height / 2);
 
-        // M3E split-pill track: the thumb is a tall accent bar straddling the
+        // M3E split-pill track: the thumb is an accent bar straddling the
         // fill boundary, so the two track segments are separate pills with a
-        // gap wide enough to seat it and the thumb overhangs the track.
+        // gap wide enough to seat it. When dragged to 100%, the active bar fills
+        // cleanly across the entire track without leaving an empty gap.
         const thumbWidth = 5.0;
         const splitGap = 8.0;
-        final thumbHeight = widget.height + 12.0;
-        final fillX = (totalWidth * clamped).clamp(0.0, totalWidth);
+        final thumbHeight = widget.height + 6.0;
 
-        final activeWidth = fillX - splitGap / 2;
-        final inactiveLeft = activeWidth > 0 ? fillX + splitGap / 2 : 0.0;
-        final inactiveWidth = activeWidth > 0
-            ? totalWidth - inactiveLeft
-            : totalWidth;
-        final seatThumbInside = inactiveWidth <= 0;
-        final thumbLeft = seatThumbInside
-            ? totalWidth - thumbWidth
-            : (fillX - thumbWidth / 2).clamp(0.0, totalWidth - thumbWidth);
+        final isFull = clamped >= 0.985;
+        final isZero = clamped <= 0.01;
+
+        final double activeWidth;
+        final double inactiveLeft;
+        final double inactiveWidth;
+        final double thumbLeft;
+
+        if (isFull) {
+          activeWidth = totalWidth;
+          inactiveLeft = totalWidth;
+          inactiveWidth = 0.0;
+          thumbLeft = totalWidth - thumbWidth;
+        } else if (isZero) {
+          activeWidth = 0.0;
+          inactiveLeft = 0.0;
+          inactiveWidth = totalWidth;
+          thumbLeft = 0.0;
+        } else {
+          final fillX = (totalWidth * clamped).clamp(0.0, totalWidth);
+          activeWidth = (fillX - splitGap / 2).clamp(
+            0.0,
+            totalWidth - splitGap,
+          );
+          inactiveLeft = activeWidth + splitGap;
+          inactiveWidth = (totalWidth - inactiveLeft).clamp(0.0, totalWidth);
+          thumbLeft = (activeWidth + (splitGap - thumbWidth) / 2).clamp(
+            0.0,
+            totalWidth - thumbWidth,
+          );
+        }
 
         final dotX = totalWidth * 0.82;
         final showDotAtX =
-            inactiveWidth > 40.0 &&
-            dotX > inactiveLeft + 8.0 &&
-            dotX < totalWidth - 12.0;
+            !isFull &&
+            inactiveWidth > 24.0 &&
+            dotX > inactiveLeft + 6.0 &&
+            dotX < totalWidth - 8.0;
 
         final iconOnActive = activeWidth >= 28.0;
         final iconColor = iconOnActive
@@ -217,7 +240,7 @@ class _RangeBarState extends State<RangeBar> {
                     ),
                   if (inactiveWidth > 0)
                     Positioned(
-                      left: activeWidth > 0 ? activeWidth + splitGap : 0,
+                      left: inactiveLeft,
                       top: 0,
                       bottom: 0,
                       width: inactiveWidth,
@@ -245,18 +268,19 @@ class _RangeBarState extends State<RangeBar> {
                         ),
                       ),
                     ),
-                  Positioned(
-                    left: thumbLeft,
-                    top: (widget.height - thumbHeight) / 2,
-                    child: Container(
-                      width: thumbWidth,
-                      height: thumbHeight,
-                      decoration: BoxDecoration(
-                        color: widget.activeColor,
-                        borderRadius: theme.borderRadius(thumbWidth / 2),
+                  if (activeWidth > 0 && !isFull)
+                    Positioned(
+                      left: thumbLeft,
+                      top: (widget.height - thumbHeight) / 2,
+                      child: Container(
+                        width: thumbWidth,
+                        height: thumbHeight,
+                        decoration: BoxDecoration(
+                          color: widget.activeColor,
+                          borderRadius: theme.borderRadius(thumbWidth / 2),
+                        ),
                       ),
                     ),
-                  ),
                   Positioned(
                     left: 12.0,
                     top: 0,
