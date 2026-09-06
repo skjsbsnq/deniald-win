@@ -313,14 +313,9 @@ class _DesktopPopupSurfaceLayers extends StatelessWidget {
                         layoutPreviewing: placement.layoutPreviewing,
                         pixelAlignmentInset: 0.0,
                         alignSizeToDevicePixels: true,
-                        child: ShellBackdropBlur(
-                          blur: !layer.opaque || layer.opacity < 1.0,
-                          useWindowAlphaThreshold: true,
-                          singleWindowSurface: true,
-                          child: SurfaceLayerTexture(
-                            layer: layer,
-                            filterQuality: filterQuality,
-                          ),
+                        child: SurfaceLayerTexture(
+                          layer: layer,
+                          filterQuality: filterQuality,
                         ),
                       ),
                 ],
