@@ -18,7 +18,6 @@ import '../../theme/shell_theme.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/connectivity/bluetooth_detail_surface.dart';
 import '../../widgets/connectivity/wifi_detail_surface.dart';
-import '../../widgets/notification_banner.dart';
 import '../../widgets/session/power_session_surface.dart';
 import '../../widgets/shade/quick_settings_tiles.dart';
 import '../../widgets/shade/range_bar.dart';
@@ -151,12 +150,6 @@ class _UnifiedTrayBubbleState extends ConsumerState<UnifiedTrayBubble>
 class _TrayBubbleContent extends ConsumerWidget {
   const _TrayBubbleContent({this.onDismiss, this.onOpenOverview});
 
-  /// The bubble shows only the newest history window; the dashboard's
-  /// notification center still lists everything. The list materializes
-  /// lazily, so the cap bounds what scrolling can ever build while the
-  /// bubble is open.
-  static const int _maxHistoryRecords = 10;
-
   final VoidCallback? onDismiss;
   final VoidCallback? onOpenOverview;
 
@@ -182,13 +175,13 @@ class _TrayBubbleContent extends ConsumerWidget {
     final networkController = ref.read(networkConnectivityProvider.notifier);
     final bluetooth = ref.watch(bluetoothProvider);
     final bluetoothController = ref.read(bluetoothProvider.notifier);
+    // The bubble itself no longer lists notifications; the dashboard panel's
+    // Info page owns the full grouped history. Only the do-not-disturb state
+    // stays here to keep the quick settings tile live.
     final notificationPolicy = ref.watch(
       desktopNotificationsProvider.select(
-        (state) => (
-          doNotDisturb: state.doNotDisturb,
-          loaded: state.policyLoaded,
-          history: state.history,
-        ),
+        (state) =>
+            (doNotDisturb: state.doNotDisturb, loaded: state.policyLoaded),
       ),
     );
     final notificationController = ref.read(
@@ -208,10 +201,6 @@ class _TrayBubbleContent extends ConsumerWidget {
         bluetooth.serviceAvailable &&
         bluetooth.available &&
         !bluetooth.powerChanging;
-
-    final records = notificationPolicy.history
-        .take(_maxHistoryRecords)
-        .toList(growable: false);
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -307,36 +296,6 @@ class _TrayBubbleContent extends ConsumerWidget {
             },
           ),
         ),
-        if (records.isNotEmpty) ...[
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12.0),
-            child: Container(height: 1.0, color: colors.hairlineSoft),
-          ),
-          ConstrainedBox(
-            constraints: const BoxConstraints(maxHeight: 180.0),
-            child: ListView.separated(
-              shrinkWrap: true,
-              itemCount: records.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 8.0),
-              itemBuilder: (context, index) {
-                final record = records[index];
-                return NotificationCard(
-                  key: ValueKey('tray-notification-${record.notification.id}'),
-                  notification: record.notification,
-                  compact: true,
-                  onDismiss: () => notificationController.dismissFromHistory(
-                    record.notification.id,
-                  ),
-                  onDefaultAction: record.active
-                      ? () => notificationController.invokeDefaultAction(
-                          record.notification.id,
-                        )
-                      : null,
-                );
-              },
-            ),
-          ),
-        ],
       ],
     );
   }

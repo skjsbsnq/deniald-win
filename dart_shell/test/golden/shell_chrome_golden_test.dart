@@ -229,7 +229,7 @@ void main() {
     );
   });
 
-  testWidgets('unified tray bubble renders a bounded history window', (
+  testWidgets('unified tray bubble stays a pure control center', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -270,16 +270,11 @@ void main() {
       matchesGoldenFile('goldens/unified_tray_bubble.png'),
     );
 
-    // The list stays lazy, so prove the cap by scrolling: the 10th record is
-    // reachable and the 11th never materializes.
-    await tester.dragUntilVisible(
-      find.text('History 9'),
-      find.byType(ListView),
-      const Offset(0, -80),
-    );
-    await tester.pumpAndSettle();
-    expect(find.text('History 10'), findsNothing);
-    expect(find.text('History 11'), findsNothing);
+    // Task 11.5 moved the notification history into the dashboard panel's
+    // Info page: even with a populated history, the bubble lists nothing.
+    expect(find.byType(NotificationCard), findsNothing);
+    expect(find.text('History 0'), findsNothing);
+    expect(find.byType(ListView), findsNothing);
   });
 
   testWidgets('launcher bubble keeps its subtree mounted across close', (
