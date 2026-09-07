@@ -43,6 +43,7 @@ import 'widgets/settings_power_page.dart';
 import 'widgets/settings_shortcuts_page.dart';
 import 'widgets/settings_system_pages.dart';
 import 'widgets/settings_touchpad_page.dart';
+import 'widgets/settings_weather_page.dart';
 
 final _englishSettings = AppLocalizationsEn();
 final settingsDesktopApplicationsProvider = FutureProvider<List<DesktopApp>>(
@@ -621,6 +622,17 @@ class _SettingsPageBody extends ConsumerWidget {
         return const SettingsNetworkPage();
       case SettingsPageId.bluetooth:
         return const SettingsBluetoothPage();
+      case SettingsPageId.weather:
+        final settings = ref.watch(
+          shellSettingsProvider.select((settings) => settings.weather),
+        );
+        return SettingsWeatherPage(
+          settings: settings,
+          onLocationModeChanged: controller.setWeatherLocationMode,
+          onManualLocationChanged: controller.setWeatherManualLocation,
+          onTemperatureUnitChanged: controller.setWeatherTemperatureUnit,
+          onReset: controller.resetWeather,
+        );
       case SettingsPageId.developer:
         return SettingsDeveloperPage(
           state: ref.watch(uiDevelopmentProvider),

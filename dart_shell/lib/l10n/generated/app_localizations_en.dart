@@ -2754,6 +2754,51 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsNavigationBluetooth => 'Bluetooth';
 
   @override
+  String get settingsNavigationWeather => 'Weather';
+
+  @override
+  String get settingsWeatherTitle => 'Weather, where you want it.';
+
+  @override
+  String get settingsWeatherDescription =>
+      'Choose how the dashboard weather page locates you and how temperatures are shown.';
+
+  @override
+  String get settingsWeatherSection => 'WEATHER';
+
+  @override
+  String get settingsWeatherLocationMode => 'Location';
+
+  @override
+  String get settingsWeatherLocationAuto => 'Automatic';
+
+  @override
+  String get settingsWeatherLocationManual => 'Manual city';
+
+  @override
+  String settingsWeatherCurrentCity(String city) {
+    return 'Current city: $city';
+  }
+
+  @override
+  String get settingsWeatherSearchPlaceholder => 'Search for a city…';
+
+  @override
+  String get settingsWeatherSearching => 'Searching…';
+
+  @override
+  String get settingsWeatherSearchNoResults => 'No matching city found.';
+
+  @override
+  String get settingsWeatherTemperatureUnit => 'Temperature unit';
+
+  @override
+  String get settingsWeatherUnitCelsius => '°C';
+
+  @override
+  String get settingsWeatherUnitFahrenheit => '°F';
+
+  @override
   String get settingsNavigationDesktopLayout => 'Desktop layout';
 
   @override

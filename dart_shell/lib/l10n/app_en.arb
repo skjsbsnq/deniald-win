@@ -3726,6 +3726,67 @@
   "@settingsNavigationBluetooth": {
     "description": "English UI text for settingsNavigationBluetooth."
   },
+  "settingsNavigationWeather": "Weather",
+  "@settingsNavigationWeather": {
+    "description": "Label for the Weather destination in Settings navigation."
+  },
+  "settingsWeatherTitle": "Weather, where you want it.",
+  "@settingsWeatherTitle": {
+    "description": "English UI text for settingsWeatherTitle."
+  },
+  "settingsWeatherDescription": "Choose how the dashboard weather page locates you and how temperatures are shown.",
+  "@settingsWeatherDescription": {
+    "description": "English UI text for settingsWeatherDescription."
+  },
+  "settingsWeatherSection": "WEATHER",
+  "@settingsWeatherSection": {
+    "description": "English UI text for settingsWeatherSection."
+  },
+  "settingsWeatherLocationMode": "Location",
+  "@settingsWeatherLocationMode": {
+    "description": "Segmented control label for the weather location mode."
+  },
+  "settingsWeatherLocationAuto": "Automatic",
+  "@settingsWeatherLocationAuto": {
+    "description": "English UI text for settingsWeatherLocationAuto."
+  },
+  "settingsWeatherLocationManual": "Manual city",
+  "@settingsWeatherLocationManual": {
+    "description": "English UI text for settingsWeatherLocationManual."
+  },
+  "settingsWeatherCurrentCity": "Current city: {city}",
+  "@settingsWeatherCurrentCity": {
+    "description": "English UI text for settingsWeatherCurrentCity.",
+    "placeholders": {
+      "city": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsWeatherSearchPlaceholder": "Search for a city…",
+  "@settingsWeatherSearchPlaceholder": {
+    "description": "English UI text for settingsWeatherSearchPlaceholder."
+  },
+  "settingsWeatherSearching": "Searching…",
+  "@settingsWeatherSearching": {
+    "description": "English UI text for settingsWeatherSearching."
+  },
+  "settingsWeatherSearchNoResults": "No matching city found.",
+  "@settingsWeatherSearchNoResults": {
+    "description": "English UI text for settingsWeatherSearchNoResults."
+  },
+  "settingsWeatherTemperatureUnit": "Temperature unit",
+  "@settingsWeatherTemperatureUnit": {
+    "description": "Segmented control label for the temperature display unit."
+  },
+  "settingsWeatherUnitCelsius": "°C",
+  "@settingsWeatherUnitCelsius": {
+    "description": "English UI text for settingsWeatherUnitCelsius."
+  },
+  "settingsWeatherUnitFahrenheit": "°F",
+  "@settingsWeatherUnitFahrenheit": {
+    "description": "English UI text for settingsWeatherUnitFahrenheit."
+  },
   "settingsNavigationDesktopLayout": "Desktop layout",
   "@settingsNavigationDesktopLayout": {
     "description": "English UI text for settingsNavigationDesktopLayout."

@@ -24,6 +24,7 @@ enum SettingsPageId {
   displays,
   network,
   bluetooth,
+  weather,
   power,
   developer,
   about,
@@ -46,6 +47,7 @@ extension SettingsPageIdPresentation on SettingsPageId {
     SettingsPageId.displays => context.l10n.settingsNavigationDisplays,
     SettingsPageId.network => context.l10n.settingsNavigationNetwork,
     SettingsPageId.bluetooth => context.l10n.settingsNavigationBluetooth,
+    SettingsPageId.weather => context.l10n.settingsNavigationWeather,
     SettingsPageId.power => context.l10n.settingsNavigationPower,
     SettingsPageId.developer => context.l10n.settingsNavigationDeveloper,
   };
@@ -67,6 +69,7 @@ extension SettingsPageIdPresentation on SettingsPageId {
     SettingsPageId.displays => Icons.monitor_rounded,
     SettingsPageId.network => Icons.wifi_rounded,
     SettingsPageId.bluetooth => Icons.bluetooth_rounded,
+    SettingsPageId.weather => Icons.cloud_outlined,
     SettingsPageId.developer => Icons.code_rounded,
   };
 }

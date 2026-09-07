@@ -498,6 +498,24 @@ class ShellSettingsController extends Notifier<ShellSettings> {
     );
   }
 
+  void setWeatherLocationMode(ShellWeatherLocationMode value) {
+    _update(
+      state.copyWith(weather: state.weather.copyWith(locationMode: value)),
+    );
+  }
+
+  void setWeatherManualLocation(ShellManualLocation? value) {
+    _update(
+      state.copyWith(weather: state.weather.copyWith(manualLocation: value)),
+    );
+  }
+
+  void setWeatherTemperatureUnit(ShellTemperatureUnit value) {
+    _update(
+      state.copyWith(weather: state.weather.copyWith(temperatureUnit: value)),
+    );
+  }
+
   void setApplicationEnvironmentOverride(
     String name,
     String? value, {
@@ -575,6 +593,10 @@ class ShellSettingsController extends Notifier<ShellSettings> {
 
   void resetPower() {
     _update(state.copyWith(power: const ShellPowerSettings()));
+  }
+
+  void resetWeather() {
+    _update(state.copyWith(weather: const ShellWeatherSettings()));
   }
 
   void resetApplicationEnvironment() {

@@ -4894,6 +4894,90 @@ abstract class AppLocalizations {
   /// **'Bluetooth'**
   String get settingsNavigationBluetooth;
 
+  /// Label for the Weather destination in Settings navigation.
+  ///
+  /// In en, this message translates to:
+  /// **'Weather'**
+  String get settingsNavigationWeather;
+
+  /// English UI text for settingsWeatherTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Weather, where you want it.'**
+  String get settingsWeatherTitle;
+
+  /// English UI text for settingsWeatherDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose how the dashboard weather page locates you and how temperatures are shown.'**
+  String get settingsWeatherDescription;
+
+  /// English UI text for settingsWeatherSection.
+  ///
+  /// In en, this message translates to:
+  /// **'WEATHER'**
+  String get settingsWeatherSection;
+
+  /// Segmented control label for the weather location mode.
+  ///
+  /// In en, this message translates to:
+  /// **'Location'**
+  String get settingsWeatherLocationMode;
+
+  /// English UI text for settingsWeatherLocationAuto.
+  ///
+  /// In en, this message translates to:
+  /// **'Automatic'**
+  String get settingsWeatherLocationAuto;
+
+  /// English UI text for settingsWeatherLocationManual.
+  ///
+  /// In en, this message translates to:
+  /// **'Manual city'**
+  String get settingsWeatherLocationManual;
+
+  /// English UI text for settingsWeatherCurrentCity.
+  ///
+  /// In en, this message translates to:
+  /// **'Current city: {city}'**
+  String settingsWeatherCurrentCity(String city);
+
+  /// English UI text for settingsWeatherSearchPlaceholder.
+  ///
+  /// In en, this message translates to:
+  /// **'Search for a city…'**
+  String get settingsWeatherSearchPlaceholder;
+
+  /// English UI text for settingsWeatherSearching.
+  ///
+  /// In en, this message translates to:
+  /// **'Searching…'**
+  String get settingsWeatherSearching;
+
+  /// English UI text for settingsWeatherSearchNoResults.
+  ///
+  /// In en, this message translates to:
+  /// **'No matching city found.'**
+  String get settingsWeatherSearchNoResults;
+
+  /// Segmented control label for the temperature display unit.
+  ///
+  /// In en, this message translates to:
+  /// **'Temperature unit'**
+  String get settingsWeatherTemperatureUnit;
+
+  /// English UI text for settingsWeatherUnitCelsius.
+  ///
+  /// In en, this message translates to:
+  /// **'°C'**
+  String get settingsWeatherUnitCelsius;
+
+  /// English UI text for settingsWeatherUnitFahrenheit.
+  ///
+  /// In en, this message translates to:
+  /// **'°F'**
+  String get settingsWeatherUnitFahrenheit;
+
   /// English UI text for settingsNavigationDesktopLayout.
   ///
   /// In en, this message translates to:

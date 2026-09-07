@@ -2626,6 +2626,50 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsNavigationBluetooth => '蓝牙';
 
   @override
+  String get settingsNavigationWeather => '天气';
+
+  @override
+  String get settingsWeatherTitle => '天气,随你所在。';
+
+  @override
+  String get settingsWeatherDescription => '控制仪表盘天气页的定位方式与温度显示单位。';
+
+  @override
+  String get settingsWeatherSection => '天气';
+
+  @override
+  String get settingsWeatherLocationMode => '定位';
+
+  @override
+  String get settingsWeatherLocationAuto => '自动';
+
+  @override
+  String get settingsWeatherLocationManual => '手动城市';
+
+  @override
+  String settingsWeatherCurrentCity(String city) {
+    return '当前城市:$city';
+  }
+
+  @override
+  String get settingsWeatherSearchPlaceholder => '搜索城市…';
+
+  @override
+  String get settingsWeatherSearching => '正在搜索…';
+
+  @override
+  String get settingsWeatherSearchNoResults => '未找到匹配的城市。';
+
+  @override
+  String get settingsWeatherTemperatureUnit => '温度单位';
+
+  @override
+  String get settingsWeatherUnitCelsius => '°C';
+
+  @override
+  String get settingsWeatherUnitFahrenheit => '°F';
+
+  @override
   String get settingsNavigationDesktopLayout => '桌面布局';
 
   @override
