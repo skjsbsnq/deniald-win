@@ -277,6 +277,106 @@ void main() {
     expect(find.byType(ListView), findsNothing);
   });
 
+  // Mid-spring baselines: the settle springs are ticker-driven simulations,
+  // so pumping a fixed duration yields a deterministic half-open frame. The
+  // resting-state goldens above cannot notice a Motion constant change
+  // (stiffness/damping/duration); these two can (review 15 §2.5).
+  testWidgets('unified tray bubble mid-spring frame renders', (tester) async {
+    Widget buildBubble(bool visible) {
+      return ProviderScope(
+        overrides: [
+          quickSettingsProvider.overrideWith(_FakeQuickSettingsController.new),
+          networkConnectivityProvider.overrideWith(_FakeNetworkController.new),
+          bluetoothProvider.overrideWith(_FakeBluetoothController.new),
+          desktopNotificationsProvider.overrideWith(
+            _FakeNotificationsController.new,
+          ),
+          batteryProvider.overrideWith(_FakeBatteryController.new),
+          desktopWorkspaceProvider.overrideWith(_FakeWorkspaceController.new),
+        ],
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          locale: const Locale('en'),
+          home: Scaffold(
+            backgroundColor: const Color(0xff121212),
+            body: ShellTheme(
+              data: const ShellThemeData(),
+              child: UnifiedTrayBubble(
+                visible: visible,
+                onDismiss: () {},
+                shelfHeight: 56.0,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    await tester.pumpWidget(buildBubble(false));
+    await tester.pump();
+    await tester.pumpWidget(buildBubble(true));
+    // ~120 ms into the expressive settle spring: visibly mid-flight, well
+    // before the overshoot settles.
+    await tester.pump(const Duration(milliseconds: 120));
+
+    await expectLater(
+      find.byType(UnifiedTrayBubble),
+      matchesGoldenFile('goldens/unified_tray_bubble_mid.png'),
+    );
+  });
+
+  testWidgets('desktop application launcher mid-spring frame renders', (
+    tester,
+  ) async {
+    final searchFocusNode = FocusNode();
+    addTearDown(searchFocusNode.dispose);
+
+    Widget buildLauncher(bool visible) {
+      return ProviderScope(
+        overrides: [
+          shellSettingsProvider.overrideWith(_MockShelfSettingsController.new),
+        ],
+        child: MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: AppLocalizations.supportedLocales,
+          locale: const Locale('en'),
+          home: Scaffold(
+            backgroundColor: const Color(0xff121212),
+            body: Center(
+              child: SizedBox(
+                width: 400,
+                height: 560,
+                child: ShellTheme(
+                  data: const ShellThemeData(),
+                  child: DesktopApplicationLauncher(
+                    searchFocusNode: searchFocusNode,
+                    onEnter: () {},
+                    onExit: () {},
+                    onDismiss: () {},
+                    onLaunch: (_) {},
+                    onLaunchLocal: (_) {},
+                    visible: visible,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    await tester.pumpWidget(buildLauncher(false));
+    await tester.pump();
+    await tester.pumpWidget(buildLauncher(true));
+    await tester.pump(const Duration(milliseconds: 120));
+
+    await expectLater(
+      find.byType(DesktopApplicationLauncher),
+      matchesGoldenFile('goldens/desktop_application_launcher_mid.png'),
+    );
+  });
+
   testWidgets('launcher bubble keeps its subtree mounted across close', (
     tester,
   ) async {

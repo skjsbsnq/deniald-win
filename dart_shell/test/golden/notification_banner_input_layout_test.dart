@@ -136,10 +136,7 @@ void main() {
     await tester.pump();
 
     final secondCardBefore = tester.getRect(_secondCardFinder());
-    expect(
-      _regionMatching(bridge.snapshots.last, secondCardBefore),
-      isNotNull,
-    );
+    expect(_regionMatching(bridge.snapshots.last, secondCardBefore), isNotNull);
 
     controller.retainOnly(const [_secondNotification]);
     await tester.pumpAndSettle();
@@ -147,10 +144,7 @@ void main() {
 
     final secondCardAfter = tester.getRect(_secondCardFinder());
     expect(secondCardAfter.top, lessThan(secondCardBefore.top));
-    expect(
-      _regionMatching(bridge.snapshots.last, secondCardAfter),
-      isNotNull,
-    );
+    expect(_regionMatching(bridge.snapshots.last, secondCardAfter), isNotNull);
   });
 }
 
