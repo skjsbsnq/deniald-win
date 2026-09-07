@@ -46,7 +46,7 @@ class NetworkMetricCard extends StatelessWidget {
                 color: colors.textSecondary,
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                letterSpacing: 0.2,
+
                 decoration: TextDecoration.none,
               ),
             ),

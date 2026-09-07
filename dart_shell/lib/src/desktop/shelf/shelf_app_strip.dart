@@ -4,7 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../launcher/controllers/home_grid_controller.dart';
 import '../../launcher/models/desktop_app.dart';
 import '../../launcher/models/home_grid_item.dart';
+import '../../launcher/services/app_launcher.dart';
 import '../../local_apps/local_flutter_application.dart';
+import '../../localization/denial_localizations.dart';
 import '../../models/denial_window.dart';
 import '../../state/pinned_apps.dart';
 import '../../state/shell_controller.dart';
@@ -37,6 +39,15 @@ class _AppEntry {
   final LocalFlutterApplication? localApp;
 }
 
+/// Desktop application lookup tables the strip uses to resolve windows back
+/// to their launching app.
+class _DesktopAppIndex {
+  const _DesktopAppIndex(this.byWindowId, this.byId);
+
+  final Map<String, DesktopApp> byWindowId;
+  final Map<String, DesktopApp> byId;
+}
+
 /// The horizontal strip of running and pinned application buttons on the shelf.
 class ShelfAppStrip extends ConsumerStatefulWidget {
   const ShelfAppStrip({super.key});
@@ -51,6 +62,9 @@ class _ShelfAppStripState extends ConsumerState<ShelfAppStrip> {
   bool _userScrolled = false;
   int _lastEntryCount = 0;
   double _lastMaxWidth = 0.0;
+  List<HomeGridItem?>? _cachedIndexSlots;
+  AppLauncher? _cachedIndexLauncher;
+  _DesktopAppIndex? _cachedIndex;
 
   @override
   void initState() {
@@ -65,11 +79,12 @@ class _ShelfAppStripState extends ConsumerState<ShelfAppStrip> {
   }
 
   void _checkAndCenterScroll(int entryCount, double maxWidth) {
-    if (_lastEntryCount != entryCount || _lastMaxWidth != maxWidth) {
-      _lastEntryCount = entryCount;
-      _lastMaxWidth = maxWidth;
-      _userScrolled = false;
+    if (_lastEntryCount == entryCount && _lastMaxWidth == maxWidth) {
+      return;
     }
+    _lastEntryCount = entryCount;
+    _lastMaxWidth = maxWidth;
+    _userScrolled = false;
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_scrollController.hasClients) return;
@@ -143,14 +158,54 @@ class _ShelfAppStripState extends ConsumerState<ShelfAppStrip> {
     }
   }
 
+  _DesktopAppIndex _resolveDesktopAppIndex(
+    List<HomeGridItem?>? slots,
+    AppLauncher appLauncher,
+  ) {
+    final cached = _cachedIndex;
+    if (cached != null &&
+        identical(slots, _cachedIndexSlots) &&
+        identical(appLauncher, _cachedIndexLauncher)) {
+      return cached;
+    }
+    final byWindowId = <String, DesktopApp>{};
+    final byId = <String, DesktopApp>{};
+    if (slots != null) {
+      for (final item in slots.whereType<HomeGridItem>()) {
+        final app = item.app;
+        if (app == null) continue;
+        byId[app.id] = app;
+        byId[_normalizeAppId(app.id)] = app;
+        if (app.id.toLowerCase().endsWith('.desktop')) {
+          final stripped = app.id.substring(
+            0,
+            app.id.length - '.desktop'.length,
+          );
+          byId[stripped] = app;
+          byId[_normalizeAppId(stripped)] = app;
+        }
+        for (final id in appLauncher.expectedWindowAppIds(app)) {
+          byWindowId.putIfAbsent(_normalizeAppId(id), () => app);
+          byId.putIfAbsent(_normalizeAppId(id), () => app);
+        }
+      }
+    }
+    final index = _DesktopAppIndex(byWindowId, byId);
+    _cachedIndexSlots = slots;
+    _cachedIndexLauncher = appLauncher;
+    _cachedIndex = index;
+    return index;
+  }
+
   List<Widget> _buildContextMenu(BuildContext context, _AppEntry entry) {
+    final l10n = context.l10n;
     final pinnedController = ref.read(pinnedAppsProvider.notifier);
     final items = <Widget>[];
 
     if (entry.windows.isNotEmpty) {
       items.add(
         ShellMenuItem(
-          label: 'New window',
+          label: l10n.shelfNewWindow,
           icon: Icons.add_to_photos_rounded,
           onPressed: () => _launchApp(context, entry),
         ),
@@ -159,7 +214,7 @@ class _ShelfAppStripState extends ConsumerState<ShelfAppStrip> {
       if (entry.windows.length > 1) {
         items.add(
           ShellMenuItem(
-            label: 'Cycle windows',
+            label: l10n.shelfCycleWindows,
             icon: Icons.view_carousel_rounded,
             onPressed: () {
               final foregroundObjectId = ref.read(
@@ -173,7 +228,7 @@ class _ShelfAppStripState extends ConsumerState<ShelfAppStrip> {
     } else {
       items.add(
         ShellMenuItem(
-          label: 'Open',
+          label: l10n.shelfOpenApp,
           icon: Icons.launch_rounded,
           onPressed: () => _launchApp(context, entry),
         ),
@@ -185,7 +240,7 @@ class _ShelfAppStripState extends ConsumerState<ShelfAppStrip> {
     if (entry.isPinned) {
       items.add(
         ShellMenuItem(
-          label: 'Unpin from shelf',
+          label: l10n.shelfUnpinFromShelf,
           icon: Icons.push_pin_outlined,
           onPressed: () => pinnedController.unpin(entry.canonicalId),
         ),
@@ -193,7 +248,7 @@ class _ShelfAppStripState extends ConsumerState<ShelfAppStrip> {
     } else {
       items.add(
         ShellMenuItem(
-          label: 'Pin to shelf',
+          label: l10n.shelfPinToShelf,
           icon: Icons.push_pin_rounded,
           onPressed: () => pinnedController.pin(entry.canonicalId),
         ),
@@ -204,7 +259,9 @@ class _ShelfAppStripState extends ConsumerState<ShelfAppStrip> {
       items.add(const ShellMenuDivider());
       items.add(
         ShellMenuItem(
-          label: entry.windows.length > 1 ? 'Close all windows' : 'Close',
+          label: entry.windows.length > 1
+              ? l10n.shelfCloseAllWindows
+              : l10n.shelfClose,
           icon: Icons.close_rounded,
           destructive: true,
           onPressed: () {
@@ -234,29 +291,12 @@ class _ShelfAppStripState extends ConsumerState<ShelfAppStrip> {
     final localRegistry = ref.watch(localFlutterApplicationRegistryProvider);
     final appLauncher = ref.watch(appLauncherProvider);
 
-    // Build desktop application lookup index from home grid slots.
-    final desktopAppsByWindowId = <String, DesktopApp>{};
-    final desktopAppsById = <String, DesktopApp>{};
-    if (slots != null) {
-      for (final item in slots.whereType<HomeGridItem>()) {
-        final app = item.app;
-        if (app == null) continue;
-        desktopAppsById[app.id] = app;
-        desktopAppsById[_normalizeAppId(app.id)] = app;
-        if (app.id.toLowerCase().endsWith('.desktop')) {
-          final stripped = app.id.substring(
-            0,
-            app.id.length - '.desktop'.length,
-          );
-          desktopAppsById[stripped] = app;
-          desktopAppsById[_normalizeAppId(stripped)] = app;
-        }
-        for (final id in appLauncher.expectedWindowAppIds(app)) {
-          desktopAppsByWindowId.putIfAbsent(_normalizeAppId(id), () => app);
-          desktopAppsById.putIfAbsent(_normalizeAppId(id), () => app);
-        }
-      }
-    }
+    // Rebuild the desktop application lookup index only when the grid slots
+    // or the launcher change; window title and focus updates rebuild this
+    // widget far more often and must not pay for the O(slots) rescan.
+    final index = _resolveDesktopAppIndex(slots, appLauncher);
+    final desktopAppsByWindowId = index.byWindowId;
+    final desktopAppsById = index.byId;
 
     DesktopApp? findDesktopApp(String id) {
       final norm = _normalizeAppId(id);

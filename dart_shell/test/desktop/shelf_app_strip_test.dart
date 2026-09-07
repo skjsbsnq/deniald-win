@@ -73,10 +73,7 @@ void main() {
   ) async {
     final bridge = _ShelfTestBridge();
     addTearDown(bridge.dispose);
-    final shell = _ShelfShellController(
-      bridge,
-      windows: const [_firstWindow],
-    );
+    final shell = _ShelfShellController(bridge, windows: const [_firstWindow]);
     await tester.pumpWidget(_stripScene(bridge, shell));
     final container = ProviderScope.containerOf(
       tester.element(find.byType(ShelfAppStrip)),

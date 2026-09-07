@@ -47,6 +47,7 @@ class _ShelfAppButtonState extends State<ShelfAppButton>
   late final MenuController _menuController;
   bool _hovered = false;
   bool _pressed = false;
+  bool _menuOpen = false;
 
   double _targetIndicatorWidth() {
     if (widget.windowCount > 1) {
@@ -103,10 +104,9 @@ class _ShelfAppButtonState extends State<ShelfAppButton>
   void _updateHover(bool hovered) {
     if (_hovered == hovered) return;
     setState(() => _hovered = hovered);
-    springTo(
+    _settleInteractionSpring(
       _hoverController,
       hovered ? 1.0 : 0.0,
-      spring: Motion.expressiveSpatialFast,
       telemetryLabel: 'shelf_app_hover',
     );
   }
@@ -114,12 +114,41 @@ class _ShelfAppButtonState extends State<ShelfAppButton>
   void _updatePress(bool pressed) {
     if (_pressed == pressed) return;
     setState(() => _pressed = pressed);
-    springTo(
+    _settleInteractionSpring(
       _pressController,
       pressed ? 1.0 : 0.0,
-      spring: Motion.expressiveSpatialFast,
       telemetryLabel: 'shelf_app_press',
     );
+  }
+
+  void _settleInteractionSpring(
+    AnimationController controller,
+    double target, {
+    required String telemetryLabel,
+  }) {
+    if (MediaQuery.disableAnimationsOf(context)) {
+      // Reduced motion skips the spring entirely so the state change lands
+      // instantly instead of animating hover and press feedback.
+      controller.value = target;
+      return;
+    }
+    springTo(
+      controller,
+      target,
+      spring: Motion.expressiveSpatialFast,
+      telemetryLabel: telemetryLabel,
+    );
+  }
+
+  void _handleMenuOpen() {
+    // Menu children are only built while open, so opening has to rebuild this
+    // button before the anchor renders its overlay panel.
+    setState(() => _menuOpen = true);
+  }
+
+  void _handleMenuClose() {
+    if (!mounted) return;
+    setState(() => _menuOpen = false);
   }
 
   void _handleSecondaryTapDown(TapDownDetails details) {
@@ -208,7 +237,11 @@ class _ShelfAppButtonState extends State<ShelfAppButton>
       useRootOverlay: false,
       clipBehavior: Clip.antiAlias,
       style: shellMenuStyle(context),
-      menuChildren: widget.menuBuilder != null
+      onOpen: _handleMenuOpen,
+      onClose: _handleMenuClose,
+      // The full menu is only constructed while open, so the frequent strip
+      // rebuilds never pay for menus that may never be shown.
+      menuChildren: _menuOpen && widget.menuBuilder != null
           ? widget.menuBuilder!(context)
           : const <Widget>[],
       child: Tooltip(

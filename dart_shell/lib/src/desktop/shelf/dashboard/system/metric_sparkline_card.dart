@@ -64,7 +64,7 @@ class MetricSparklineCard extends StatelessWidget {
                             color: colors.textSecondary,
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
-                            letterSpacing: 0.2,
+
                             decoration: TextDecoration.none,
                           ),
                         ),
@@ -93,10 +93,14 @@ class MetricSparklineCard extends StatelessWidget {
                   SizedBox(
                     width: 132,
                     height: 76,
-                    child: MetricSparkline(
-                      history: history,
-                      lineColor: theme.accentPalette.primary,
-                      fillColor: theme.accentPalette.primary,
+                    // The series repaints on every telemetry tick, so the
+                    // boundary keeps that damage confined to its own layer.
+                    child: RepaintBoundary(
+                      child: MetricSparkline(
+                        history: history,
+                        lineColor: theme.accentPalette.primary,
+                        fillColor: theme.accentPalette.primary,
+                      ),
                     ),
                   ),
                 ],

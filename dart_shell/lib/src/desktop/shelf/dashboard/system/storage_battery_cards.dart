@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart' show Icons;
 import 'package:flutter/widgets.dart';
 
+import '../../../../../l10n/generated/app_localizations.dart';
+import '../../../../localization/denial_localizations.dart';
 import '../../../../models/battery_status.dart';
 import '../../../../services/system_hardware_service.dart';
 import '../../../../theme/shell_theme.dart';
@@ -18,7 +20,7 @@ class StorageCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = context.shellTheme;
     final colors = context.shellColors;
-    final isZh = Localizations.localeOf(context).languageCode == 'zh';
+    final l10n = context.l10n;
     final usage = storage?.fraction ?? 0.0;
 
     return DecoratedBox(
@@ -37,14 +39,14 @@ class StorageCard extends StatelessWidget {
               children: [
                 Expanded(
                   child: Text(
-                    isZh ? '存储' : 'Storage',
+                    l10n.systemStorage,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: colors.textSecondary,
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      letterSpacing: 0.2,
+
                       decoration: TextDecoration.none,
                     ),
                   ),
@@ -86,10 +88,10 @@ class StorageCard extends StatelessWidget {
             const SizedBox(height: 8),
             Text(
               storage == null
-                  ? (isZh ? '暂无数据' : 'Unavailable')
-                  : (isZh
-                        ? '剩余 ${formatGigabytes(storage!.total - storage!.used)}'
-                        : '${formatGigabytes(storage!.total - storage!.used)} free'),
+                  ? l10n.systemDataUnavailable
+                  : l10n.systemStorageFree(
+                      formatGigabytes(storage!.total - storage!.used),
+                    ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
@@ -116,7 +118,7 @@ class BatteryTankCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = context.shellTheme;
     final colors = context.shellColors;
-    final isZh = Localizations.localeOf(context).languageCode == 'zh';
+    final l10n = context.l10n;
     final capacity = battery.capacity;
 
     return DecoratedBox(
@@ -135,14 +137,14 @@ class BatteryTankCard extends StatelessWidget {
               children: [
                 Expanded(
                   child: Text(
-                    isZh ? '电池' : 'Battery',
+                    l10n.systemBattery,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       color: colors.textSecondary,
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
-                      letterSpacing: 0.2,
+
                       decoration: TextDecoration.none,
                     ),
                   ),
@@ -164,7 +166,7 @@ class BatteryTankCard extends StatelessWidget {
               child: capacity == null
                   ? Center(
                       child: Text(
-                        isZh ? '电池不可用' : 'No battery',
+                        l10n.systemBatteryUnavailable,
                         style: TextStyle(
                           color: colors.textTertiary,
                           fontSize: 11,
@@ -176,7 +178,7 @@ class BatteryTankCard extends StatelessWidget {
                   : LiquidFill(fraction: capacity / 100),
             ),
             const SizedBox(height: 8),
-            _BatteryStatusLine(battery: battery, isZh: isZh),
+            _BatteryStatusLine(battery: battery, l10n: l10n),
           ],
         ),
       ),
@@ -185,10 +187,10 @@ class BatteryTankCard extends StatelessWidget {
 }
 
 class _BatteryStatusLine extends StatelessWidget {
-  const _BatteryStatusLine({required this.battery, required this.isZh});
+  const _BatteryStatusLine({required this.battery, required this.l10n});
 
   final BatteryStatus battery;
-  final bool isZh;
+  final AppLocalizations l10n;
 
   @override
   Widget build(BuildContext context) {
@@ -202,27 +204,27 @@ class _BatteryStatusLine extends StatelessWidget {
     )) {
       (null, _, _, _) => (
         Icons.battery_0_bar_rounded,
-        isZh ? '不可用' : 'Unavailable',
+        l10n.systemStatusUnavailable,
         colors.textTertiary,
       ),
       (_, _, true, _) => (
         Icons.check_rounded,
-        isZh ? '已充满' : 'Full',
+        l10n.batteryFull,
         colors.performanceGood,
       ),
       (_, true, _, _) => (
         Icons.bolt_rounded,
-        isZh ? '充电中' : 'Charging',
+        l10n.batteryCharging,
         colors.performanceGood,
       ),
       (_, _, _, true) => (
         Icons.power_rounded,
-        isZh ? '交流供电' : 'On AC power',
+        l10n.batteryOnAcPower,
         colors.textSecondary,
       ),
       _ => (
         Icons.battery_full_rounded,
-        isZh ? '使用电池' : 'On battery',
+        l10n.batteryOnBattery,
         colors.textSecondary,
       ),
     };
