@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../state/weather_state.dart';
+import '../../../../settings/settings_controller.dart';
 import '../../../../theme/motion.dart';
 import '../../../../theme/shell_color_scheme.dart';
 import '../../../../theme/shell_theme.dart';
@@ -54,6 +55,11 @@ class _WeatherViewState extends ConsumerState<WeatherView> {
 
     final colors = context.shellColors;
     final isZh = Localizations.localeOf(context).languageCode == 'zh';
+    final temperatureUnit = ref.watch(
+      shellSettingsProvider.select(
+        (settings) => settings.weather.temperatureUnit,
+      ),
+    );
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
@@ -126,18 +132,26 @@ class _WeatherViewState extends ConsumerState<WeatherView> {
           WeatherHeroSection(
             current: snapshot.current,
             isDay: isDaylight(DateTime.now(), snapshot.days.firstOrNull),
+            temperatureUnit: temperatureUnit,
           ),
           const SizedBox(height: 18),
           _SectionCaption(colors: colors, label: isZh ? '逐小时' : 'Hourly'),
           const SizedBox(height: 8),
-          WeatherHourlyStrip(hours: snapshot.hours, days: snapshot.days),
+          WeatherHourlyStrip(
+            hours: snapshot.hours,
+            days: snapshot.days,
+            temperatureUnit: temperatureUnit,
+          ),
           const SizedBox(height: 18),
           _SectionCaption(
             colors: colors,
             label: isZh ? '未来 7 天' : 'Next 7 days',
           ),
           const SizedBox(height: 8),
-          WeatherDailyForecast(days: snapshot.days),
+          WeatherDailyForecast(
+            days: snapshot.days,
+            temperatureUnit: temperatureUnit,
+          ),
           const SizedBox(height: 18),
           WeatherMetricsGrid(snapshot: snapshot),
         ],

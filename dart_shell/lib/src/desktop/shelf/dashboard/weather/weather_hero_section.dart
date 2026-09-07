@@ -2,7 +2,9 @@ import 'package:flutter/material.dart' show Icons;
 import 'package:flutter/widgets.dart';
 
 import '../../../../services/weather_service.dart';
+import '../../../../settings/shell_settings.dart';
 import '../../../../theme/shell_theme.dart';
+import 'weather_temperature.dart';
 
 /// One WMO 4677 weather-code family with the icons and labels the dashboard
 /// renders for it.
@@ -164,10 +166,12 @@ class WeatherHeroSection extends StatelessWidget {
     super.key,
     required this.current,
     required this.isDay,
+    this.temperatureUnit = ShellTemperatureUnit.celsius,
   });
 
   final WeatherCurrent current;
   final bool isDay;
+  final ShellTemperatureUnit temperatureUnit;
 
   @override
   Widget build(BuildContext context) {
@@ -185,7 +189,7 @@ class WeatherHeroSection extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                '${current.temperatureC.round()}°',
+                formatTemperature(current.temperatureC, temperatureUnit),
                 style: TextStyle(
                   color: colors.textPrimary,
                   fontSize: 64,
@@ -208,8 +212,8 @@ class WeatherHeroSection extends StatelessWidget {
               const SizedBox(height: 4),
               Text(
                 isZh
-                    ? '体感 ${current.apparentTemperatureC.round()}°'
-                    : 'Feels like ${current.apparentTemperatureC.round()}°',
+                    ? '体感 ${formatTemperature(current.apparentTemperatureC, temperatureUnit)}'
+                    : 'Feels like ${formatTemperature(current.apparentTemperatureC, temperatureUnit)}',
                 style: TextStyle(
                   color: colors.textSecondary,
                   fontSize: 12,

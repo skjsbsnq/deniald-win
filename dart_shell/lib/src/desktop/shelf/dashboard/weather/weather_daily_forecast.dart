@@ -3,16 +3,24 @@ import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
 
 import '../../../../services/weather_service.dart';
+import '../../../../settings/shell_settings.dart';
 import '../../../../theme/shell_theme.dart';
 import '../../../../theme/tokens.dart';
 import 'weather_hero_section.dart';
+import 'weather_temperature.dart';
 
 /// Seven-day forecast list: weekday, condition icon, and a temperature range
 /// bar normalized against the week's own extremes.
 class WeatherDailyForecast extends StatelessWidget {
-  const WeatherDailyForecast({super.key, required this.days});
+  const WeatherDailyForecast({
+    super.key,
+    required this.days,
+    this.temperatureUnit = ShellTemperatureUnit.celsius,
+  });
 
   final List<WeatherDay> days;
+
+  final ShellTemperatureUnit temperatureUnit;
 
   @override
   Widget build(BuildContext context) {
@@ -67,7 +75,7 @@ class WeatherDailyForecast extends StatelessWidget {
                 SizedBox(
                   width: 30,
                   child: Text(
-                    '${days[i].minTemperatureC.round()}°',
+                    formatTemperature(days[i].minTemperatureC, temperatureUnit),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     textAlign: TextAlign.right,
@@ -145,7 +153,7 @@ class WeatherDailyForecast extends StatelessWidget {
                 SizedBox(
                   width: 30,
                   child: Text(
-                    '${days[i].maxTemperatureC.round()}°',
+                    formatTemperature(days[i].maxTemperatureC, temperatureUnit),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(

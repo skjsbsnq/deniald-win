@@ -3,8 +3,10 @@ import 'dart:math' as math;
 import 'package:flutter/widgets.dart';
 
 import '../../../../services/weather_service.dart';
+import '../../../../settings/shell_settings.dart';
 import '../../../../theme/shell_theme.dart';
 import 'weather_hero_section.dart';
+import 'weather_temperature.dart';
 
 /// Horizontal scrolling forecast band: one column per upcoming hour with the
 /// time, condition icon, a temperature chip whose vertical position traces a
@@ -14,6 +16,7 @@ class WeatherHourlyStrip extends StatelessWidget {
     super.key,
     required this.hours,
     required this.days,
+    this.temperatureUnit = ShellTemperatureUnit.celsius,
   });
 
   /// Full hourly series; entries at or before [now] are skipped.
@@ -21,6 +24,8 @@ class WeatherHourlyStrip extends StatelessWidget {
 
   /// Daily entries used to resolve day/night per hour.
   final List<WeatherDay> days;
+
+  final ShellTemperatureUnit temperatureUnit;
 
   static const double _itemWidth = 58;
   static const double _timeLabelHeight = 14;
@@ -140,7 +145,10 @@ class WeatherHourlyStrip extends StatelessWidget {
                                 ),
                               ),
                               child: Text(
-                                '${hour.temperatureC.round()}°',
+                                formatTemperature(
+                                  hour.temperatureC,
+                                  temperatureUnit,
+                                ),
                                 style: TextStyle(
                                   color: colors.textPrimary,
                                   fontSize: 11,

@@ -6,10 +6,14 @@ import 'package:denial_dart_shell/src/desktop/shelf/dashboard/views/system_view.
 import 'package:denial_dart_shell/src/desktop/shelf/dashboard/views/weather_view.dart';
 import 'package:denial_dart_shell/src/desktop/shelf/dashboard/weather/weather_hero_section.dart';
 import 'package:denial_dart_shell/src/desktop/shelf/dashboard/weather/weather_metrics_grid.dart';
+import 'package:denial_dart_shell/src/desktop/shelf/dashboard/weather/weather_temperature.dart';
 import 'package:denial_dart_shell/l10n/generated/app_localizations.dart';
 import 'package:denial_dart_shell/src/models/battery_status.dart';
 import 'package:denial_dart_shell/src/services/system_hardware_service.dart';
 import 'package:denial_dart_shell/src/services/weather_service.dart';
+import 'package:denial_dart_shell/src/services/weather_store.dart';
+import 'package:denial_dart_shell/src/settings/settings_controller.dart';
+import 'package:denial_dart_shell/src/settings/shell_settings.dart';
 import 'package:denial_dart_shell/src/state/system_extended_status.dart';
 import 'package:denial_dart_shell/src/state/system_status.dart';
 import 'package:denial_dart_shell/src/state/weather_state.dart';
@@ -246,6 +250,7 @@ void main() {
 
   testWidgets('weather service outlives an in-flight fetch', (tester) async {
     final events = <String>[];
+    final store = _MemoryWeatherStore();
     final container = ProviderContainer.test(
       overrides: [
         weatherServiceProvider.overrideWith((ref) {
@@ -256,6 +261,10 @@ void main() {
           });
           return service;
         }),
+        weatherStoreProvider.overrideWithValue(store),
+        // The real settings controller talks to the platform bridge, whose
+        // subscription timer never fires inside fake async.
+        shellSettingsProvider.overrideWith(_DefaultWeatherSettingsController.new),
       ],
     );
     addTearDown(container.dispose);
@@ -276,6 +285,90 @@ void main() {
     expect(state.status, WeatherStatus.ready);
     expect(state.snapshot, isNotNull);
     expect(state.snapshot?.location.city, 'Beijing');
+    // A successful fetch persists to the store for the next panel open.
+    expect(store.written?.location.city, 'Beijing');
+  });
+
+  test('weather controller hydrates from disk without geolocation', () async {
+    final store = _MemoryWeatherStore()
+      ..written = _snapshot().copyWithFreshTimestamp();
+    final service = _CountingWeatherService();
+    final container = ProviderContainer.test(
+      overrides: [
+        weatherServiceProvider.overrideWithValue(service),
+        weatherStoreProvider.overrideWithValue(store),
+      ],
+    );
+    addTearDown(container.dispose);
+    final sub = container.listen(weatherProvider, (_, _) {});
+    addTearDown(sub.close);
+
+    await container.read(weatherProvider.notifier).refresh();
+
+    // Regression: every panel open re-ran IP geolocation because the
+    // autoDispose controller had no disk cache to hydrate from.
+    expect(service.locationLookups, 0);
+    expect(service.fetches, 0);
+    final state = container.read(weatherProvider);
+    expect(state.status, WeatherStatus.ready);
+    expect(state.snapshot?.location.city, 'Beijing');
+  });
+
+  test('weather controller refreshes in background when cache is stale', () async {
+    final stale = DateTime.now().subtract(
+      weatherCacheLifetime + const Duration(minutes: 1),
+    );
+    final store = _MemoryWeatherStore()
+      ..written = _snapshot().withFetchedAt(stale);
+    final service = _CountingWeatherService();
+    final container = ProviderContainer.test(
+      overrides: [
+        weatherServiceProvider.overrideWithValue(service),
+        weatherStoreProvider.overrideWithValue(store),
+      ],
+    );
+    addTearDown(container.dispose);
+    final sub = container.listen(weatherProvider, (_, _) {});
+    addTearDown(sub.close);
+
+    await container.read(weatherProvider.notifier).refresh();
+
+    // The cached location is reused, so no new geolocation lookup happens,
+    // but the stale snapshot triggers a fresh fetch that lands back on disk.
+    expect(service.locationLookups, 0);
+    expect(service.fetches, 1);
+    final state = container.read(weatherProvider);
+    expect(state.status, WeatherStatus.ready);
+    expect(state.snapshot?.location.city, 'Beijing');
+    expect(store.written?.location.city, 'Beijing');
+  });
+
+  test('weather controller uses the manual city without geolocation', () async {
+    final store = _MemoryWeatherStore()
+      ..written = _snapshot().copyWithFreshTimestamp();
+    final service = _CountingWeatherService();
+    final container = ProviderContainer.test(
+      overrides: [
+        weatherServiceProvider.overrideWithValue(service),
+        weatherStoreProvider.overrideWithValue(store),
+        shellSettingsProvider.overrideWith(
+          () => _ManualWeatherSettingsController(),
+        ),
+      ],
+    );
+    addTearDown(container.dispose);
+    final sub = container.listen(weatherProvider, (_, _) {});
+    addTearDown(sub.close);
+
+    await container.read(weatherProvider.notifier).forceRefresh();
+
+    // Manual mode must resolve the location from settings alone.
+    expect(service.locationLookups, 0);
+    expect(service.fetches, 1);
+    expect(service.lastFetched?.city, 'Shenzhen');
+    final state = container.read(weatherProvider);
+    expect(state.status, WeatherStatus.ready);
+    expect(state.snapshot?.location.city, 'Shenzhen');
   });
 
   group('dashboard formatting helpers', () {
@@ -346,6 +439,15 @@ void main() {
       expect(isDaylight(DateTime(2026, 9, 7, 20), day), isFalse);
       expect(isDaylight(DateTime(2026, 9, 7, 12), null), isTrue);
       expect(isDaylight(DateTime(2026, 9, 7, 3), null), isFalse);
+    });
+
+    test('formatTemperature converts units and rounds', () {
+      expect(formatTemperature(26.4, ShellTemperatureUnit.celsius), '26°');
+      expect(formatTemperature(-3.6, ShellTemperatureUnit.celsius), '-4°');
+      // 26.4°C is 79.52°F.
+      expect(formatTemperature(26.4, ShellTemperatureUnit.fahrenheit), '80°');
+      expect(formatTemperature(0, ShellTemperatureUnit.fahrenheit), '32°');
+      expect(formatTemperature(-40, ShellTemperatureUnit.fahrenheit), '-40°');
     });
   });
 }
@@ -518,4 +620,98 @@ class _SlowWeatherService extends WeatherService {
     events.add('fetch-end');
     return _snapshot();
   }
+}
+
+extension _SnapshotTestCopy on WeatherSnapshot {
+  /// Copy with a fetched-at of now, marking the cache fresh.
+  WeatherSnapshot copyWithFreshTimestamp() {
+    return WeatherSnapshot(
+      location: location,
+      current: current,
+      hours: hours,
+      days: days,
+      airQuality: airQuality,
+      fetchedAt: DateTime.now(),
+    );
+  }
+
+  WeatherSnapshot withFetchedAt(DateTime time) {
+    return WeatherSnapshot(
+      location: location,
+      current: current,
+      hours: hours,
+      days: days,
+      airQuality: airQuality,
+      fetchedAt: time,
+    );
+  }
+}
+
+class _MemoryWeatherStore implements WeatherStore {
+  WeatherSnapshot? written;
+
+  @override
+  Future<WeatherSnapshot?> read() async => written;
+
+  @override
+  Future<void> write(WeatherSnapshot snapshot) async {
+    written = snapshot;
+  }
+}
+
+/// Counts network calls so tests can assert that cached or manual locations
+/// never fall back to IP geolocation. Fetches report the requested location
+/// so assertions can tell which coordinates were actually used.
+class _CountingWeatherService extends WeatherService {
+  int locationLookups = 0;
+  int fetches = 0;
+  GeoLocation? lastFetched;
+
+  @override
+  Future<GeoLocation?> resolveLocation() async {
+    locationLookups++;
+    return const GeoLocation(latitude: 39.9, longitude: 116.4, city: 'Beijing');
+  }
+
+  @override
+  Future<WeatherSnapshot> fetch(GeoLocation location) async {
+    fetches++;
+    lastFetched = location;
+    return _snapshotAt(location);
+  }
+}
+
+WeatherSnapshot _snapshotAt(GeoLocation location) {
+  final snapshot = _snapshot();
+  return WeatherSnapshot(
+    location: location,
+    current: snapshot.current,
+    hours: snapshot.hours,
+    days: snapshot.days,
+    airQuality: snapshot.airQuality,
+    fetchedAt: DateTime.now(),
+  );
+}
+
+class _ManualWeatherSettingsController extends ShellSettingsController {
+  @override
+  ShellSettings build() {
+    return const ShellSettings(
+      weather: ShellWeatherSettings(
+        locationMode: ShellWeatherLocationMode.manual,
+        manualLocation: ShellManualLocation(
+          latitude: 22.5,
+          longitude: 114.06,
+          city: 'Shenzhen',
+        ),
+      ),
+    );
+  }
+}
+
+/// Synchronous settings controller that avoids the platform bridge so it can
+/// run inside fake-async widget tests.
+class _DefaultWeatherSettingsController extends ShellSettingsController {
+  @override
+  ShellSettings build() => const ShellSettings();
 }
