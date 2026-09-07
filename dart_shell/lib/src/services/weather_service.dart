@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -169,7 +170,9 @@ class WeatherHour {
       return null;
     }
     return WeatherHour(
-      time: DateTime.fromMillisecondsSinceEpoch(timeMs),
+      // Wall-clock fields are UTC-flagged so .hour reads the location's
+      // local hour instead of the device zone's rendering of the instant.
+      time: DateTime.fromMillisecondsSinceEpoch(timeMs, isUtc: true),
       temperatureC: temperature,
       weatherCode: code,
       precipitationProbability:
@@ -223,17 +226,18 @@ class WeatherDay {
     }
     final sunriseMs = json['sunrise'];
     final sunsetMs = json['sunset'];
-    final date = DateTime.fromMillisecondsSinceEpoch(dateMs);
+    // Wall-clock fields are UTC-flagged; see WeatherHour.fromJson.
+    final date = DateTime.fromMillisecondsSinceEpoch(dateMs, isUtc: true);
     return WeatherDay(
       date: date,
       weatherCode: code,
       maxTemperatureC: max,
       minTemperatureC: min,
       sunrise: sunriseMs is int && sunriseMs >= 0
-          ? DateTime.fromMillisecondsSinceEpoch(sunriseMs)
+          ? DateTime.fromMillisecondsSinceEpoch(sunriseMs, isUtc: true)
           : date,
       sunset: sunsetMs is int && sunsetMs >= 0
-          ? DateTime.fromMillisecondsSinceEpoch(sunsetMs)
+          ? DateTime.fromMillisecondsSinceEpoch(sunsetMs, isUtc: true)
           : date,
     );
   }
@@ -274,6 +278,7 @@ class WeatherSnapshot {
     required this.days,
     required this.airQuality,
     required this.fetchedAt,
+    this.utcOffsetSeconds = 0,
   });
 
   final GeoLocation location;
@@ -282,6 +287,22 @@ class WeatherSnapshot {
   final List<WeatherDay> days;
   final AirQuality? airQuality;
   final DateTime fetchedAt;
+
+  /// The location's UTC offset in seconds at fetch time. Open-Meteo returns
+  /// naive local timestamps; parsing them as UTC keeps the location's wall
+  /// clock intact while this offset lets callers reconstruct "now" there
+  /// instead of comparing against the device's time zone.
+  final int utcOffsetSeconds;
+}
+
+/// Location discovery produced no usable position. Carried as a distinct
+/// type so the UI can steer toward the manual-city settings rather than
+/// reporting a generic network failure.
+class WeatherLocationFailure implements Exception {
+  const WeatherLocationFailure();
+
+  @override
+  String toString() => 'WeatherLocationFailure';
 }
 
 /// Open-Meteo requires no API key, which keeps the shell free of user-held
@@ -384,11 +405,17 @@ class WeatherService {
       days: forecast.days,
       airQuality: airQuality,
       fetchedAt: DateTime.now(),
+      utcOffsetSeconds: forecast.utcOffsetSeconds,
     );
   }
 
   Future<
-    ({WeatherCurrent current, List<WeatherHour> hours, List<WeatherDay> days})
+    ({
+      WeatherCurrent current,
+      List<WeatherHour> hours,
+      List<WeatherDay> days,
+      int utcOffsetSeconds,
+    })
   >
   _fetchForecast(GeoLocation location) async {
     final uri = _forecastEndpoint.replace(
@@ -431,7 +458,13 @@ class WeatherService {
     if (days.isEmpty) {
       throw const FormatException('Open-Meteo response lacks daily data');
     }
-    return (current: current, hours: hours, days: days);
+    return (
+      current: current,
+      hours: hours,
+      days: days,
+      utcOffsetSeconds:
+          _finiteDouble(decoded['utc_offset_seconds'])?.round() ?? 0,
+    );
   }
 
   Future<AirQuality?> _fetchAirQuality(GeoLocation location) async {
@@ -460,8 +493,12 @@ class WeatherService {
       return null;
     }
     // The hourly series extend across past and forecast days; take the value
-    // nearest to now so the AQI card reflects current conditions.
-    final now = DateTime.now();
+    // nearest to now so the AQI card reflects current conditions. The series
+    // is in the location's local time, so "now" must be reconstructed there
+    // rather than read off the device clock.
+    final offsetSeconds =
+        _finiteDouble(decoded['utc_offset_seconds'])?.round() ?? 0;
+    final now = DateTime.now().toUtc().add(Duration(seconds: offsetSeconds));
     final index = _closestTimeIndex(times, now);
     if (index == null) {
       return null;
@@ -478,7 +515,7 @@ class WeatherService {
     int? best;
     Duration? bestDistance;
     for (var i = 0; i < times.length; i++) {
-      final time = DateTime.tryParse('${times[i]}');
+      final time = _parseLocalWallTime(times[i]);
       if (time == null) {
         continue;
       }
@@ -489,6 +526,18 @@ class WeatherService {
       }
     }
     return best;
+  }
+
+  /// Parses an Open-Meteo naive local timestamp ("2026-09-08T14:00") into a
+  /// UTC-flagged DateTime that carries the location's wall clock. Reading
+  /// wall-clock fields and comparing against a city-local "now" then never
+  /// passes through the device's time zone.
+  static DateTime? _parseLocalWallTime(Object? raw) {
+    if (raw is! String) {
+      return null;
+    }
+    final text = raw.trim().replaceAll(RegExp(r'(Z|[+-]\d{2}:?\d{2})$'), '');
+    return DateTime.tryParse('$text${text.length > 10 ? '' : 'T00:00'}Z');
   }
 
   static List<WeatherHour> _parseHourly(Object? raw) {
@@ -507,7 +556,7 @@ class WeatherService {
     }
     final hours = <WeatherHour>[];
     for (var i = 0; i < times.length; i++) {
-      final time = DateTime.tryParse('${times[i]}');
+      final time = _parseLocalWallTime(times[i]);
       final temperature = _finiteDouble(temperatures[i]);
       final code = _finiteDouble(codes[i])?.round();
       final probability = _finiteDouble(probabilities[i])?.round();
@@ -546,12 +595,12 @@ class WeatherService {
     }
     final days = <WeatherDay>[];
     for (var i = 0; i < dates.length; i++) {
-      final date = DateTime.tryParse('${dates[i]}');
+      final date = _parseLocalWallTime(dates[i]);
       final code = _finiteDouble(codes[i])?.round();
       final max = _finiteDouble(maxima[i]);
       final min = _finiteDouble(minima[i]);
-      final sunrise = DateTime.tryParse('${sunrises[i]}');
-      final sunset = DateTime.tryParse('${sunsets[i]}');
+      final sunrise = _parseLocalWallTime(sunrises[i]);
+      final sunset = _parseLocalWallTime(sunsets[i]);
       if (date == null || code == null || max == null || min == null) {
         continue;
       }
@@ -574,23 +623,51 @@ class WeatherService {
     request.headers
       ..set(HttpHeaders.userAgentHeader, 'denial-weather/1.0')
       ..set(HttpHeaders.acceptHeader, 'application/json');
-    final response = await request.close().timeout(_requestTimeout);
+    // Aborting on timeout matters: without it the connection keeps
+    // transferring after the caller has moved on, and nothing but the
+    // service's forced dispose would stop it.
+    final response = await request.close().timeout(
+      _requestTimeout,
+      onTimeout: () {
+        request.abort();
+        throw const SocketException('Weather request timed out');
+      },
+    );
     if (response.statusCode != HttpStatus.ok) {
-      await response.drain<void>();
+      await response.drain<void>().timeout(_requestTimeout);
       throw HttpException(
         'Weather endpoint returned HTTP ${response.statusCode}',
         uri: uri,
       );
     }
     if (response.contentLength > _maximumResponseBytes) {
-      await response.drain<void>();
+      await response.drain<void>().timeout(_requestTimeout);
       throw const FormatException('Weather response is too large');
     }
-    final body = await response
-        .transform(utf8.decoder)
-        .join()
-        .timeout(_requestTimeout);
-    return jsonDecode(body);
+    return _readJsonBody(response, request).timeout(
+      _requestTimeout,
+      onTimeout: () {
+        request.abort();
+        throw const SocketException('Weather response timed out');
+      },
+    );
+  }
+
+  Future<Object?> _readJsonBody(
+    HttpClientResponse response,
+    HttpClientRequest request,
+  ) async {
+    // Chunked responses carry no content length, so the byte cap is
+    // enforced while the body streams in rather than up front.
+    final bytes = BytesBuilder(copy: false);
+    await for (final chunk in response) {
+      bytes.add(chunk);
+      if (bytes.length > _maximumResponseBytes) {
+        request.abort();
+        throw const FormatException('Weather response is too large');
+      }
+    }
+    return jsonDecode(utf8.decode(bytes.takeBytes()));
   }
 
   void dispose() {

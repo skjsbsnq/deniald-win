@@ -12,9 +12,7 @@ void main() {
   setUp(() {
     tempHome = Directory.systemTemp.createTempSync('denial-weather-store-');
     store = WeatherFileStore(
-      paths: RuntimePaths(environment: <String, String>{
-        'HOME': tempHome.path,
-      }),
+      paths: RuntimePaths(environment: <String, String>{'HOME': tempHome.path}),
     );
   });
 
@@ -31,31 +29,40 @@ void main() {
     expect(restored, isNotNull);
     expect(restored!.location, snapshot.location);
     expect(restored.current.temperatureC, snapshot.current.temperatureC);
-    expect(restored.current.apparentTemperatureC,
-        snapshot.current.apparentTemperatureC);
+    expect(
+      restored.current.apparentTemperatureC,
+      snapshot.current.apparentTemperatureC,
+    );
     expect(restored.hours.length, snapshot.hours.length);
     expect(restored.hours.first.time, snapshot.hours.first.time);
+    expect(restored.hours.first.time.isUtc, isTrue);
     expect(restored.days.length, snapshot.days.length);
     expect(restored.days.first.sunrise, snapshot.days.first.sunrise);
     expect(restored.airQuality?.pm2_5, snapshot.airQuality?.pm2_5);
     expect(restored.fetchedAt, snapshot.fetchedAt);
+    expect(restored.utcOffsetSeconds, snapshot.utcOffsetSeconds);
   });
 
   test('reading a missing or corrupt file yields null', () async {
     expect(await store.read(), isNull);
 
-    final file = File(
-      '${tempHome.path}/.local/state/denial/weather.json',
-    );
+    final file = File('${tempHome.path}/.local/state/denial/weather.json');
     await file.parent.create(recursive: true);
     await file.writeAsString('{not json');
     expect(await store.read(), isNull);
   });
 
+  test('a version-1 snapshot is discarded', () async {
+    final file = File('${tempHome.path}/.local/state/denial/weather.json');
+    await file.parent.create(recursive: true);
+    // Version 1 timestamps were parsed through the device time zone and are
+    // not convertible to the version 2 wall-clock representation.
+    await file.writeAsString('{"version": 1, "location": {}, "days": []}');
+    expect(await store.read(), isNull);
+  });
+
   test('writes are atomic and survive a partial temporary file', () async {
-    final file = File(
-      '${tempHome.path}/.local/state/denial/weather.json',
-    );
+    final file = File('${tempHome.path}/.local/state/denial/weather.json');
     await file.parent.create(recursive: true);
     // A leftover temporary file from a crashed write must not corrupt reads.
     await File('${file.path}.tmp').writeAsString('garbage');
@@ -69,14 +76,18 @@ void main() {
 }
 
 WeatherSnapshot _snapshot() {
+  // Wall-clock series carry the location's local time as UTC-flagged
+  // DateTimes; fetchedAt stays a device-zone instant.
   final now = DateTime(2026, 9, 7, 14, 30);
-  final today = DateTime(2026, 9, 7);
+  final nowWall = DateTime.utc(2026, 9, 7, 14, 30);
+  final today = DateTime.utc(2026, 9, 7);
   return WeatherSnapshot(
     location: const GeoLocation(
       latitude: 39.9,
       longitude: 116.4,
       city: 'Beijing',
     ),
+    utcOffsetSeconds: 8 * 3600,
     current: const WeatherCurrent(
       temperatureC: 26.4,
       apparentTemperatureC: 28.1,
@@ -90,7 +101,7 @@ WeatherSnapshot _snapshot() {
     ),
     hours: <WeatherHour>[
       WeatherHour(
-        time: now.add(const Duration(hours: 1)),
+        time: nowWall.add(const Duration(hours: 1)),
         temperatureC: 21.5,
         weatherCode: 1,
         precipitationProbability: 30,

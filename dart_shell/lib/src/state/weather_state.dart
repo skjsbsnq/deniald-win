@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,6 +7,7 @@ import '../services/weather_service.dart';
 import '../services/weather_store.dart';
 import '../settings/settings_controller.dart';
 import '../settings/shell_settings.dart';
+import 'notifier_lifecycle.dart';
 
 enum WeatherStatus { idle, locating, loading, ready, failed }
 
@@ -51,19 +51,17 @@ final weatherProvider = NotifierProvider<WeatherController, WeatherState>(
 /// the page re-shows the last snapshot instantly. Snapshots survive panel
 /// closure via the XDG state file, so IP geolocation runs at most once per
 /// location change, not once per open.
-class WeatherController extends Notifier<WeatherState> {
-  int _generation = 0;
-  bool _disposed = false;
+class WeatherController extends Notifier<WeatherState>
+    with NotifierLifecycle<WeatherState> {
   bool _refreshRunning = false;
   Future<WeatherSnapshot?>? _hydration;
-  Object? _lastLocationKey;
   WeatherSnapshot? _retainedSnapshot;
   Object? _retainedError;
+  Object? _lastLocationKey;
 
   @override
   WeatherState build() {
-    _generation++;
-    _disposed = false;
+    beginBuildGeneration();
     _refreshRunning = false;
     // Watching (not just reading in refresh) pins the autoDispose service to
     // this controller's lifetime: a transiently-read service is reclaimed
@@ -72,10 +70,6 @@ class WeatherController extends Notifier<WeatherState> {
     // the same reason — the post-fetch cache write must not race disposal.
     ref.watch(weatherServiceProvider);
     ref.watch(weatherStoreProvider);
-    ref.onDispose(() {
-      _disposed = true;
-      _generation++;
-    });
     // Rebuild on weather setting changes: switching to a manual city must
     // re-resolve location even when a fresh snapshot is cached. The previous
     // state (including its snapshot) is retained via fields, since reading
@@ -87,11 +81,14 @@ class WeatherController extends Notifier<WeatherState> {
     final previousKey = _lastLocationKey;
     _lastLocationKey = locationKey;
     if (previousKey != null && previousKey != locationKey) {
+      // Capture the generation of *this* build: re-reading
+      // currentBuildGeneration inside the microtask would compare the live
+      // value against itself and degrade to a plain mounted check.
+      final generation = currentBuildGeneration;
       scheduleMicrotask(() {
-        if (!ref.mounted || _disposed) {
-          return;
+        if (isBuildGenerationActive(generation)) {
+          forceRefresh();
         }
-        forceRefresh();
       });
     }
     final retained = _retainedSnapshot;
@@ -116,11 +113,25 @@ class WeatherController extends Notifier<WeatherState> {
   /// Loads data if the cache is missing or older than [weatherCacheLifetime].
   /// The disk snapshot is hydrated first so the page renders instantly.
   Future<void> refresh() async {
+    if (_refreshRunning) {
+      return;
+    }
     final hydrated = await _hydrate();
-    if (_disposed) {
+    // A forceRefresh may have started while the snapshot hydrated; its fetch
+    // will publish the authoritative state, so this pass must not overwrite
+    // it with hydrated data.
+    if (!isBuildGenerationActive(currentBuildGeneration) || _refreshRunning) {
       return;
     }
     final existing = state.snapshot ?? hydrated;
+    // A snapshot persisted for a different city must not surface as ready:
+    // weather settings can change while the controller is disposed (panel
+    // closed), so the disk snapshot is the only place that mismatch is
+    // still observable. Discard it and fetch for the configured location.
+    if (existing != null && _locationMismatch(existing)) {
+      await forceRefresh();
+      return;
+    }
     if (existing != null) {
       if (state.status != WeatherStatus.ready || state.snapshot == null) {
         state = WeatherState(
@@ -138,12 +149,24 @@ class WeatherController extends Notifier<WeatherState> {
     await forceRefresh();
   }
 
+  /// Whether [snapshot] was fetched for a location other than the manually
+  /// configured one. Auto mode keeps whatever location IP geolocation found.
+  bool _locationMismatch(WeatherSnapshot snapshot) {
+    final manual = ref.read(shellSettingsProvider).weather.resolvedLocation;
+    if (manual == null) {
+      return false;
+    }
+    final location = snapshot.location;
+    return manual.latitude != location.latitude ||
+        manual.longitude != location.longitude;
+  }
+
   Future<void> forceRefresh() async {
     if (_refreshRunning) {
       return;
     }
     _refreshRunning = true;
-    final generation = _generation;
+    final generation = currentBuildGeneration;
     try {
       state = WeatherState(
         status: state.snapshot == null
@@ -160,18 +183,21 @@ class WeatherController extends Notifier<WeatherState> {
         state = state.copyWith(status: WeatherStatus.locating);
         location = await service.resolveLocation();
       }
-      if (_isStale(generation)) {
+      if (!isBuildGenerationActive(generation)) {
         return;
       }
       if (location == null) {
+        // A distinct failure type keeps location discovery distinguishable
+        // from network errors, so the UI can offer the manual-city escape
+        // hatch instead of a bare retry.
         state = state.copyWith(
           status: WeatherStatus.failed,
-          error: const SocketException('Location discovery failed'),
+          error: const WeatherLocationFailure(),
         );
         return;
       }
       final snapshot = await service.fetch(location);
-      if (_isStale(generation)) {
+      if (!isBuildGenerationActive(generation)) {
         return;
       }
       state = WeatherState(
@@ -185,12 +211,18 @@ class WeatherController extends Notifier<WeatherState> {
         ref.read(weatherStoreProvider).write(snapshot).catchError((_) {}),
       );
     } on Object catch (error) {
-      if (_isStale(generation)) {
+      if (!isBuildGenerationActive(generation)) {
         return;
       }
       state = state.copyWith(status: WeatherStatus.failed, error: error);
     } finally {
-      _refreshRunning = false;
+      // Only the current generation may release the guard: a superseded
+      // fetch clearing it would admit a concurrent fetch whose store write
+      // races this one. A stale controller leaves it set; build() resets it
+      // on the next controller instance.
+      if (isBuildGenerationActive(generation)) {
+        _refreshRunning = false;
+      }
     }
   }
 
@@ -224,6 +256,4 @@ class WeatherController extends Notifier<WeatherState> {
     // key only changes when IP geolocation resolves somewhere new.
     return null;
   }
-
-  bool _isStale(int generation) => _disposed || generation != _generation;
 }

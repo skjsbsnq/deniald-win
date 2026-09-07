@@ -307,8 +307,8 @@ void main() {
     expect(weatherPatch.containsKey('temperatureUnit'), isFalse);
 
     // Resetting back clears the pinned city with an explicit null.
-    final resetPatch = before.differenceFrom(after)['weather']!
-        as Map<String, Object?>;
+    final resetPatch =
+        before.differenceFrom(after)['weather']! as Map<String, Object?>;
     expect(resetPatch['manualLocation'], isNull);
     expect(resetPatch['locationMode'], 'auto');
   });

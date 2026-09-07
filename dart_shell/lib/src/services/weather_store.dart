@@ -22,9 +22,14 @@ abstract interface class WeatherStore {
 /// shows cached data instantly and IP geolocation never runs twice. Mirrors
 /// the atomic write-then-rename pattern of the todo repository.
 class WeatherFileStore implements WeatherStore {
-  const WeatherFileStore({required this.paths});
+  WeatherFileStore({required this.paths});
 
   final RuntimePaths paths;
+
+  // Writes serialize through a chain: a stale write from a previous
+  // controller must not interleave with a fresh one around the shared
+  // ".tmp" path (write-then-rename would race otherwise).
+  Future<void>? _pendingWrite;
 
   @override
   Future<WeatherSnapshot?> read() async {
@@ -40,7 +45,15 @@ class WeatherFileStore implements WeatherStore {
   }
 
   @override
-  Future<void> write(WeatherSnapshot snapshot) async {
+  Future<void> write(WeatherSnapshot snapshot) {
+    final pending = _pendingWrite;
+    final next = pending == null
+        ? _writeUnchecked(snapshot)
+        : pending.then((_) => _writeUnchecked(snapshot));
+    return _pendingWrite = next;
+  }
+
+  Future<void> _writeUnchecked(WeatherSnapshot snapshot) async {
     try {
       final file = await _file();
       final temporary = File('${file.path}.tmp');
@@ -63,11 +76,15 @@ class WeatherFileStore implements WeatherStore {
 extension WeatherSnapshotJson on WeatherSnapshot {
   Map<String, Object> toJson() {
     return <String, Object>{
-      'version': 1,
+      // Version 2 stores the location's wall clock in UTC-flagged
+      // DateTimes plus its UTC offset; version 1 timestamps were parsed
+      // through the device zone and are not convertible in place.
+      'version': 2,
       'location': location.toJson(),
       'current': current.toJson(),
       'hours': [for (final hour in hours) hour.toJson()],
       'days': [for (final day in days) day.toJson()],
+      'utcOffsetSeconds': utcOffsetSeconds,
       if (airQuality case final quality?) 'airQuality': quality.toJson(),
       'fetchedAt': fetchedAt.millisecondsSinceEpoch,
     };
@@ -79,6 +96,9 @@ WeatherSnapshot? weatherSnapshotFromJson(Object? raw) {
     return null;
   }
   final json = raw.cast<Object?, Object?>();
+  if (json['version'] != 2) {
+    return null;
+  }
   final location = GeoLocation.fromJson(json['location']);
   final current = WeatherCurrent.fromJson(json['current']);
   final fetchedAtMs = json['fetchedAt'];
@@ -112,5 +132,8 @@ WeatherSnapshot? weatherSnapshotFromJson(Object? raw) {
     days: days,
     airQuality: AirQuality.fromJson(json['airQuality']),
     fetchedAt: DateTime.fromMillisecondsSinceEpoch(fetchedAtMs),
+    utcOffsetSeconds: json['utcOffsetSeconds'] is int
+        ? json['utcOffsetSeconds'] as int
+        : 0,
   );
 }

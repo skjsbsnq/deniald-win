@@ -3,6 +3,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart' show Icons;
 import 'package:flutter/widgets.dart';
 
+import '../../../../../l10n/generated/app_localizations.dart';
+import '../../../../localization/denial_localizations.dart';
 import '../../../../services/weather_service.dart';
 import '../../../../theme/shell_color_scheme.dart';
 import '../../../../theme/shell_theme.dart';
@@ -19,7 +21,7 @@ class WeatherMetricsGrid extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isZh = Localizations.localeOf(context).languageCode == 'zh';
+    final l10n = context.l10n;
     final current = snapshot.current;
     final today = snapshot.days.firstOrNull;
 
@@ -30,18 +32,18 @@ class WeatherMetricsGrid extends StatelessWidget {
           children: [
             Expanded(
               child: LiquidMetricCard(
-                label: isZh ? '湿度' : 'Humidity',
+                label: l10n.weatherMetricHumidity,
                 fraction: current.humidityPercent / 100,
               ),
             ),
             const SizedBox(width: 8),
             Expanded(
               child: _WeatherMetricCard(
-                label: isZh ? '风速风向' : 'Wind',
+                label: l10n.weatherMetricWind,
                 child: _WindPane(
                   windSpeedMs: current.windSpeedMs,
                   windDirectionDeg: current.windDirectionDeg,
-                  isZh: isZh,
+                  l10n: l10n,
                 ),
               ),
             ),
@@ -53,17 +55,17 @@ class WeatherMetricsGrid extends StatelessWidget {
           children: [
             Expanded(
               child: _WeatherMetricCard(
-                label: 'UV',
-                child: _UvPane(uvIndex: current.uvIndex, isZh: isZh),
+                label: l10n.weatherMetricUv,
+                child: _UvPane(uvIndex: current.uvIndex, l10n: l10n),
               ),
             ),
             const SizedBox(width: 8),
             Expanded(
               child: _WeatherMetricCard(
-                label: isZh ? '空气质量' : 'Air quality',
+                label: l10n.weatherMetricAirQuality,
                 child: _AirQualityPane(
                   airQuality: snapshot.airQuality,
-                  isZh: isZh,
+                  l10n: l10n,
                 ),
               ),
             ),
@@ -75,19 +77,19 @@ class WeatherMetricsGrid extends StatelessWidget {
           children: [
             Expanded(
               child: _WeatherMetricCard(
-                label: isZh ? '气压与能见度' : 'Pressure & visibility',
+                label: l10n.weatherMetricPressureVisibility,
                 child: _PressureVisibilityPane(
                   pressureHpa: current.pressureHpa,
                   visibilityM: current.visibilityM,
-                  isZh: isZh,
+                  l10n: l10n,
                 ),
               ),
             ),
             const SizedBox(width: 8),
             Expanded(
               child: _WeatherMetricCard(
-                label: isZh ? '日出与日落' : 'Sunrise & sunset',
-                child: _SunCyclePane(day: today, isZh: isZh),
+                label: l10n.weatherMetricSunCycle,
+                child: _SunCyclePane(day: today, l10n: l10n),
               ),
             ),
           ],
@@ -128,7 +130,7 @@ class _WeatherMetricCard extends StatelessWidget {
                 color: colors.textSecondary,
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
-                letterSpacing: 0.2,
+                letterSpacing: 0,
                 decoration: TextDecoration.none,
               ),
             ),
@@ -147,12 +149,12 @@ class _WindPane extends StatelessWidget {
   const _WindPane({
     required this.windSpeedMs,
     required this.windDirectionDeg,
-    required this.isZh,
+    required this.l10n,
   });
 
   final double windSpeedMs;
   final double windDirectionDeg;
-  final bool isZh;
+  final AppLocalizations l10n;
 
   @override
   Widget build(BuildContext context) {
@@ -188,7 +190,7 @@ class _WindPane extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                windDirectionName(windDirectionDeg, isZh),
+                windDirectionName(windDirectionDeg, l10n),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
@@ -200,8 +202,10 @@ class _WindPane extends StatelessWidget {
               ),
               const SizedBox(height: 3),
               Text(
-                '${beaufortLevel(windSpeedMs)}${isZh ? ' 级' : ''} · '
-                '${windSpeedMs.toStringAsFixed(1)} m/s',
+                l10n.weatherWindDetails(
+                  beaufortLevel(windSpeedMs),
+                  windSpeedMs.toStringAsFixed(1),
+                ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
@@ -220,15 +224,15 @@ class _WindPane extends StatelessWidget {
 }
 
 class _UvPane extends StatelessWidget {
-  const _UvPane({required this.uvIndex, required this.isZh});
+  const _UvPane({required this.uvIndex, required this.l10n});
 
   final double uvIndex;
-  final bool isZh;
+  final AppLocalizations l10n;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.shellColors;
-    final (label, color) = uvRating(uvIndex, isZh, colors);
+    final (label, color) = uvRating(uvIndex, l10n, colors);
 
     // Stacked so the widest rating chip can never overflow the half-width
     // card.
@@ -254,10 +258,10 @@ class _UvPane extends StatelessWidget {
 }
 
 class _AirQualityPane extends StatelessWidget {
-  const _AirQualityPane({required this.airQuality, required this.isZh});
+  const _AirQualityPane({required this.airQuality, required this.l10n});
 
   final AirQuality? airQuality;
-  final bool isZh;
+  final AppLocalizations l10n;
 
   @override
   Widget build(BuildContext context) {
@@ -265,7 +269,7 @@ class _AirQualityPane extends StatelessWidget {
 
     if (airQuality == null) {
       return Text(
-        isZh ? '暂无数据' : 'Unavailable',
+        l10n.weatherMetricUnavailable,
         style: TextStyle(
           color: colors.textTertiary,
           fontSize: 11,
@@ -275,7 +279,7 @@ class _AirQualityPane extends StatelessWidget {
       );
     }
     final index = airQualityIndex(airQuality!);
-    final (label, color) = airQualityRating(index, isZh, colors);
+    final (label, color) = airQualityRating(index, l10n, colors);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -315,12 +319,12 @@ class _PressureVisibilityPane extends StatelessWidget {
   const _PressureVisibilityPane({
     required this.pressureHpa,
     required this.visibilityM,
-    required this.isZh,
+    required this.l10n,
   });
 
   final double pressureHpa;
   final double visibilityM;
-  final bool isZh;
+  final AppLocalizations l10n;
 
   @override
   Widget build(BuildContext context) {
@@ -332,14 +336,14 @@ class _PressureVisibilityPane extends StatelessWidget {
       children: [
         _MetricLine(
           icon: Icons.compress_rounded,
-          label: isZh ? '气压' : 'Pressure',
+          label: l10n.weatherMetricPressure,
           value: '${pressureHpa.round()} hPa',
           colors: colors,
         ),
         const SizedBox(height: 6),
         _MetricLine(
           icon: Icons.visibility_rounded,
-          label: isZh ? '能见度' : 'Visibility',
+          label: l10n.weatherMetricVisibility,
           value: formatVisibility(visibilityM),
           colors: colors,
         ),
@@ -349,10 +353,10 @@ class _PressureVisibilityPane extends StatelessWidget {
 }
 
 class _SunCyclePane extends StatelessWidget {
-  const _SunCyclePane({required this.day, required this.isZh});
+  const _SunCyclePane({required this.day, required this.l10n});
 
   final WeatherDay? day;
-  final bool isZh;
+  final AppLocalizations l10n;
 
   @override
   Widget build(BuildContext context) {
@@ -364,14 +368,14 @@ class _SunCyclePane extends StatelessWidget {
       children: [
         _MetricLine(
           icon: Icons.wb_twilight_rounded,
-          label: isZh ? '日出' : 'Sunrise',
+          label: l10n.weatherMetricSunrise,
           value: _formatTime(day?.sunrise),
           colors: colors,
         ),
         const SizedBox(height: 6),
         _MetricLine(
           icon: Icons.dark_mode_rounded,
-          label: isZh ? '日落' : 'Sunset',
+          label: l10n.weatherMetricSunset,
           value: _formatTime(day?.sunset),
           colors: colors,
         ),
@@ -466,12 +470,20 @@ class _RatingChip extends StatelessWidget {
 }
 
 /// Eight-sector compass name for a meteorological heading.
-String windDirectionName(double degrees, bool isZh) {
-  const zhSectors = <String>['北', '东北', '东', '东南', '南', '西南', '西', '西北'];
-  const enSectors = <String>['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+String windDirectionName(double degrees, AppLocalizations l10n) {
+  final sectors = <String>[
+    l10n.windDirectionNorth,
+    l10n.windDirectionNorthEast,
+    l10n.windDirectionEast,
+    l10n.windDirectionSouthEast,
+    l10n.windDirectionSouth,
+    l10n.windDirectionSouthWest,
+    l10n.windDirectionWest,
+    l10n.windDirectionNorthWest,
+  ];
   final normalized = (degrees % 360 + 360) % 360;
   final index = ((normalized + 22.5) / 45).floor() % 8;
-  return isZh ? '${zhSectors[index]}风' : enSectors[index];
+  return sectors[index];
 }
 
 /// Beaufort force for a wind speed in m/s.
@@ -500,41 +512,45 @@ int beaufortLevel(double metersPerSecond) {
 }
 
 /// UV severity band and its semantic color.
-(String, Color) uvRating(double uvIndex, bool isZh, ShellColorScheme colors) {
+(String, Color) uvRating(
+  double uvIndex,
+  AppLocalizations l10n,
+  ShellColorScheme colors,
+) {
   if (uvIndex < 3) {
-    return (isZh ? '低' : 'Low', colors.performanceGood);
+    return (l10n.weatherUvLow, colors.performanceGood);
   }
   if (uvIndex < 6) {
-    return (isZh ? '中' : 'Moderate', colors.performanceWarning);
+    return (l10n.weatherUvModerate, colors.performanceWarning);
   }
   if (uvIndex < 8) {
-    return (isZh ? '高' : 'High', colors.performanceWarning);
+    return (l10n.weatherUvHigh, colors.performanceWarning);
   }
-  return (isZh ? '极高' : 'Extreme', colors.performanceBad);
+  return (l10n.weatherUvExtreme, colors.performanceBad);
 }
 
 /// Rating band and semantic color for a computed AQI value.
 (String, Color) airQualityRating(
   int index,
-  bool isZh,
+  AppLocalizations l10n,
   ShellColorScheme colors,
 ) {
   if (index <= 50) {
-    return (isZh ? '优' : 'Good', colors.performanceGood);
+    return (l10n.weatherAqiGood, colors.performanceGood);
   }
   if (index <= 100) {
-    return (isZh ? '良' : 'Moderate', colors.textSecondary);
+    return (l10n.weatherAqiModerate, colors.textSecondary);
   }
   if (index <= 150) {
-    return (isZh ? '轻度污染' : 'Light pollution', colors.performanceWarning);
+    return (l10n.weatherAqiLightPollution, colors.performanceWarning);
   }
   if (index <= 200) {
-    return (isZh ? '中度污染' : 'Unhealthy', colors.performanceWarning);
+    return (l10n.weatherAqiUnhealthy, colors.performanceWarning);
   }
   if (index <= 300) {
-    return (isZh ? '重度污染' : 'Very unhealthy', colors.performanceBad);
+    return (l10n.weatherAqiVeryUnhealthy, colors.performanceBad);
   }
-  return (isZh ? '严重污染' : 'Hazardous', colors.performanceBad);
+  return (l10n.weatherAqiHazardous, colors.performanceBad);
 }
 
 /// Combined AQI: the maximum of the US EPA PM2.5 and PM10 sub-indices.

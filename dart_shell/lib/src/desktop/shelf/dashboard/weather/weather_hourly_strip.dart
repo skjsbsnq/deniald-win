@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
 
+import '../../../../localization/denial_localizations.dart';
 import '../../../../services/weather_service.dart';
 import '../../../../settings/shell_settings.dart';
 import '../../../../theme/shell_theme.dart';
@@ -17,15 +18,20 @@ class WeatherHourlyStrip extends StatelessWidget {
     required this.hours,
     required this.days,
     this.temperatureUnit = ShellTemperatureUnit.celsius,
+    this.utcOffsetSeconds = 0,
   });
 
-  /// Full hourly series; entries at or before [now] are skipped.
+  /// Full hourly series; entries at or before now are skipped.
   final List<WeatherHour> hours;
 
   /// Daily entries used to resolve day/night per hour.
   final List<WeatherDay> days;
 
   final ShellTemperatureUnit temperatureUnit;
+
+  /// The location's UTC offset in seconds. Hour timestamps carry the city's
+  /// wall clock, so the "upcoming" cutoff must use the city's now.
+  final int utcOffsetSeconds;
 
   static const double _itemWidth = 58;
   static const double _timeLabelHeight = 14;
@@ -48,9 +54,9 @@ class WeatherHourlyStrip extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = context.shellTheme;
     final colors = context.shellColors;
-    final isZh = Localizations.localeOf(context).languageCode == 'zh';
+    final l10n = context.l10n;
 
-    final now = DateTime.now();
+    final now = cityNow(utcOffsetSeconds);
     final upcoming = hours
         .where((hour) => hour.time.isAfter(now))
         .take(24)
@@ -104,9 +110,9 @@ class WeatherHourlyStrip extends StatelessWidget {
                             height: _timeLabelHeight,
                             child: Center(
                               child: Text(
-                                isZh
-                                    ? '${hour.time.hour}时'
-                                    : '${hour.time.hour.toString().padLeft(2, '0')}:00',
+                                l10n.weatherHourLabel(
+                                  hour.time.hour.toString().padLeft(2, '0'),
+                                ),
                                 style: TextStyle(
                                   color: colors.textTertiary,
                                   fontSize: 10.5,

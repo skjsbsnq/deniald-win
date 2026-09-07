@@ -1,78 +1,57 @@
 import 'package:flutter/material.dart' show Icons;
 import 'package:flutter/widgets.dart';
 
+import '../../../../../l10n/generated/app_localizations.dart';
+import '../../../../localization/denial_localizations.dart';
 import '../../../../services/weather_service.dart';
 import '../../../../settings/shell_settings.dart';
 import '../../../../theme/shell_theme.dart';
 import 'weather_temperature.dart';
 
-/// One WMO 4677 weather-code family with the icons and labels the dashboard
-/// renders for it.
+/// One WMO 4677 weather-code family with the icons the dashboard renders
+/// for it; the label comes from the generated localizations.
 class WeatherCondition {
-  const WeatherCondition({
-    required this.dayIcon,
-    required this.nightIcon,
-    required this.zhLabel,
-    required this.enLabel,
-  });
+  const WeatherCondition({required this.dayIcon, required this.nightIcon});
 
   final IconData dayIcon;
   final IconData nightIcon;
-  final String zhLabel;
-  final String enLabel;
 
   IconData icon({required bool day}) => day ? dayIcon : nightIcon;
-
-  String label({required bool isZh}) => isZh ? zhLabel : enLabel;
 }
 
 const WeatherCondition _clear = WeatherCondition(
   dayIcon: Icons.wb_sunny_rounded,
   nightIcon: Icons.dark_mode_rounded,
-  zhLabel: '晴',
-  enLabel: 'Clear',
 );
 
 const WeatherCondition _mostlyClear = WeatherCondition(
   dayIcon: Icons.light_mode_rounded,
   nightIcon: Icons.dark_mode_rounded,
-  zhLabel: '晴间多云',
-  enLabel: 'Mostly clear',
 );
 
 const WeatherCondition _partlyCloudy = WeatherCondition(
   dayIcon: Icons.wb_cloudy_rounded,
   nightIcon: Icons.cloud_rounded,
-  zhLabel: '多云',
-  enLabel: 'Partly cloudy',
 );
 
 const WeatherCondition _overcast = WeatherCondition(
   dayIcon: Icons.cloud_rounded,
   nightIcon: Icons.cloud_rounded,
-  zhLabel: '阴',
-  enLabel: 'Overcast',
 );
 
 const WeatherCondition _drizzle = WeatherCondition(
   dayIcon: Icons.grain_rounded,
   nightIcon: Icons.grain_rounded,
-  zhLabel: '毛毛雨',
-  enLabel: 'Drizzle',
 );
 
 const WeatherCondition _snow = WeatherCondition(
   dayIcon: Icons.ac_unit_rounded,
   nightIcon: Icons.ac_unit_rounded,
-  zhLabel: '雪',
-  enLabel: 'Snow',
 );
 
 const WeatherCondition _thunderstorm = WeatherCondition(
   dayIcon: Icons.thunderstorm_rounded,
   nightIcon: Icons.thunderstorm_rounded,
-  zhLabel: '雷雨',
-  enLabel: 'Thunderstorm',
 );
 
 /// Presentation for a WMO weather code; unmapped codes degrade to overcast.
@@ -85,67 +64,72 @@ WeatherCondition weatherConditionFor(int code) {
     45 || 48 => WeatherCondition(
       dayIcon: Icons.cloud_rounded,
       nightIcon: Icons.cloud_rounded,
-      zhLabel: '雾',
-      enLabel: 'Fog',
     ),
     51 || 53 || 55 || 56 || 57 => _drizzle,
     61 => WeatherCondition(
       dayIcon: Icons.water_drop_rounded,
       nightIcon: Icons.water_drop_rounded,
-      zhLabel: '小雨',
-      enLabel: 'Light rain',
     ),
     63 => WeatherCondition(
       dayIcon: Icons.water_drop_rounded,
       nightIcon: Icons.water_drop_rounded,
-      zhLabel: '中雨',
-      enLabel: 'Rain',
     ),
     65 => WeatherCondition(
       dayIcon: Icons.water_drop_rounded,
       nightIcon: Icons.water_drop_rounded,
-      zhLabel: '大雨',
-      enLabel: 'Heavy rain',
     ),
     66 || 67 => WeatherCondition(
       dayIcon: Icons.water_drop_rounded,
       nightIcon: Icons.water_drop_rounded,
-      zhLabel: '冻雨',
-      enLabel: 'Freezing rain',
     ),
     71 => WeatherCondition(
       dayIcon: Icons.ac_unit_rounded,
       nightIcon: Icons.ac_unit_rounded,
-      zhLabel: '小雪',
-      enLabel: 'Light snow',
     ),
     73 => _snow,
     75 => WeatherCondition(
       dayIcon: Icons.ac_unit_rounded,
       nightIcon: Icons.ac_unit_rounded,
-      zhLabel: '大雪',
-      enLabel: 'Heavy snow',
     ),
     77 => WeatherCondition(
       dayIcon: Icons.ac_unit_rounded,
       nightIcon: Icons.ac_unit_rounded,
-      zhLabel: '雪粒',
-      enLabel: 'Snow grains',
     ),
     80 || 81 || 82 => WeatherCondition(
       dayIcon: Icons.water_drop_rounded,
       nightIcon: Icons.water_drop_rounded,
-      zhLabel: '阵雨',
-      enLabel: 'Showers',
     ),
     85 || 86 => WeatherCondition(
       dayIcon: Icons.ac_unit_rounded,
       nightIcon: Icons.ac_unit_rounded,
-      zhLabel: '阵雪',
-      enLabel: 'Snow showers',
     ),
     95 || 96 || 99 => _thunderstorm,
     _ => _overcast,
+  };
+}
+
+/// Localized prose for a WMO weather code; unmapped codes degrade to
+/// overcast, mirroring [weatherConditionFor].
+String weatherConditionLabel(AppLocalizations l10n, int code) {
+  return switch (code) {
+    0 => l10n.weatherConditionClear,
+    1 => l10n.weatherConditionMostlyClear,
+    2 => l10n.weatherConditionPartlyCloudy,
+    3 => l10n.weatherConditionOvercast,
+    45 || 48 => l10n.weatherConditionFog,
+    51 || 53 || 55 || 56 || 57 => l10n.weatherConditionDrizzle,
+    61 => l10n.weatherConditionLightRain,
+    63 => l10n.weatherConditionRain,
+    65 => l10n.weatherConditionHeavyRain,
+    66 || 67 => l10n.weatherConditionFreezingRain,
+    71 => l10n.weatherConditionLightSnow,
+    73 => l10n.weatherConditionSnow,
+    75 => l10n.weatherConditionHeavySnow,
+    77 => l10n.weatherConditionSnowGrains,
+    80 || 81 || 82 => l10n.weatherConditionShowers,
+    85 || 86 => l10n.weatherConditionSnowShowers,
+    95 || 96 || 99 => l10n.weatherConditionThunderstorm,
+    _ => l10n.weatherConditionOvercast,
   };
 }
 
@@ -157,6 +141,13 @@ bool isDaylight(DateTime time, WeatherDay? day) {
     return hour >= 6 && hour < 18;
   }
   return !time.isBefore(day.sunrise) && time.isBefore(day.sunset);
+}
+
+/// The location's current wall clock. Snapshot timestamps are UTC-flagged
+/// carriers of the location's wall clock, so "now" must be reconstructed in
+/// that same frame rather than read from the device's DateTime.now().
+DateTime cityNow(int utcOffsetSeconds) {
+  return DateTime.now().toUtc().add(Duration(seconds: utcOffsetSeconds));
 }
 
 /// Hero block of the Weather view: the live temperature, condition glyph,
@@ -177,7 +168,7 @@ class WeatherHeroSection extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = context.shellTheme;
     final colors = context.shellColors;
-    final isZh = Localizations.localeOf(context).languageCode == 'zh';
+    final l10n = context.l10n;
     final condition = weatherConditionFor(current.weatherCode);
 
     return Row(
@@ -195,13 +186,13 @@ class WeatherHeroSection extends StatelessWidget {
                   fontSize: 64,
                   fontWeight: FontWeight.w600,
                   height: 1.0,
-                  letterSpacing: -1,
+
                   decoration: TextDecoration.none,
                 ),
               ),
               const SizedBox(height: 6),
               Text(
-                condition.label(isZh: isZh),
+                weatherConditionLabel(l10n, current.weatherCode),
                 style: TextStyle(
                   color: colors.textPrimary,
                   fontSize: 16,
@@ -211,9 +202,12 @@ class WeatherHeroSection extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                isZh
-                    ? '体感 ${formatTemperature(current.apparentTemperatureC, temperatureUnit)}'
-                    : 'Feels like ${formatTemperature(current.apparentTemperatureC, temperatureUnit)}',
+                l10n.weatherFeelsLike(
+                  formatTemperature(
+                    current.apparentTemperatureC,
+                    temperatureUnit,
+                  ),
+                ),
                 style: TextStyle(
                   color: colors.textSecondary,
                   fontSize: 12,

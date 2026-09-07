@@ -143,6 +143,10 @@ class _CitySearchFieldState extends ConsumerState<_CitySearchField> {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
+    // Pin the autoDispose service for this field's lifetime: a transient read
+    // lets the provider be reclaimed mid-search, and its dispose closes the
+    // HttpClient with force, aborting the in-flight geocoding request.
+    ref.watch(weatherServiceProvider);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [

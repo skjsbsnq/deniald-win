@@ -1,15 +1,19 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart' show Icons;
+import 'package:flutter/material.dart' show Icons, Scrollbar;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../state/weather_state.dart';
+import '../../../../localization/denial_localizations.dart';
+import '../../../../services/weather_service.dart';
+import '../../../../settings/settings_application.dart';
 import '../../../../settings/settings_controller.dart';
-import '../../../../theme/motion.dart';
+import '../../../../settings/widgets/settings_navigation.dart';
+import '../../../../state/weather_state.dart';
 import '../../../../theme/shell_color_scheme.dart';
 import '../../../../theme/shell_theme.dart';
 import '../../../../theme/tokens.dart';
+import '../../../../widgets/shell_hover_pill.dart';
 import '../weather/weather_daily_forecast.dart';
 import '../weather/weather_hero_section.dart';
 import '../weather/weather_hourly_strip.dart';
@@ -26,6 +30,8 @@ class WeatherView extends ConsumerStatefulWidget {
 }
 
 class _WeatherViewState extends ConsumerState<WeatherView> {
+  final ScrollController _scrollController = ScrollController();
+
   @override
   void initState() {
     super.initState();
@@ -39,6 +45,12 @@ class _WeatherViewState extends ConsumerState<WeatherView> {
   }
 
   @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final state = ref.watch(weatherProvider);
     final snapshot = state.snapshot;
@@ -46,115 +58,131 @@ class _WeatherViewState extends ConsumerState<WeatherView> {
     if (snapshot == null) {
       if (state.status == WeatherStatus.failed) {
         return _WeatherErrorPane(
+          locationFailed: state.error is WeatherLocationFailure,
           onRetry: () =>
               unawaited(ref.read(weatherProvider.notifier).forceRefresh()),
+          onChooseCity: () =>
+              launchSettingsPage(ref, context, SettingsPageId.weather),
         );
       }
       return _WeatherLoadingPane(status: state.status);
     }
 
     final colors = context.shellColors;
-    final isZh = Localizations.localeOf(context).languageCode == 'zh';
+    final l10n = context.l10n;
     final temperatureUnit = ref.watch(
       shellSettingsProvider.select(
         (settings) => settings.weather.temperatureUnit,
       ),
     );
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  snapshot.location.city,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: colors.textPrimary,
-                    fontSize: 17,
-                    fontWeight: FontWeight.w700,
-                    decoration: TextDecoration.none,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                isZh
-                    ? '${_formatClock(snapshot.fetchedAt)} 更新'
-                    : 'Updated ${_formatClock(snapshot.fetchedAt)}',
-                style: TextStyle(
-                  color: colors.textTertiary,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  decoration: TextDecoration.none,
-                ),
-              ),
-              const SizedBox(width: 8),
-              _RefreshButton(
-                onPressed: () => unawaited(
-                  ref.read(weatherProvider.notifier).forceRefresh(),
-                ),
-              ),
-            ],
-          ),
-          if (state.status == WeatherStatus.failed) ...[
-            const SizedBox(height: 8),
+    // The scrollbar shares an explicit controller with the scroll view
+    // because the shell provides no PrimaryScrollController to adopt.
+    return Scrollbar(
+      controller: _scrollController,
+      child: SingleChildScrollView(
+        controller: _scrollController,
+        padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
             Row(
               children: [
-                Icon(
-                  Icons.error_outline_rounded,
-                  size: 14,
-                  color: colors.performanceWarning,
-                ),
-                const SizedBox(width: 6),
                 Expanded(
                   child: Text(
-                    isZh ? '刷新失败,显示缓存数据' : 'Refresh failed · cached data',
+                    snapshot.location.city,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: colors.textTertiary,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
+                      color: colors.textPrimary,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w700,
                       decoration: TextDecoration.none,
                     ),
                   ),
                 ),
+                const SizedBox(width: 8),
+                Text(
+                  l10n.weatherUpdated(_formatClock(snapshot.fetchedAt)),
+                  style: TextStyle(
+                    color: colors.textTertiary,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    decoration: TextDecoration.none,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                _RefreshButton(
+                  onPressed: () => unawaited(
+                    ref.read(weatherProvider.notifier).forceRefresh(),
+                  ),
+                ),
               ],
             ),
+            if (state.status == WeatherStatus.failed) ...[
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Icon(
+                    Icons.error_outline_rounded,
+                    size: 14,
+                    color: colors.performanceWarning,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      l10n.weatherCachedDataNotice,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: colors.textTertiary,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        decoration: TextDecoration.none,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+            const SizedBox(height: 14),
+            WeatherHeroSection(
+              current: snapshot.current,
+              // Day/night must be resolved on the city's wall clock; the
+              // device clock would flip the glyph across time zones.
+              isDay: isDaylight(
+                cityNow(snapshot.utcOffsetSeconds),
+                snapshot.days.firstOrNull,
+              ),
+              temperatureUnit: temperatureUnit,
+            ),
+            // Sections whose data is absent collapse together with their
+            // heading instead of leaving an orphaned caption behind.
+            if (snapshot.hours.isNotEmpty) ...[
+              const SizedBox(height: 18),
+              _SectionCaption(colors: colors, label: l10n.weatherSectionHourly),
+              const SizedBox(height: 8),
+              WeatherHourlyStrip(
+                hours: snapshot.hours,
+                days: snapshot.days,
+                temperatureUnit: temperatureUnit,
+                utcOffsetSeconds: snapshot.utcOffsetSeconds,
+              ),
+            ],
+            if (snapshot.days.isNotEmpty) ...[
+              const SizedBox(height: 18),
+              _SectionCaption(colors: colors, label: l10n.weatherSectionDaily),
+              const SizedBox(height: 8),
+              WeatherDailyForecast(
+                days: snapshot.days,
+                temperatureUnit: temperatureUnit,
+              ),
+            ],
+            const SizedBox(height: 18),
+            WeatherMetricsGrid(snapshot: snapshot),
           ],
-          const SizedBox(height: 14),
-          WeatherHeroSection(
-            current: snapshot.current,
-            isDay: isDaylight(DateTime.now(), snapshot.days.firstOrNull),
-            temperatureUnit: temperatureUnit,
-          ),
-          const SizedBox(height: 18),
-          _SectionCaption(colors: colors, label: isZh ? '逐小时' : 'Hourly'),
-          const SizedBox(height: 8),
-          WeatherHourlyStrip(
-            hours: snapshot.hours,
-            days: snapshot.days,
-            temperatureUnit: temperatureUnit,
-          ),
-          const SizedBox(height: 18),
-          _SectionCaption(
-            colors: colors,
-            label: isZh ? '未来 7 天' : 'Next 7 days',
-          ),
-          const SizedBox(height: 8),
-          WeatherDailyForecast(
-            days: snapshot.days,
-            temperatureUnit: temperatureUnit,
-          ),
-          const SizedBox(height: 18),
-          WeatherMetricsGrid(snapshot: snapshot),
-        ],
+        ),
       ),
     );
   }
@@ -174,56 +202,30 @@ class _SectionCaption extends StatelessWidget {
         color: colors.textTertiary,
         fontSize: 11,
         fontWeight: FontWeight.w700,
-        letterSpacing: 0.4,
         decoration: TextDecoration.none,
       ),
     );
   }
 }
 
-class _RefreshButton extends StatefulWidget {
+class _RefreshButton extends StatelessWidget {
   const _RefreshButton({required this.onPressed});
 
   final VoidCallback onPressed;
 
   @override
-  State<_RefreshButton> createState() => _RefreshButtonState();
-}
-
-class _RefreshButtonState extends State<_RefreshButton> {
-  bool _hovered = false;
-
-  @override
   Widget build(BuildContext context) {
     final colors = context.shellColors;
 
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: widget.onPressed,
-        child: AnimatedContainer(
-          duration: Motion.pill,
-          curve: Curves.easeOut,
-          width: 30,
-          height: 30,
-          decoration: BoxDecoration(
-            color: _hovered
-                ? colors.panelHighlight
-                : colors.surfaceContainerHighest,
-            shape: BoxShape.circle,
-          ),
-          child: Center(
-            child: Icon(
-              Icons.refresh_rounded,
-              size: 16,
-              color: colors.textSecondary,
-            ),
-          ),
-        ),
-      ),
+    // A square pill at full scale renders the same circle the bespoke
+    // BoxShape.circle decoration did.
+    return ShellHoverPill(
+      onTap: onPressed,
+      width: 30,
+      height: 30,
+      color: colors.surfaceContainerHighest,
+      hoverColor: colors.panelHighlight,
+      child: Icon(Icons.refresh_rounded, size: 16, color: colors.textSecondary),
     );
   }
 }
@@ -236,7 +238,7 @@ class _WeatherLoadingPane extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colors = context.shellColors;
-    final isZh = Localizations.localeOf(context).languageCode == 'zh';
+    final l10n = context.l10n;
     final locating = status == WeatherStatus.locating;
 
     return SizedBox(
@@ -252,9 +254,7 @@ class _WeatherLoadingPane extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             Text(
-              locating
-                  ? (isZh ? '正在定位…' : 'Locating…')
-                  : (isZh ? '正在加载天气…' : 'Loading weather…'),
+              locating ? l10n.weatherLoadingLocating : l10n.weatherLoadingData,
               style: TextStyle(
                 color: colors.textSecondary,
                 fontSize: 12.5,
@@ -270,15 +270,23 @@ class _WeatherLoadingPane extends StatelessWidget {
 }
 
 class _WeatherErrorPane extends StatelessWidget {
-  const _WeatherErrorPane({required this.onRetry});
+  const _WeatherErrorPane({
+    required this.onRetry,
+    required this.onChooseCity,
+    this.locationFailed = false,
+  });
 
   final VoidCallback onRetry;
+  final VoidCallback onChooseCity;
+
+  /// Location discovery failing is actionable (switch to a manual city),
+  /// unlike a network failure where only retrying helps.
+  final bool locationFailed;
 
   @override
   Widget build(BuildContext context) {
-    final theme = context.shellTheme;
     final colors = context.shellColors;
-    final isZh = Localizations.localeOf(context).languageCode == 'zh';
+    final l10n = context.l10n;
 
     return SizedBox(
       height: 280,
@@ -287,13 +295,17 @@ class _WeatherErrorPane extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              Icons.error_outline_rounded,
+              locationFailed
+                  ? Icons.location_off_rounded
+                  : Icons.error_outline_rounded,
               size: 38,
               color: colors.textTertiary,
             ),
             const SizedBox(height: 10),
             Text(
-              isZh ? '天气数据加载失败' : 'Failed to load weather',
+              locationFailed
+                  ? l10n.weatherErrorLocationUnavailable
+                  : l10n.weatherErrorLoadFailed,
               style: TextStyle(
                 color: colors.textSecondary,
                 fontSize: 12.5,
@@ -302,44 +314,76 @@ class _WeatherErrorPane extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 14),
-            MouseRegion(
-              cursor: SystemMouseCursors.click,
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: onRetry,
-                child: Container(
-                  height: 32,
-                  padding: const EdgeInsets.symmetric(horizontal: 14),
-                  decoration: BoxDecoration(
-                    color: theme.accentPalette.container,
-                    borderRadius: theme.borderRadius(ShellShapeScale.full),
-                  ),
-                  child: Center(
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.refresh_rounded,
-                          size: 15,
-                          color: theme.accentPalette.onContainer,
-                        ),
-                        const SizedBox(width: 6),
-                        Text(
-                          isZh ? '重试' : 'Retry',
-                          style: TextStyle(
-                            color: theme.accentPalette.onContainer,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            decoration: TextDecoration.none,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                _WeatherErrorAction(
+                  icon: Icons.refresh_rounded,
+                  label: l10n.weatherRetry,
+                  onPressed: onRetry,
                 ),
-              ),
+                if (locationFailed) ...[
+                  const SizedBox(width: 8),
+                  _WeatherErrorAction(
+                    icon: Icons.location_city_rounded,
+                    label: l10n.weatherChooseCity,
+                    onPressed: onChooseCity,
+                  ),
+                ],
+              ],
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+class _WeatherErrorAction extends StatelessWidget {
+  const _WeatherErrorAction({
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = context.shellTheme;
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onPressed,
+        child: Container(
+          height: 32,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          decoration: BoxDecoration(
+            color: theme.accentPalette.container,
+            borderRadius: theme.borderRadius(ShellShapeScale.full),
+          ),
+          child: Center(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 15, color: theme.accentPalette.onContainer),
+                const SizedBox(width: 6),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: theme.accentPalette.onContainer,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    decoration: TextDecoration.none,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

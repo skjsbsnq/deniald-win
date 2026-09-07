@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/widgets.dart';
 
+import '../../../../../l10n/generated/app_localizations.dart';
+import '../../../../localization/denial_localizations.dart';
 import '../../../../services/weather_service.dart';
 import '../../../../settings/shell_settings.dart';
 import '../../../../theme/shell_theme.dart';
@@ -26,7 +28,7 @@ class WeatherDailyForecast extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = context.shellTheme;
     final colors = context.shellColors;
-    final isZh = Localizations.localeOf(context).languageCode == 'zh';
+    final l10n = context.l10n;
 
     if (days.isEmpty) {
       return const SizedBox.shrink();
@@ -54,7 +56,7 @@ class WeatherDailyForecast extends StatelessWidget {
                 SizedBox(
                   width: 52,
                   child: Text(
-                    _weekdayLabel(days[i].date, i, isZh),
+                    _weekdayLabel(l10n, days[i].date, i),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
@@ -171,25 +173,13 @@ class WeatherDailyForecast extends StatelessWidget {
     );
   }
 
-  static String _weekdayLabel(DateTime date, int index, bool isZh) {
+  static String _weekdayLabel(AppLocalizations l10n, DateTime date, int index) {
     if (index == 0) {
-      return isZh ? '今天' : 'Today';
+      return l10n.weatherToday;
     }
     if (index == 1) {
-      return isZh ? '明天' : 'Tomorrow';
+      return l10n.weatherTomorrow;
     }
-    const zhWeekdays = <String>['一', '二', '三', '四', '五', '六', '日'];
-    const enWeekdays = <String>[
-      'Mon',
-      'Tue',
-      'Wed',
-      'Thu',
-      'Fri',
-      'Sat',
-      'Sun',
-    ];
-    // DateTime.weekday is 1-based with Monday first.
-    final weekday = date.weekday - 1;
-    return isZh ? '周${zhWeekdays[weekday]}' : enWeekdays[weekday];
+    return localizedWeekdaySymbol(l10n, date.weekday);
   }
 }
