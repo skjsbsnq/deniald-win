@@ -81,6 +81,15 @@ void main() {
         idleSuspendEnabled: true,
         idleSuspendTimeoutMinutes: 72,
       ),
+      weather: ShellWeatherSettings(
+        locationMode: ShellWeatherLocationMode.manual,
+        manualLocation: ShellManualLocation(
+          latitude: 22.5,
+          longitude: 114.06,
+          city: 'Shenzhen',
+        ),
+        temperatureUnit: ShellTemperatureUnit.fahrenheit,
+      ),
       applicationEnvironment: ShellApplicationEnvironmentSettings(
         variables: <String, String?>{
           'DISPLAY': null,
@@ -230,5 +239,77 @@ void main() {
     final appearance = settings.toJson()['appearance']! as Map<String, Object>;
     expect(appearance.containsKey('windowRadius'), isFalse);
     expect(appearance.containsKey('panelRadius'), isFalse);
+  });
+
+  test('weather settings default to automatic celsius', () {
+    const settings = ShellSettings();
+    expect(settings.weather.locationMode, ShellWeatherLocationMode.auto);
+    expect(settings.weather.manualLocation, isNull);
+    expect(settings.weather.temperatureUnit, ShellTemperatureUnit.celsius);
+    expect(settings.weather.resolvedLocation, isNull);
+  });
+
+  test('weather settings survive a round trip and clear the pinned city', () {
+    const weather = ShellWeatherSettings(
+      locationMode: ShellWeatherLocationMode.manual,
+      manualLocation: ShellManualLocation(
+        latitude: 39.9,
+        longitude: 116.4,
+        city: 'Beijing',
+      ),
+      temperatureUnit: ShellTemperatureUnit.fahrenheit,
+    );
+    expect(ShellWeatherSettings.fromJson(weather.toJson()), weather);
+    expect(weather.resolvedLocation?.city, 'Beijing');
+
+    final cleared = weather.copyWith(manualLocation: null);
+    expect(cleared.manualLocation, isNull);
+    // Clearing the city while keeping manual mode stays stable in JSON.
+    expect(ShellWeatherSettings.fromJson(cleared.toJson()), cleared);
+  });
+
+  test('malformed weather settings fail safe to defaults', () {
+    final settings = ShellSettings.fromJson(<String, dynamic>{
+      'weather': <String, dynamic>{
+        'locationMode': 'orbit',
+        'manualLocation': <String, dynamic>{
+          'latitude': 'not-a-number',
+          'longitude': 116.4,
+          'city': 'Beijing',
+        },
+        'temperatureUnit': 'kelvin',
+      },
+    });
+
+    expect(settings.weather.locationMode, ShellWeatherLocationMode.auto);
+    expect(settings.weather.manualLocation, isNull);
+    expect(settings.weather.temperatureUnit, ShellTemperatureUnit.celsius);
+  });
+
+  test('weather changes produce a typed patch', () {
+    const before = ShellSettings();
+    const after = ShellSettings(
+      weather: ShellWeatherSettings(
+        locationMode: ShellWeatherLocationMode.manual,
+        manualLocation: ShellManualLocation(
+          latitude: 22.5,
+          longitude: 114.06,
+          city: 'Shenzhen',
+        ),
+      ),
+    );
+
+    final patch = after.differenceFrom(before);
+    final weatherPatch = patch['weather']! as Map<String, Object?>;
+    expect(weatherPatch['locationMode'], 'manual');
+    final location = weatherPatch['manualLocation']! as Map<String, Object>;
+    expect(location['city'], 'Shenzhen');
+    expect(weatherPatch.containsKey('temperatureUnit'), isFalse);
+
+    // Resetting back clears the pinned city with an explicit null.
+    final resetPatch = before.differenceFrom(after)['weather']!
+        as Map<String, Object?>;
+    expect(resetPatch['manualLocation'], isNull);
+    expect(resetPatch['locationMode'], 'auto');
   });
 }

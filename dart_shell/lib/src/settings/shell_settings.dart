@@ -49,6 +49,154 @@ const double launcherOverlayMinimumHeight = 200;
 
 enum ShellLocalePreference { system, english, simplifiedChinese }
 
+enum ShellTemperatureUnit { celsius, fahrenheit }
+
+enum ShellWeatherLocationMode { auto, manual }
+
+/// Sentinel distinguishing "leave the nullable field as-is" from "clear it"
+/// in [ShellWeatherSettings.copyWith].
+const Object _sentinel = Object();
+
+/// A city the user picked explicitly for the weather panel.
+@immutable
+class ShellManualLocation {
+  const ShellManualLocation({
+    required this.latitude,
+    required this.longitude,
+    required this.city,
+  });
+
+  final double latitude;
+  final double longitude;
+  final String city;
+
+  ShellManualLocation copyWith({
+    double? latitude,
+    double? longitude,
+    String? city,
+  }) {
+    return ShellManualLocation(
+      latitude: latitude ?? this.latitude,
+      longitude: longitude ?? this.longitude,
+      city: city ?? this.city,
+    );
+  }
+
+  Map<String, Object> toJson() => <String, Object>{
+    'latitude': latitude,
+    'longitude': longitude,
+    'city': city,
+  };
+
+  static ShellManualLocation? fromJson(Object? value) {
+    if (value is! Map) {
+      return null;
+    }
+    final map = value.cast<Object?, Object?>();
+    final latitude = map['latitude'];
+    final longitude = map['longitude'];
+    final city = map['city'];
+    if (latitude is! num ||
+        longitude is! num ||
+        city is! String ||
+        !latitude.isFinite ||
+        !longitude.isFinite) {
+      return null;
+    }
+    final name = city.trim();
+    if (name.isEmpty || name.length > 128 || name.contains('\u0000')) {
+      return null;
+    }
+    return ShellManualLocation(
+      latitude: latitude.toDouble(),
+      longitude: longitude.toDouble(),
+      city: name,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return other is ShellManualLocation &&
+        other.latitude == latitude &&
+        other.longitude == longitude &&
+        other.city == city;
+  }
+
+  @override
+  int get hashCode => Object.hash(latitude, longitude, city);
+}
+
+/// Weather panel preferences: location discovery mode, the pinned manual
+/// location, and the display temperature unit.
+@immutable
+class ShellWeatherSettings {
+  const ShellWeatherSettings({
+    this.locationMode = ShellWeatherLocationMode.auto,
+    this.manualLocation,
+    this.temperatureUnit = ShellTemperatureUnit.celsius,
+  });
+
+  final ShellWeatherLocationMode locationMode;
+  final ShellManualLocation? manualLocation;
+  final ShellTemperatureUnit temperatureUnit;
+
+  /// The location the weather channel should resolve to, or null when the
+  /// mode requires a network lookup (auto) and no manual fallback is set.
+  ShellManualLocation? get resolvedLocation =>
+      locationMode == ShellWeatherLocationMode.manual ? manualLocation : null;
+
+  ShellWeatherSettings copyWith({
+    ShellWeatherLocationMode? locationMode,
+    Object? manualLocation = _sentinel,
+    ShellTemperatureUnit? temperatureUnit,
+  }) {
+    return ShellWeatherSettings(
+      locationMode: locationMode ?? this.locationMode,
+      manualLocation: manualLocation == _sentinel
+          ? this.manualLocation
+          : manualLocation as ShellManualLocation?,
+      temperatureUnit: temperatureUnit ?? this.temperatureUnit,
+    );
+  }
+
+  Map<String, Object> toJson() => <String, Object>{
+    'locationMode': locationMode.name,
+    if (manualLocation case final location?)
+      'manualLocation': location.toJson(),
+    'temperatureUnit': temperatureUnit.name,
+  };
+
+  factory ShellWeatherSettings.fromJson(Object? value) {
+    final json = _map(value);
+    final defaults = const ShellWeatherSettings();
+    return ShellWeatherSettings(
+      locationMode: _enumValue(
+        ShellWeatherLocationMode.values,
+        json['locationMode'],
+        defaults.locationMode,
+      ),
+      manualLocation: ShellManualLocation.fromJson(json['manualLocation']),
+      temperatureUnit: _enumValue(
+        ShellTemperatureUnit.values,
+        json['temperatureUnit'],
+        defaults.temperatureUnit,
+      ),
+    );
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return other is ShellWeatherSettings &&
+        other.locationMode == locationMode &&
+        other.manualLocation == manualLocation &&
+        other.temperatureUnit == temperatureUnit;
+  }
+
+  @override
+  int get hashCode =>
+      Object.hash(locationMode, manualLocation, temperatureUnit);
+}
+
 @immutable
 class ShellLocalizationSettings {
   const ShellLocalizationSettings({this.locale = ShellLocalePreference.system});
@@ -805,6 +953,7 @@ class ShellSettings {
     this.animations = const ShellAnimationSettings(),
     this.lockScreen = const ShellLockScreenSettings(),
     this.power = const ShellPowerSettings(),
+    this.weather = const ShellWeatherSettings(),
     this.applicationEnvironment = const ShellApplicationEnvironmentSettings(),
   });
 
@@ -819,6 +968,7 @@ class ShellSettings {
   final ShellAnimationSettings animations;
   final ShellLockScreenSettings lockScreen;
   final ShellPowerSettings power;
+  final ShellWeatherSettings weather;
   final ShellApplicationEnvironmentSettings applicationEnvironment;
 
   ShellSettings copyWith({
@@ -829,6 +979,7 @@ class ShellSettings {
     ShellAnimationSettings? animations,
     ShellLockScreenSettings? lockScreen,
     ShellPowerSettings? power,
+    ShellWeatherSettings? weather,
     ShellApplicationEnvironmentSettings? applicationEnvironment,
   }) {
     return ShellSettings(
@@ -839,6 +990,7 @@ class ShellSettings {
       animations: animations ?? this.animations,
       lockScreen: lockScreen ?? this.lockScreen,
       power: power ?? this.power,
+      weather: weather ?? this.weather,
       applicationEnvironment:
           applicationEnvironment ?? this.applicationEnvironment,
     );
@@ -1044,6 +1196,27 @@ class ShellSettings {
       patch['power'] = section;
     }
 
+    if (weather != previous.weather) {
+      final before = previous.weather;
+      final section = <String, Object?>{};
+      if (weather.locationMode != before.locationMode) {
+        section['locationMode'] = weather.locationMode.name;
+      }
+      if (weather.manualLocation != before.manualLocation) {
+        // A nullable field: serialize the full desired value (or omit it) so
+        // the patch merge clears the stored location when the user resets it.
+        if (weather.manualLocation case final location?) {
+          section['manualLocation'] = location.toJson();
+        } else {
+          section['manualLocation'] = null;
+        }
+      }
+      if (weather.temperatureUnit != before.temperatureUnit) {
+        section['temperatureUnit'] = weather.temperatureUnit.name;
+      }
+      patch['weather'] = section;
+    }
+
     if (applicationEnvironment != previous.applicationEnvironment) {
       // This section is a complete desired map: absence means delete the
       // override, so it must never be recursively merged with an older map.
@@ -1116,6 +1289,7 @@ class ShellSettings {
         'idleSuspendEnabled': power.idleSuspendEnabled,
         'idleSuspendTimeoutMinutes': power.idleSuspendTimeoutMinutes,
       },
+      'weather': weather.toJson(),
       'applicationEnvironment': applicationEnvironment.toJson(),
     };
   }
@@ -1425,6 +1599,7 @@ class ShellSettings {
             : defaults.power.idleSuspendEnabled,
         idleSuspendTimeoutMinutes: idleSuspendTimeoutMinutes,
       ),
+      weather: ShellWeatherSettings.fromJson(json['weather']),
       applicationEnvironment: ShellApplicationEnvironmentSettings.fromJson(
         json['applicationEnvironment'],
       ),
@@ -1441,6 +1616,7 @@ class ShellSettings {
         other.animations == animations &&
         other.lockScreen == lockScreen &&
         other.power == power &&
+        other.weather == weather &&
         other.applicationEnvironment == applicationEnvironment;
   }
 
@@ -1453,6 +1629,7 @@ class ShellSettings {
     animations,
     lockScreen,
     power,
+    weather,
     applicationEnvironment,
   );
 }

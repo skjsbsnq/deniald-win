@@ -22,6 +22,49 @@ class GeoLocation {
   final double latitude;
   final double longitude;
   final String city;
+
+  Map<String, Object> toJson() => <String, Object>{
+    'latitude': latitude,
+    'longitude': longitude,
+    'city': city,
+  };
+
+  static GeoLocation? fromJson(Object? raw) {
+    if (raw is! Map) {
+      return null;
+    }
+    final json = raw.cast<Object?, Object?>();
+    final latitude = json['latitude'];
+    final longitude = json['longitude'];
+    final city = json['city'];
+    if (latitude is! num ||
+        longitude is! num ||
+        city is! String ||
+        !latitude.isFinite ||
+        !longitude.isFinite) {
+      return null;
+    }
+    final name = city.trim();
+    if (name.isEmpty || name.length > 128 || name.contains('\u0000')) {
+      return null;
+    }
+    return GeoLocation(
+      latitude: latitude.toDouble(),
+      longitude: longitude.toDouble(),
+      city: name,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) {
+    return other is GeoLocation &&
+        other.latitude == latitude &&
+        other.longitude == longitude &&
+        other.city == city;
+  }
+
+  @override
+  int get hashCode => Object.hash(latitude, longitude, city);
 }
 
 @immutable
@@ -47,6 +90,50 @@ class WeatherCurrent {
   final double uvIndex;
   final double pressureHpa;
   final double visibilityM;
+
+  Map<String, Object> toJson() => <String, Object>{
+    'temperatureC': temperatureC,
+    'apparentTemperatureC': apparentTemperatureC,
+    'weatherCode': weatherCode,
+    'humidityPercent': humidityPercent,
+    'windSpeedMs': windSpeedMs,
+    'windDirectionDeg': windDirectionDeg,
+    'uvIndex': uvIndex,
+    'pressureHpa': pressureHpa,
+    'visibilityM': visibilityM,
+  };
+
+  static WeatherCurrent? fromJson(Object? raw) {
+    if (raw is! Map) {
+      return null;
+    }
+    final json = raw.cast<Object?, Object?>();
+    final temperature = _finiteDouble(json['temperatureC']);
+    final apparent = _finiteDouble(json['apparentTemperatureC']);
+    final code = _finiteDouble(json['weatherCode'])?.round();
+    final humidity = _finiteDouble(json['humidityPercent'])?.round();
+    final windSpeed = _finiteDouble(json['windSpeedMs']);
+    final windDirection = _finiteDouble(json['windDirectionDeg']);
+    if (temperature == null ||
+        apparent == null ||
+        code == null ||
+        humidity == null ||
+        windSpeed == null ||
+        windDirection == null) {
+      return null;
+    }
+    return WeatherCurrent(
+      temperatureC: temperature,
+      apparentTemperatureC: apparent,
+      weatherCode: code,
+      humidityPercent: humidity,
+      windSpeedMs: windSpeed,
+      windDirectionDeg: windDirection,
+      uvIndex: _finiteDouble(json['uvIndex']) ?? 0,
+      pressureHpa: _finiteDouble(json['pressureHpa']) ?? 0,
+      visibilityM: _finiteDouble(json['visibilityM']) ?? 0,
+    );
+  }
 }
 
 @immutable
@@ -62,6 +149,33 @@ class WeatherHour {
   final double temperatureC;
   final int weatherCode;
   final int precipitationProbability;
+
+  Map<String, Object> toJson() => <String, Object>{
+    'time': time.millisecondsSinceEpoch,
+    'temperatureC': temperatureC,
+    'weatherCode': weatherCode,
+    'precipitationProbability': precipitationProbability,
+  };
+
+  static WeatherHour? fromJson(Object? raw) {
+    if (raw is! Map) {
+      return null;
+    }
+    final json = raw.cast<Object?, Object?>();
+    final timeMs = json['time'];
+    final temperature = _finiteDouble(json['temperatureC']);
+    final code = _finiteDouble(json['weatherCode'])?.round();
+    if (timeMs is! int || timeMs < 0 || temperature == null || code == null) {
+      return null;
+    }
+    return WeatherHour(
+      time: DateTime.fromMillisecondsSinceEpoch(timeMs),
+      temperatureC: temperature,
+      weatherCode: code,
+      precipitationProbability:
+          _finiteDouble(json['precipitationProbability'])?.round() ?? 0,
+    );
+  }
 }
 
 @immutable
@@ -81,6 +195,48 @@ class WeatherDay {
   final double minTemperatureC;
   final DateTime sunrise;
   final DateTime sunset;
+
+  Map<String, Object> toJson() => <String, Object>{
+    'date': date.millisecondsSinceEpoch,
+    'weatherCode': weatherCode,
+    'maxTemperatureC': maxTemperatureC,
+    'minTemperatureC': minTemperatureC,
+    'sunrise': sunrise.millisecondsSinceEpoch,
+    'sunset': sunset.millisecondsSinceEpoch,
+  };
+
+  static WeatherDay? fromJson(Object? raw) {
+    if (raw is! Map) {
+      return null;
+    }
+    final json = raw.cast<Object?, Object?>();
+    final dateMs = json['date'];
+    final code = _finiteDouble(json['weatherCode'])?.round();
+    final max = _finiteDouble(json['maxTemperatureC']);
+    final min = _finiteDouble(json['minTemperatureC']);
+    if (dateMs is! int ||
+        dateMs < 0 ||
+        code == null ||
+        max == null ||
+        min == null) {
+      return null;
+    }
+    final sunriseMs = json['sunrise'];
+    final sunsetMs = json['sunset'];
+    final date = DateTime.fromMillisecondsSinceEpoch(dateMs);
+    return WeatherDay(
+      date: date,
+      weatherCode: code,
+      maxTemperatureC: max,
+      minTemperatureC: min,
+      sunrise: sunriseMs is int && sunriseMs >= 0
+          ? DateTime.fromMillisecondsSinceEpoch(sunriseMs)
+          : date,
+      sunset: sunsetMs is int && sunsetMs >= 0
+          ? DateTime.fromMillisecondsSinceEpoch(sunsetMs)
+          : date,
+    );
+  }
 }
 
 @immutable
@@ -89,6 +245,24 @@ class AirQuality {
 
   final double pm10;
   final double pm2_5;
+
+  Map<String, Object> toJson() => <String, Object>{
+    'pm10': pm10,
+    'pm2_5': pm2_5,
+  };
+
+  static AirQuality? fromJson(Object? raw) {
+    if (raw is! Map) {
+      return null;
+    }
+    final json = raw.cast<Object?, Object?>();
+    final pm10 = _finiteDouble(json['pm10']);
+    final pm25 = _finiteDouble(json['pm2_5']);
+    if (pm10 == null || pm25 == null) {
+      return null;
+    }
+    return AirQuality(pm10: pm10, pm2_5: pm25);
+  }
 }
 
 @immutable
@@ -123,6 +297,9 @@ class WeatherService {
   static final Uri _geoEndpoint = Uri.parse(
     'https://ipwho.is/?fields=success,latitude,longitude,city',
   );
+  static final Uri _geocodingEndpoint = Uri.parse(
+    'https://geocoding-api.open-meteo.com/v1/search',
+  );
   static final Uri _forecastEndpoint = Uri.parse(
     'https://api.open-meteo.com/v1/forecast',
   );
@@ -144,6 +321,57 @@ class WeatherService {
       return null;
     }
     return GeoLocation(latitude: latitude, longitude: longitude, city: city);
+  }
+
+  /// Resolves a free-text city query into up to five candidate locations via
+  /// the Open-Meteo geocoding API. Errors surface as an empty list: the
+  /// settings page treats a failed search as "no results", never as a crash.
+  Future<List<GeoLocation>> searchCities(String query) async {
+    final trimmed = query.trim();
+    if (trimmed.isEmpty || trimmed.length > 128) {
+      return const <GeoLocation>[];
+    }
+    final Uri uri;
+    try {
+      uri = _geocodingEndpoint.replace(
+        queryParameters: <String, String>{'name': trimmed, 'count': '5'},
+      );
+    } on ArgumentError {
+      return const <GeoLocation>[];
+    }
+    final Object? decoded;
+    try {
+      decoded = await _getJson(uri);
+    } on Object {
+      return const <GeoLocation>[];
+    }
+    if (decoded is! Map<String, dynamic>) {
+      return const <GeoLocation>[];
+    }
+    final results = decoded['results'];
+    if (results is! List) {
+      return const <GeoLocation>[];
+    }
+    final cities = <GeoLocation>[];
+    for (final result in results) {
+      if (result is! Map<String, dynamic>) {
+        continue;
+      }
+      final latitude = _finiteDouble(result['latitude']);
+      final longitude = _finiteDouble(result['longitude']);
+      final name = result['name'];
+      if (latitude == null || longitude == null || name is! String) {
+        continue;
+      }
+      final city = name.trim();
+      if (city.isEmpty) {
+        continue;
+      }
+      cities.add(
+        GeoLocation(latitude: latitude, longitude: longitude, city: city),
+      );
+    }
+    return List.unmodifiable(cities);
   }
 
   Future<WeatherSnapshot> fetch(GeoLocation location) async {
