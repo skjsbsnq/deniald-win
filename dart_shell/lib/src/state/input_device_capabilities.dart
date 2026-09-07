@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/input_device_capabilities.dart';
 import '../platform/denial_bridge.dart';
 import 'shell_controller.dart';
+import 'notifier_lifecycle.dart';
 
 class InputDeviceCapabilitiesState {
   const InputDeviceCapabilitiesState({
@@ -38,18 +39,18 @@ final inputDeviceCapabilitiesProvider =
     >(InputDeviceCapabilitiesController.new);
 
 class InputDeviceCapabilitiesController
-    extends Notifier<InputDeviceCapabilitiesState> {
+    extends Notifier<InputDeviceCapabilitiesState>
+    with NotifierLifecycle<InputDeviceCapabilitiesState> {
   late DenialBridge _bridge;
   StreamSubscription<DenialInputDeviceCapabilities>? _subscription;
-  var _generation = 0;
 
   @override
   InputDeviceCapabilitiesState build() {
     _bridge = ref.watch(denialBridgeProvider);
     unawaited(_subscription?.cancel());
-    final generation = ++_generation;
+    final generation = beginBuildGeneration();
     _subscription = _bridge.inputDeviceCapabilities.listen((capabilities) {
-      if (generation == _generation) {
+      if (isBuildGenerationActive(generation)) {
         state = state.copyWith(
           capabilities: capabilities,
           busy: false,
@@ -58,7 +59,6 @@ class InputDeviceCapabilitiesController
       }
     });
     ref.onDispose(() {
-      _generation += 1;
       unawaited(_subscription?.cancel());
       _subscription = null;
     });
@@ -91,7 +91,7 @@ class InputDeviceCapabilitiesController
   Future<void> _refresh(int generation) async {
     try {
       final capabilities = await _bridge.readInputDeviceCapabilities();
-      if (generation == _generation) {
+      if (isBuildGenerationActive(generation)) {
         state = state.copyWith(
           capabilities: capabilities,
           busy: false,
@@ -99,7 +99,7 @@ class InputDeviceCapabilitiesController
         );
       }
     } on Object catch (error) {
-      if (generation == _generation) {
+      if (isBuildGenerationActive(generation)) {
         state = state.copyWith(busy: false, error: error.toString());
       }
     }
@@ -109,7 +109,7 @@ class InputDeviceCapabilitiesController
     if (state.busy || requested.revision <= 0 || !requested.hasTouchpad) {
       return;
     }
-    final generation = _generation;
+    final generation = currentBuildGeneration;
     var fallback = state.capabilities;
     state = state.copyWith(
       capabilities: requested,
@@ -130,7 +130,7 @@ class InputDeviceCapabilitiesController
           ),
         );
       }
-      if (generation == _generation) {
+      if (isBuildGenerationActive(generation)) {
         state = state.copyWith(
           capabilities: applied,
           busy: false,
@@ -138,7 +138,7 @@ class InputDeviceCapabilitiesController
         );
       }
     } on Object catch (error) {
-      if (generation == _generation) {
+      if (isBuildGenerationActive(generation)) {
         state = state.copyWith(
           capabilities: fallback,
           busy: false,
@@ -152,7 +152,7 @@ class InputDeviceCapabilitiesController
     if (state.busy || requested.revision <= 0 || !requested.hasMouse) {
       return;
     }
-    final generation = _generation;
+    final generation = currentBuildGeneration;
     var fallback = state.capabilities;
     state = state.copyWith(
       capabilities: requested,
@@ -173,7 +173,7 @@ class InputDeviceCapabilitiesController
           ),
         );
       }
-      if (generation == _generation) {
+      if (isBuildGenerationActive(generation)) {
         state = state.copyWith(
           capabilities: applied,
           busy: false,
@@ -181,7 +181,7 @@ class InputDeviceCapabilitiesController
         );
       }
     } on Object catch (error) {
-      if (generation == _generation) {
+      if (isBuildGenerationActive(generation)) {
         state = state.copyWith(
           capabilities: fallback,
           busy: false,

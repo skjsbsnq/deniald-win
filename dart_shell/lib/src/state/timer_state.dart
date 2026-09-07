@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'notifier_lifecycle.dart';
+
 enum TimerMode { pomodoroFocus, pomodoroBreak, stopwatch }
 
 @immutable
@@ -55,23 +57,25 @@ class TimerToolState {
 
 final timerToolProvider = NotifierProvider<TimerToolController, TimerToolState>(
   TimerToolController.new,
-  isAutoDispose: true,
 );
 
 /// One shared 1 Hz ticker for the pomodoro countdown and the stopwatch.
 /// The tick advances the clock only while [running], and the pomodoro
 /// advances elapsed time toward [target] so the ring drains as work happens.
-class TimerToolController extends Notifier<TimerToolState> {
+///
+/// Deliberately not autoDispose: a countdown is expected to outlive the panel
+/// that started it. The last watcher unsubscribes whenever the dashboard
+/// closes, and autoDispose would cancel the ticker and silently drop the
+/// elapsed time. The ticker only runs while [running], so an idle timer costs
+/// nothing.
+class TimerToolController extends Notifier<TimerToolState>
+    with NotifierLifecycle<TimerToolState> {
   Timer? _timer;
-  int _generation = 0;
-  bool _disposed = false;
 
   @override
   TimerToolState build() {
-    _generation++;
-    _disposed = false;
+    beginBuildGeneration();
     ref.onDispose(() {
-      _disposed = true;
       _timer?.cancel();
       _timer = null;
     });
@@ -82,10 +86,10 @@ class TimerToolController extends Notifier<TimerToolState> {
     if (state.running) {
       return;
     }
-    final generation = _generation;
+    final generation = currentBuildGeneration;
     state = state.copyWith(running: true);
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (_disposed || generation != _generation) {
+      if (!isBuildGenerationActive(generation)) {
         return;
       }
       _tick();

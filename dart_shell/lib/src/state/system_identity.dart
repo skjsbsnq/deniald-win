@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../services/system_identity_service.dart';
+import 'notifier_lifecycle.dart';
 
 @immutable
 class SystemIdentityState {
@@ -26,25 +27,26 @@ final systemIdentityProvider =
       isAutoDispose: true,
     );
 
-class SystemIdentityController extends Notifier<SystemIdentityState> {
+class SystemIdentityController extends Notifier<SystemIdentityState>
+    with NotifierLifecycle<SystemIdentityState> {
   static const Duration _uptimeInterval = Duration(minutes: 1);
 
   Timer? _uptimeTimer;
-  int _generation = 0;
-  bool _disposed = false;
 
   @override
   SystemIdentityState build() {
-    _generation++;
-    _disposed = false;
+    // Bump the lifecycle generation first: without this call the generation
+    // below stays 0 forever and every isBuildGenerationActive check degrades
+    // to ref.mounted, which flips back to true after a rebuild — letting a
+    // stale in-flight load publish into the fresh build.
+    beginBuildGeneration();
     final service = ref.watch(systemIdentityServiceProvider);
-    final generation = _generation;
+    final generation = currentBuildGeneration;
     unawaited(_load(service, generation));
     _uptimeTimer = Timer.periodic(_uptimeInterval, (_) {
       unawaited(_refreshUptime(service, generation));
     });
     ref.onDispose(() {
-      _disposed = true;
       _uptimeTimer?.cancel();
       _uptimeTimer = null;
     });
@@ -57,7 +59,7 @@ class SystemIdentityController extends Notifier<SystemIdentityState> {
       service.readDistro(),
       service.resolveAvatarPath(),
     ]);
-    if (_isStale(generation)) {
+    if (!isBuildGenerationActive(generation)) {
       return;
     }
     state = SystemIdentityState(
@@ -72,7 +74,7 @@ class SystemIdentityController extends Notifier<SystemIdentityState> {
     int generation,
   ) async {
     final seconds = await service.readUptimeSeconds();
-    if (_isStale(generation) ||
+    if (!isBuildGenerationActive(generation) ||
         seconds == null ||
         seconds == state.uptimeSeconds) {
       return;
@@ -83,6 +85,4 @@ class SystemIdentityController extends Notifier<SystemIdentityState> {
       avatarPath: state.avatarPath,
     );
   }
-
-  bool _isStale(int generation) => _disposed || generation != _generation;
 }

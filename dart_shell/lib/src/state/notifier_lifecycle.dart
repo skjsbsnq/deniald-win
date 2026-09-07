@@ -28,6 +28,12 @@ mixin NotifierLifecycle<StateT> on Notifier<StateT> {
   bool isBuildGenerationActive(int generation) =>
       ref.mounted && _activeBuildGeneration == generation;
 
+  /// The generation of the most recent build. Methods that start async work
+  /// outside build() (explicit refreshes, user actions) capture this and
+  /// validate with [isBuildGenerationActive].
+  @protected
+  int get currentBuildGeneration => _activeBuildGeneration;
+
   @protected
   void cancelOnDispose<T>(StreamSubscription<T> subscription) {
     ref.onDispose(() => unawaited(subscription.cancel()));

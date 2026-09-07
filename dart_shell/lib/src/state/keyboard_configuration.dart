@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/keyboard_configuration.dart';
 import '../platform/denial_bridge.dart';
 import 'shell_controller.dart';
+import 'notifier_lifecycle.dart';
 
 class KeyboardConfigurationState {
   const KeyboardConfigurationState({
@@ -38,18 +39,18 @@ final keyboardConfigurationProvider =
     >(KeyboardConfigurationController.new);
 
 class KeyboardConfigurationController
-    extends Notifier<KeyboardConfigurationState> {
+    extends Notifier<KeyboardConfigurationState>
+    with NotifierLifecycle<KeyboardConfigurationState> {
   late DenialBridge _bridge;
   StreamSubscription<DenialKeyboardConfiguration>? _subscription;
-  int _generation = 0;
 
   @override
   KeyboardConfigurationState build() {
     _bridge = ref.watch(denialBridgeProvider);
     _subscription?.cancel();
-    final generation = ++_generation;
+    final generation = beginBuildGeneration();
     _subscription = _bridge.keyboardConfigurations.listen((configuration) {
-      if (generation == _generation) {
+      if (isBuildGenerationActive(generation)) {
         state = state.copyWith(
           configuration: configuration,
           busy: false,
@@ -58,7 +59,6 @@ class KeyboardConfigurationController
       }
     });
     ref.onDispose(() {
-      _generation += 1;
       unawaited(_subscription?.cancel());
       _subscription = null;
     });
@@ -67,10 +67,10 @@ class KeyboardConfigurationController
   }
 
   Future<void> refresh() async {
-    final generation = _generation;
+    final generation = currentBuildGeneration;
     try {
       final configuration = await _bridge.readKeyboardConfiguration();
-      if (generation == _generation) {
+      if (isBuildGenerationActive(generation)) {
         state = state.copyWith(
           configuration: configuration,
           busy: false,
@@ -78,7 +78,7 @@ class KeyboardConfigurationController
         );
       }
     } on Object catch (error) {
-      if (generation == _generation) {
+      if (isBuildGenerationActive(generation)) {
         state = state.copyWith(busy: false, error: error.toString());
       }
     }

@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../services/system_hardware_service.dart';
+import 'notifier_lifecycle.dart';
 
 @immutable
 class SystemExtendedStatus {
@@ -33,14 +34,13 @@ final systemExtendedStatusProvider =
       isAutoDispose: true,
     );
 
-class SystemExtendedStatusController extends Notifier<SystemExtendedStatus> {
+class SystemExtendedStatusController extends Notifier<SystemExtendedStatus>
+    with NotifierLifecycle<SystemExtendedStatus> {
   static const Duration _interval = Duration(seconds: 2);
   static const int _storageRefreshPeriod = 30;
 
   Timer? _timer;
-  int _generation = 0;
   int _samplingGeneration = 0;
-  bool _disposed = false;
   int _sampleCount = 0;
   int _nextStorageSample = 0;
   DateTime? _lastCounterTime;
@@ -48,21 +48,22 @@ class SystemExtendedStatusController extends Notifier<SystemExtendedStatus> {
 
   @override
   SystemExtendedStatus build() {
-    _generation++;
+    // Bump the lifecycle generation first: currentBuildGeneration below (and
+    // every isBuildGenerationActive check in _refresh) is meaningless without
+    // it — the accessor reads the same field this call increments.
+    beginBuildGeneration();
     _samplingGeneration++;
-    _disposed = false;
     _sampleCount = 0;
     _nextStorageSample = 0;
     _lastCounterTime = null;
     _lastCounters = null;
     final service = ref.watch(systemHardwareServiceProvider);
-    final generation = _generation;
+    final generation = currentBuildGeneration;
     scheduleMicrotask(() => unawaited(_refresh(service, generation)));
     _timer = Timer.periodic(_interval, (_) {
       unawaited(_refresh(service, generation));
     });
     ref.onDispose(() {
-      _disposed = true;
       _timer?.cancel();
       _timer = null;
       _samplingGeneration++;
@@ -80,7 +81,7 @@ class SystemExtendedStatusController extends Notifier<SystemExtendedStatus> {
       service.readNetworkCounters(),
       if (storageDue) service.readRootStorage(),
     ]);
-    if (_isStale(generation) || sample != _samplingGeneration) {
+    if (!isBuildGenerationActive(generation) || sample != _samplingGeneration) {
       return;
     }
     _sampleCount++;
@@ -129,8 +130,6 @@ class SystemExtendedStatusController extends Notifier<SystemExtendedStatus> {
       storage: effectiveStorage,
     );
   }
-
-  bool _isStale(int generation) => _disposed || generation != _generation;
 }
 
 /// Rolling network rate history for the dashboard sparkline, oldest first.

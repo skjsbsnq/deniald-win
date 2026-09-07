@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/output_configuration.dart';
 import '../platform/denial_bridge.dart';
 import 'shell_controller.dart';
+import 'notifier_lifecycle.dart';
 
 const _unsetPrimaryOutput = Object();
 
@@ -69,19 +70,18 @@ final outputConfigurationProvider =
       OutputConfigurationController.new,
     );
 
-class OutputConfigurationController extends Notifier<OutputConfigurationState> {
+class OutputConfigurationController extends Notifier<OutputConfigurationState>
+    with NotifierLifecycle<OutputConfigurationState> {
   static const _confirmationTimeoutMilliseconds = 10_000;
 
   late DenialBridge _bridge;
-  int _generation = 0;
 
   @override
   OutputConfigurationState build() {
     _bridge = ref.watch(denialBridgeProvider);
-    final generation = ++_generation;
-    ref.onDispose(() => _generation += 1);
+    final generation = beginBuildGeneration();
     scheduleMicrotask(() {
-      if (generation == _generation) {
+      if (isBuildGenerationActive(generation)) {
         unawaited(refresh());
       }
     });
@@ -89,11 +89,11 @@ class OutputConfigurationController extends Notifier<OutputConfigurationState> {
   }
 
   Future<void> refresh() async {
-    final generation = _generation;
+    final generation = currentBuildGeneration;
     state = state.copyWith(loading: true, clearError: true);
     try {
       final configuration = await _bridge.readOutputConfiguration();
-      if (generation != _generation) {
+      if (!isBuildGenerationActive(generation)) {
         return;
       }
       final outputs = List<DenialOutput>.unmodifiable(configuration.outputs);
@@ -108,7 +108,7 @@ class OutputConfigurationController extends Notifier<OutputConfigurationState> {
         selectedName: selected,
       );
     } on Object catch (error) {
-      if (generation == _generation) {
+      if (isBuildGenerationActive(generation)) {
         state = state.copyWith(
           loading: false,
           applying: false,
@@ -197,7 +197,7 @@ class OutputConfigurationController extends Notifier<OutputConfigurationState> {
         !state.dirty) {
       return false;
     }
-    final generation = _generation;
+    final generation = currentBuildGeneration;
     state = state.copyWith(applying: true, clearError: true);
     try {
       final applied = await _bridge.applyOutputConfiguration(
@@ -207,7 +207,7 @@ class OutputConfigurationController extends Notifier<OutputConfigurationState> {
         primaryOutput: state.draftPrimaryOutput,
         confirmationTimeoutMilliseconds: _confirmationTimeoutMilliseconds,
       );
-      if (generation != _generation) {
+      if (!isBuildGenerationActive(generation)) {
         return true;
       }
       state = OutputConfigurationState(
@@ -218,7 +218,7 @@ class OutputConfigurationController extends Notifier<OutputConfigurationState> {
       );
       return true;
     } on DenialOutputControlException catch (error) {
-      if (generation == _generation) {
+      if (isBuildGenerationActive(generation)) {
         state = state.copyWith(applying: false, error: error.message);
         if (error.code == 'stale_configuration') {
           unawaited(refresh());
@@ -226,7 +226,7 @@ class OutputConfigurationController extends Notifier<OutputConfigurationState> {
       }
       return false;
     } on Object catch (error) {
-      if (generation == _generation) {
+      if (isBuildGenerationActive(generation)) {
         state = state.copyWith(applying: false, error: error.toString());
       }
       return false;
@@ -242,7 +242,7 @@ class OutputConfigurationController extends Notifier<OutputConfigurationState> {
     if (confirmation == null || state.applying) {
       return false;
     }
-    final generation = _generation;
+    final generation = currentBuildGeneration;
     state = state.copyWith(applying: true, clearError: true);
     try {
       if (keep) {
@@ -250,17 +250,17 @@ class OutputConfigurationController extends Notifier<OutputConfigurationState> {
       } else {
         await _bridge.rollbackOutputConfiguration(confirmation.token);
       }
-      if (generation == _generation) {
+      if (isBuildGenerationActive(generation)) {
         await refresh();
       }
       return true;
     } on DenialOutputControlException catch (error) {
-      if (generation == _generation) {
+      if (isBuildGenerationActive(generation)) {
         state = state.copyWith(applying: false, error: error.message);
       }
       return false;
     } on Object catch (error) {
-      if (generation == _generation) {
+      if (isBuildGenerationActive(generation)) {
         state = state.copyWith(applying: false, error: error.toString());
       }
       return false;

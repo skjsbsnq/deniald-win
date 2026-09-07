@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/shortcut_configuration.dart';
 import '../platform/denial_bridge.dart';
 import 'shell_controller.dart';
+import 'notifier_lifecycle.dart';
 
 class ShortcutConfigurationState {
   const ShortcutConfigurationState({
@@ -51,23 +52,22 @@ final shortcutConfigurationProvider =
     >(ShortcutConfigurationController.new);
 
 class ShortcutConfigurationController
-    extends Notifier<ShortcutConfigurationState> {
+    extends Notifier<ShortcutConfigurationState>
+    with NotifierLifecycle<ShortcutConfigurationState> {
   late DenialBridge _bridge;
   StreamSubscription<DenialShortcutConfiguration>? _subscription;
-  int _generation = 0;
 
   @override
   ShortcutConfigurationState build() {
     _bridge = ref.watch(denialBridgeProvider);
     _subscription?.cancel();
-    final generation = ++_generation;
+    final generation = beginBuildGeneration();
     _subscription = _bridge.shortcutConfigurations.listen((configuration) {
-      if (generation == _generation) {
+      if (isBuildGenerationActive(generation)) {
         _applyConfiguration(configuration);
       }
     });
     ref.onDispose(() {
-      _generation += 1;
       unawaited(_subscription?.cancel());
       _subscription = null;
     });
@@ -76,17 +76,17 @@ class ShortcutConfigurationController
   }
 
   Future<void> refresh() async {
-    final generation = _generation;
+    final generation = currentBuildGeneration;
     if (state.configuration == null) {
       state = state.copyWith(loading: true, clearError: true);
     }
     try {
       final configuration = await _bridge.readShortcutConfiguration();
-      if (generation == _generation) {
+      if (isBuildGenerationActive(generation)) {
         _applyConfiguration(configuration);
       }
     } on Object catch (error) {
-      if (generation == _generation) {
+      if (isBuildGenerationActive(generation)) {
         state = state.copyWith(
           loading: false,
           error: error.toString(),
