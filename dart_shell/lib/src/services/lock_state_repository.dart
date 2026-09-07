@@ -63,11 +63,11 @@ class LockStateRepository {
           }
         },
         onError: (Object error) {
-          debugPrint('denia lock: file watch failed: $error');
+          debugPrint('denial lock: file watch failed: $error');
         },
       );
     } on FileSystemException catch (error) {
-      debugPrint('denia lock: file watch unavailable: $error');
+      debugPrint('denial lock: file watch unavailable: $error');
     }
   }
 
@@ -104,7 +104,7 @@ class LockStateRepository {
       if (error.osError?.errorCode == 2) {
         return false;
       }
-      debugPrint('denia lock: failed to read $path: $error');
+      debugPrint('denial lock: failed to read $path: $error');
       return false;
     }
   }
@@ -115,7 +115,7 @@ class LockStateRepository {
       await file.parent.create(recursive: true);
       await file.writeAsString(enabled ? '1\n' : '0\n', flush: true);
     } on FileSystemException catch (error) {
-      debugPrint('denia lock: failed to write $path: $error');
+      debugPrint('denial lock: failed to write $path: $error');
     }
   }
 

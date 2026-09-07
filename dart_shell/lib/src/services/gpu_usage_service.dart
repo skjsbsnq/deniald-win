@@ -59,9 +59,7 @@ class GpuUsageService {
     } else {
       final sleepingNvidiaGpus = _nvidiaRuntimeStatusFiles!.length;
       for (var index = 0; index < sleepingNvidiaGpus; index += 1) {
-        samples.add(
-          GpuSample(id: 'nvml$index', label: 'NV', usage: 0.0),
-        );
+        samples.add(GpuSample(id: 'nvml$index', label: 'NV', usage: 0.0));
       }
     }
     return disambiguateGpuLabels(samples);

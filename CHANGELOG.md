@@ -28,6 +28,30 @@ boundaries may change before 1.0.
   packages, OpenRC session integration, installation documentation, and a
   no-compile release-promotion path.
 
+<!-- The entries below manually decompose the bundled `wip(shell)` commit
+     5a9ce8f (2026-09-05) for release-note readability; history itself is
+     not rewritten. WIP commits are no longer accepted on main. -->
+
+- The desktop gained a ChromeOS-style bottom shelf: a unified frosted bar
+  with a launcher button, a running-and-pinned application strip with
+  spring-animated hover, press, and running indicators, and an aggregated
+  tray area with clock and battery capsules.
+- Applications can now be pinned to and unpinned from the shelf, with
+  per-application context menus (new window, cycle windows, close) built on
+  a new shared shell menu component.
+- The application launcher was reworked for the shelf layout, including
+  bubble-style positioning, keyboard navigation, and cached filtering.
+- Quick settings gained the expressive tile grid and pill sliders
+  (brightness and volume) now shared across surfaces, with wheel and
+  trackpad-relative gestures.
+- Notification cards and the notification center were restyled for the
+  ChromeOS surfaces, with revised action controls and media artwork.
+- The desktop system bar reorganized its media and status content to host
+  the shelf layout, and the system-level HUD moved to the shared motion
+  language.
+- Shell chrome (launcher, shelf, notification card, overview window card)
+  is now covered by golden image tests.
+
 ### Changed
 
 - Clipboard history now provides searchable text, image and file cards, drag-to-drop actions, privacy states, and accessible controls.
