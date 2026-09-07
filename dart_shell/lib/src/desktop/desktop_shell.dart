@@ -869,6 +869,7 @@ class _DesktopShellState extends ConsumerState<DesktopShell> {
             onLaunchLocalApp: _launchLocalApp,
             onActivateWindow: _activateWindow,
             onOverviewBarrierTap: _handleOverviewBarrierTap,
+            onToggleOverview: () => _toggleOverview(null),
             onBeginOverviewDrag: _beginOverviewDrag,
             onUpdateOverviewDrag: _updateOverviewDrag,
             onEndOverviewDrag: _endOverviewDrag,

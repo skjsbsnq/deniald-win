@@ -209,7 +209,10 @@ class _DesktopPanelOverlayState extends ConsumerState<_DesktopPanelOverlay> {
                     child: _cachedApplicationLauncher(),
                   ),
           ),
-        if (!dashboardRect.isEmpty)
+        // In the ChromeOS shelf layout the unified dashboard panel owns this
+        // role; the legacy dashboard must neither render nor open, so its
+        // surface and edge trigger stay unmounted entirely.
+        if (!useChromeOsShelf && !dashboardRect.isEmpty)
           Positioned.fromRect(
             key: const ValueKey<String>('desktop-dashboard-position'),
             rect: dashboardRect,
@@ -242,7 +245,9 @@ class _DesktopPanelOverlayState extends ConsumerState<_DesktopPanelOverlay> {
               ),
             ),
           ),
-        if (!panelState.overviewActive && !dashboardTriggerRect.isEmpty)
+        if (!useChromeOsShelf &&
+            !panelState.overviewActive &&
+            !dashboardTriggerRect.isEmpty)
           Positioned.fromRect(
             rect: dashboardTriggerRect,
             child: ShellInputRegion(

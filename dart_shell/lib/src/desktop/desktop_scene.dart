@@ -463,6 +463,7 @@ class _DesktopScene extends ConsumerStatefulWidget {
     required this.onLaunchLocalApp,
     required this.onActivateWindow,
     required this.onOverviewBarrierTap,
+    required this.onToggleOverview,
     required this.onBeginOverviewDrag,
     required this.onUpdateOverviewDrag,
     required this.onEndOverviewDrag,
@@ -499,6 +500,7 @@ class _DesktopScene extends ConsumerStatefulWidget {
   final ValueChanged<LocalFlutterApplication> onLaunchLocalApp;
   final ValueChanged<DenialWindow> onActivateWindow;
   final ValueChanged<Offset> onOverviewBarrierTap;
+  final VoidCallback onToggleOverview;
   final ValueChanged<DenialWindow> onBeginOverviewDrag;
   final void Function(DenialWindow window, Offset delta) onUpdateOverviewDrag;
   final ValueChanged<DenialWindow> onEndOverviewDrag;
@@ -1045,7 +1047,9 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
                             debugLabel: 'Unified tray bubble',
                             active: trayVisible,
                             pointerPolicy: ShellPointerPolicy.fullScene,
-                            keyboardPolicy: ShellKeyboardPolicy.none,
+                            keyboardPolicy: trayVisible
+                                ? ShellKeyboardPolicy.capture
+                                : ShellKeyboardPolicy.none,
                             child: IgnorePointer(
                               ignoring: !shelfTrayExpanded,
                               child: UnifiedTrayBubble(
@@ -1055,6 +1059,10 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
                                 visible: trayVisible,
                                 onDismiss: () =>
                                     _shelfTrayExpanded.value = false,
+                                onOpenOverview: () {
+                                  _shelfTrayExpanded.value = false;
+                                  widget.onToggleOverview();
+                                },
                                 shelfHeight: visibleSystemBars.isNotEmpty
                                     ? visibleSystemBars.first.rect.height
                                     : 56.0,
@@ -1075,7 +1083,9 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
                             debugLabel: 'Unified dashboard panel',
                             active: dashboardVisible,
                             pointerPolicy: ShellPointerPolicy.fullScene,
-                            keyboardPolicy: ShellKeyboardPolicy.none,
+                            keyboardPolicy: dashboardVisible
+                                ? ShellKeyboardPolicy.capture
+                                : ShellKeyboardPolicy.none,
                             child: IgnorePointer(
                               ignoring: !shelfDashboardExpanded,
                               child: UnifiedDashboardPanel(

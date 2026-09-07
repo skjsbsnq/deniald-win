@@ -59,7 +59,10 @@ class _DesktopPanelTransitionState extends State<DesktopPanelTransition>
     );
     _progress = CurvedAnimation(
       parent: _controller,
-      curve: Curves.linear,
+      // Emphasized deceleration on entry and acceleration on exit: the panel
+      // arrives fast and brakes into place, then leaves quicker than it
+      // arrived, matching the MD3 convention that exiting stays snappier.
+      curve: Motion.md3EmphasizedDecelerate,
       reverseCurve: Motion.md3EmphasizedAccelerate,
     );
   }
