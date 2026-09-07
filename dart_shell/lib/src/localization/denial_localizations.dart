@@ -148,6 +148,20 @@ String localizedWeekday(AppLocalizations l10n, int weekday) =>
       _ => l10n.weekdayMonday,
     };
 
+/// Compact weekday marker for dense chrome (calendar headers, forecast rows):
+/// one CJK glyph per locale that provides them, two letters otherwise.
+String localizedWeekdaySymbol(AppLocalizations l10n, int weekday) =>
+    switch (weekday) {
+      DateTime.monday => l10n.weekdayShortMonday,
+      DateTime.tuesday => l10n.weekdayShortTuesday,
+      DateTime.wednesday => l10n.weekdayShortWednesday,
+      DateTime.thursday => l10n.weekdayShortThursday,
+      DateTime.friday => l10n.weekdayShortFriday,
+      DateTime.saturday => l10n.weekdayShortSaturday,
+      DateTime.sunday => l10n.weekdayShortSunday,
+      _ => l10n.weekdayShortMonday,
+    };
+
 String localizedMonth(AppLocalizations l10n, int month) => switch (month) {
   DateTime.january => l10n.monthJanuary,
   DateTime.february => l10n.monthFebruary,

@@ -2516,8 +2516,12 @@
   "@settingsDisplayPosition": {
     "description": "Logical position of one monitor in the desktop layout.",
     "placeholders": {
-      "x": { "type": "int" },
-      "y": { "type": "int" }
+      "x": {
+        "type": "int"
+      },
+      "y": {
+        "type": "int"
+      }
     }
   },
   "settingsDisplayPrimary": "Primary display",
@@ -2584,7 +2588,9 @@
   "@settingsDisplayZoomLevel": {
     "description": "Accessibility label for the current monitor canvas zoom.",
     "placeholders": {
-      "percent": { "type": "int" }
+      "percent": {
+        "type": "int"
+      }
     }
   },
   "settingsDisplayZoomOut": "Zoom out",
@@ -2603,7 +2609,9 @@
   "@settingsMonitorSemantics": {
     "description": "Accessibility label for one monitor tile.",
     "placeholders": {
-      "name": { "type": "String" }
+      "name": {
+        "type": "String"
+      }
     }
   },
   "settingsEdgeDistance": "Edge distance",
@@ -4797,5 +4805,562 @@
   "settingsFontsAndIconsRestartNotice": "Takes effect after the shell restarts.",
   "@settingsFontsAndIconsRestartNotice": {
     "description": "Notice that font and icon changes apply after a restart."
-  }
+  },
+  "weatherLoadingLocating": "Locating…",
+  "@weatherLoadingLocating": {
+    "description": "Loading state while IP location discovery runs."
+  },
+  "weatherLoadingData": "Loading weather…",
+  "@weatherLoadingData": {
+    "description": "Loading state while the weather payload downloads."
+  },
+  "weatherErrorLoadFailed": "Failed to load weather",
+  "@weatherErrorLoadFailed": {
+    "description": "Error title when the weather payload cannot be loaded."
+  },
+  "weatherErrorLocationUnavailable": "Couldn't determine this device's location",
+  "@weatherErrorLocationUnavailable": {
+    "description": "Error title when automatic location discovery fails; offers manual city selection."
+  },
+  "weatherRetry": "Retry",
+  "@weatherRetry": {
+    "description": "Retry button on the weather error pane."
+  },
+  "weatherChooseCity": "Choose a city",
+  "@weatherChooseCity": {
+    "description": "Escape-hatch button that opens weather settings to pick a manual city."
+  },
+  "weatherUpdated": "Updated {time}",
+  "@weatherUpdated": {
+    "description": "Caption showing when the shown snapshot was fetched.",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "weatherCachedDataNotice": "Refresh failed · cached data",
+  "@weatherCachedDataNotice": {
+    "description": "Inline notice that a refresh failed and cached data is shown."
+  },
+  "weatherSectionHourly": "Hourly",
+  "@weatherSectionHourly": {
+    "description": "Section heading above the hourly forecast strip."
+  },
+  "weatherSectionDaily": "Next 7 days",
+  "@weatherSectionDaily": {
+    "description": "Section heading above the seven-day forecast list."
+  },
+  "quickSettingsTitle": "Quick Settings",
+  "@quickSettingsTitle": {
+    "description": "Title of the unified tray quick-settings bubble."
+  },
+  "quickSettingsAppsActive": "{count} active apps",
+  "@quickSettingsAppsActive": {
+    "description": "Chip caption counting running applications in the tray bubble.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "quickSettingsScreenshot": "Screenshot",
+  "@quickSettingsScreenshot": {
+    "description": "Quick-settings tile that triggers a screenshot."
+  },
+  "networkStatusConnectedTo": "Connected: {ssid}",
+  "@networkStatusConnectedTo": {
+    "description": "Tray chip caption naming the connected Wi-Fi network.",
+    "placeholders": {
+      "ssid": {
+        "type": "String"
+      }
+    }
+  },
+  "networkStatusSecured": "This device is connected",
+  "@networkStatusSecured": {
+    "description": "Tray chip caption when connectivity is established."
+  },
+  "networkStatusDisconnected": "Disconnected",
+  "@networkStatusDisconnected": {
+    "description": "Tray chip caption when no network is connected."
+  },
+  "notificationsShowAll": "Show all ({count})",
+  "@notificationsShowAll": {
+    "description": "Expands a capped notification group to every record.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "weatherMetricHumidity": "Humidity",
+  "@weatherMetricHumidity": {
+    "description": "Weather metric card label."
+  },
+  "weatherMetricWind": "Wind",
+  "@weatherMetricWind": {
+    "description": "Weather metric card label."
+  },
+  "weatherMetricAirQuality": "Air quality",
+  "@weatherMetricAirQuality": {
+    "description": "Weather metric card label."
+  },
+  "weatherMetricPressureVisibility": "Pressure & visibility",
+  "@weatherMetricPressureVisibility": {
+    "description": "Weather metric card label."
+  },
+  "weatherMetricSunCycle": "Sunrise & sunset",
+  "@weatherMetricSunCycle": {
+    "description": "Weather metric card label."
+  },
+  "weatherMetricUnavailable": "Unavailable",
+  "@weatherMetricUnavailable": {
+    "description": "Placeholder when a weather metric has no data."
+  },
+  "weatherMetricPressure": "Pressure",
+  "@weatherMetricPressure": {
+    "description": "Weather metric row label."
+  },
+  "weatherMetricVisibility": "Visibility",
+  "@weatherMetricVisibility": {
+    "description": "Weather metric row label."
+  },
+  "weatherMetricSunrise": "Sunrise",
+  "@weatherMetricSunrise": {
+    "description": "Weather metric row label."
+  },
+  "weatherMetricSunset": "Sunset",
+  "@weatherMetricSunset": {
+    "description": "Weather metric row label."
+  },
+  "weatherWindDetails": "{force} · {speed} m/s",
+  "@weatherWindDetails": {
+    "description": "Wind pane detail line.",
+    "placeholders": {
+      "force": {
+        "type": "int"
+      },
+      "speed": {
+        "type": "String"
+      }
+    }
+  },
+  "windDirectionNorth": "N",
+  "@windDirectionNorth": {
+    "description": "Compass sector."
+  },
+  "windDirectionNorthEast": "NE",
+  "@windDirectionNorthEast": {
+    "description": "Compass sector."
+  },
+  "windDirectionEast": "E",
+  "@windDirectionEast": {
+    "description": "Compass sector."
+  },
+  "windDirectionSouthEast": "SE",
+  "@windDirectionSouthEast": {
+    "description": "Compass sector."
+  },
+  "windDirectionSouth": "S",
+  "@windDirectionSouth": {
+    "description": "Compass sector."
+  },
+  "windDirectionSouthWest": "SW",
+  "@windDirectionSouthWest": {
+    "description": "Compass sector."
+  },
+  "windDirectionWest": "W",
+  "@windDirectionWest": {
+    "description": "Compass sector."
+  },
+  "windDirectionNorthWest": "NW",
+  "@windDirectionNorthWest": {
+    "description": "Compass sector."
+  },
+  "weatherUvLow": "Low",
+  "@weatherUvLow": {
+    "description": "UV rating band."
+  },
+  "weatherUvModerate": "Moderate",
+  "@weatherUvModerate": {
+    "description": "UV rating band."
+  },
+  "weatherUvHigh": "High",
+  "@weatherUvHigh": {
+    "description": "UV rating band."
+  },
+  "weatherUvExtreme": "Extreme",
+  "@weatherUvExtreme": {
+    "description": "UV rating band."
+  },
+  "weatherAqiGood": "Good",
+  "@weatherAqiGood": {
+    "description": "Air-quality rating band."
+  },
+  "weatherAqiModerate": "Moderate",
+  "@weatherAqiModerate": {
+    "description": "Air-quality rating band."
+  },
+  "weatherAqiLightPollution": "Light pollution",
+  "@weatherAqiLightPollution": {
+    "description": "Air-quality rating band."
+  },
+  "weatherAqiUnhealthy": "Unhealthy",
+  "@weatherAqiUnhealthy": {
+    "description": "Air-quality rating band."
+  },
+  "weatherAqiVeryUnhealthy": "Very unhealthy",
+  "@weatherAqiVeryUnhealthy": {
+    "description": "Air-quality rating band."
+  },
+  "weatherAqiHazardous": "Hazardous",
+  "@weatherAqiHazardous": {
+    "description": "Air-quality rating band."
+  },
+  "weatherConditionClear": "Clear",
+  "@weatherConditionClear": {
+    "description": "WMO weather condition."
+  },
+  "weatherConditionMostlyClear": "Mostly clear",
+  "@weatherConditionMostlyClear": {
+    "description": "WMO weather condition."
+  },
+  "weatherConditionPartlyCloudy": "Partly cloudy",
+  "@weatherConditionPartlyCloudy": {
+    "description": "WMO weather condition."
+  },
+  "weatherConditionOvercast": "Overcast",
+  "@weatherConditionOvercast": {
+    "description": "WMO weather condition."
+  },
+  "weatherConditionFog": "Fog",
+  "@weatherConditionFog": {
+    "description": "WMO weather condition."
+  },
+  "weatherConditionDrizzle": "Drizzle",
+  "@weatherConditionDrizzle": {
+    "description": "WMO weather condition."
+  },
+  "weatherConditionLightRain": "Light rain",
+  "@weatherConditionLightRain": {
+    "description": "WMO weather condition."
+  },
+  "weatherConditionRain": "Rain",
+  "@weatherConditionRain": {
+    "description": "WMO weather condition."
+  },
+  "weatherConditionHeavyRain": "Heavy rain",
+  "@weatherConditionHeavyRain": {
+    "description": "WMO weather condition."
+  },
+  "weatherConditionFreezingRain": "Freezing rain",
+  "@weatherConditionFreezingRain": {
+    "description": "WMO weather condition."
+  },
+  "weatherConditionLightSnow": "Light snow",
+  "@weatherConditionLightSnow": {
+    "description": "WMO weather condition."
+  },
+  "weatherConditionSnow": "Snow",
+  "@weatherConditionSnow": {
+    "description": "WMO weather condition."
+  },
+  "weatherConditionHeavySnow": "Heavy snow",
+  "@weatherConditionHeavySnow": {
+    "description": "WMO weather condition."
+  },
+  "weatherConditionSnowGrains": "Snow grains",
+  "@weatherConditionSnowGrains": {
+    "description": "WMO weather condition."
+  },
+  "weatherConditionShowers": "Showers",
+  "@weatherConditionShowers": {
+    "description": "WMO weather condition."
+  },
+  "weatherConditionSnowShowers": "Snow showers",
+  "@weatherConditionSnowShowers": {
+    "description": "WMO weather condition."
+  },
+  "weatherConditionThunderstorm": "Thunderstorm",
+  "@weatherConditionThunderstorm": {
+    "description": "WMO weather condition."
+  },
+  "weatherFeelsLike": "Feels like {temperature}",
+  "@weatherFeelsLike": {
+    "description": "Apparent temperature caption.",
+    "placeholders": {
+      "temperature": {
+        "type": "String"
+      }
+    }
+  },
+  "weatherHourLabel": "{hour}:00",
+  "@weatherHourLabel": {
+    "description": "Hourly strip time label.",
+    "placeholders": {
+      "hour": {
+        "type": "String"
+      }
+    }
+  },
+  "weatherToday": "Today",
+  "@weatherToday": {
+    "description": "Forecast row label."
+  },
+  "weatherTomorrow": "Tomorrow",
+  "@weatherTomorrow": {
+    "description": "Forecast row label."
+  },
+  "weekdayShortMonday": "Mo",
+  "@weekdayShortMonday": {
+    "description": "Compact weekday symbol."
+  },
+  "weekdayShortTuesday": "Tu",
+  "@weekdayShortTuesday": {
+    "description": "Compact weekday symbol."
+  },
+  "weekdayShortWednesday": "We",
+  "@weekdayShortWednesday": {
+    "description": "Compact weekday symbol."
+  },
+  "weekdayShortThursday": "Th",
+  "@weekdayShortThursday": {
+    "description": "Compact weekday symbol."
+  },
+  "weekdayShortFriday": "Fr",
+  "@weekdayShortFriday": {
+    "description": "Compact weekday symbol."
+  },
+  "weekdayShortSaturday": "Sa",
+  "@weekdayShortSaturday": {
+    "description": "Compact weekday symbol."
+  },
+  "weekdayShortSunday": "Su",
+  "@weekdayShortSunday": {
+    "description": "Compact weekday symbol."
+  },
+  "systemCoresLabel": "{count} cores",
+  "@systemCoresLabel": {
+    "description": "CPU detail chip.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "systemMemory": "Memory",
+  "@systemMemory": {
+    "description": "System card label."
+  },
+  "systemNetwork": "Network",
+  "@systemNetwork": {
+    "description": "System card label."
+  },
+  "systemStorage": "Storage",
+  "@systemStorage": {
+    "description": "System card label."
+  },
+  "systemBattery": "Battery",
+  "@systemBattery": {
+    "description": "System card label."
+  },
+  "systemBatteryUnavailable": "No battery",
+  "@systemBatteryUnavailable": {
+    "description": "Battery card without a battery."
+  },
+  "systemDataUnavailable": "Unavailable",
+  "@systemDataUnavailable": {
+    "description": "Placeholder without data."
+  },
+  "systemStatusUnavailable": "Unavailable",
+  "@systemStatusUnavailable": {
+    "description": "Battery status line."
+  },
+  "batteryFull": "Full",
+  "@batteryFull": {
+    "description": "Battery status."
+  },
+  "batteryOnAcPower": "On AC power",
+  "@batteryOnAcPower": {
+    "description": "Battery status."
+  },
+  "batteryOnBattery": "On battery",
+  "@batteryOnBattery": {
+    "description": "Battery status."
+  },
+  "timerPomodoro": "Pomodoro",
+  "@timerPomodoro": {
+    "description": "Timer tool tab."
+  },
+  "timerStopwatch": "Stopwatch",
+  "@timerStopwatch": {
+    "description": "Timer tool tab."
+  },
+  "timerFocus25": "Focus 25m",
+  "@timerFocus25": {
+    "description": "Pomodoro preset."
+  },
+  "timerBreak5": "Break 5m",
+  "@timerBreak5": {
+    "description": "Pomodoro preset."
+  },
+  "timerBreakLabel": "Break",
+  "@timerBreakLabel": {
+    "description": "Timer status caption."
+  },
+  "timerFocusLabel": "Focus",
+  "@timerFocusLabel": {
+    "description": "Timer status caption."
+  },
+  "timerNoLaps": "No laps yet",
+  "@timerNoLaps": {
+    "description": "Stopwatch lap list placeholder."
+  },
+  "timerLapNumber": "Lap {number}",
+  "@timerLapNumber": {
+    "description": "Stopwatch lap row.",
+    "placeholders": {
+      "number": {
+        "type": "int"
+      }
+    }
+  },
+  "todoOpenCount": "Open {count}",
+  "@todoOpenCount": {
+    "description": "Todo tab label.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "todoDoneCount": "Done {count}",
+  "@todoDoneCount": {
+    "description": "Todo tab label.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "todoAddHint": "Add a task…",
+  "@todoAddHint": {
+    "description": "Todo quick-add hint."
+  },
+  "todoNothingCompleted": "Nothing completed yet",
+  "@todoNothingCompleted": {
+    "description": "Todo completed tab placeholder."
+  },
+  "todoAllCaughtUp": "All caught up!",
+  "@todoAllCaughtUp": {
+    "description": "Todo open tab placeholder."
+  },
+  "todoClearCompleted": "Clear completed",
+  "@todoClearCompleted": {
+    "description": "Todo completed tab action."
+  },
+  "dashboardTabInfo": "Info",
+  "@dashboardTabInfo": {
+    "description": "Dashboard tab label."
+  },
+  "dashboardTabSystem": "System",
+  "@dashboardTabSystem": {
+    "description": "Dashboard tab label."
+  },
+  "dashboardTabWeather": "Weather",
+  "@dashboardTabWeather": {
+    "description": "Dashboard tab label."
+  },
+  "notificationsGroupCount": "{count} notifications",
+  "@notificationsGroupCount": {
+    "description": "Notification group count.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "notificationsOneNotification": "1 notification",
+  "@notificationsOneNotification": {
+    "description": "Notification group count singular."
+  },
+  "notificationsDndShort": "DND",
+  "@notificationsDndShort": {
+    "description": "Do-not-disturb capsule short label."
+  },
+  "infoDrawerDateLabel": "{date} · {todos} todos",
+  "@infoDrawerDateLabel": {
+    "description": "Tool drawer collapsed date capsule.",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      },
+      "todos": {
+        "type": "int"
+      }
+    }
+  },
+  "uptimeDaysHours": "Up · {days}d {hours}h",
+  "@uptimeDaysHours": {
+    "description": "System uptime badge.",
+    "placeholders": {
+      "days": {
+        "type": "int"
+      },
+      "hours": {
+        "type": "int"
+      }
+    }
+  },
+  "uptimeHoursMinutes": "Up · {hours}h {minutes}m",
+  "@uptimeHoursMinutes": {
+    "description": "System uptime badge.",
+    "placeholders": {
+      "hours": {
+        "type": "int"
+      },
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "uptimeMinutes": "Up · {minutes}m",
+  "@uptimeMinutes": {
+    "description": "System uptime badge.",
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "commonToday": "Today",
+  "@commonToday": {
+    "description": "Jump-to-today chip."
+  },
+  "systemStorageFree": "{size} free",
+  "@systemStorageFree": {
+    "description": "Storage card free-space caption.",
+    "placeholders": {
+      "size": {
+        "type": "String"
+      }
+    }
+  },
+  "shelfNewWindow": "New window",
+  "@shelfNewWindow": {"description": "Context menu entry to open a new window of a shelf app."},
+  "shelfCycleWindows": "Cycle windows",
+  "@shelfCycleWindows": {"description": "Context menu entry to cycle through an app's windows."},
+  "shelfOpenApp": "Open",
+  "@shelfOpenApp": {"description": "Context menu entry to launch a pinned app with no windows."},
+  "shelfPinToShelf": "Pin to shelf",
+  "@shelfPinToShelf": {"description": "Context menu entry to pin an app to the shelf."},
+  "shelfUnpinFromShelf": "Unpin from shelf",
+  "@shelfUnpinFromShelf": {"description": "Context menu entry to unpin an app from the shelf."},
+  "shelfClose": "Close",
+  "@shelfClose": {"description": "Context menu entry to close the app's single window."},
+  "shelfCloseAllWindows": "Close all windows",
+  "@shelfCloseAllWindows": {"description": "Context menu entry to close every window of the app."},
+  "weatherMetricUv": "UV",
+  "@weatherMetricUv": {"description": "Label for the UV index metric card."}
 }

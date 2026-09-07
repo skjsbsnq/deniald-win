@@ -3367,4 +3367,395 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsFontsAndIconsRestartNotice => '重启 shell 后生效。';
+
+  @override
+  String get weatherLoadingLocating => '正在定位…';
+
+  @override
+  String get weatherLoadingData => '正在加载天气…';
+
+  @override
+  String get weatherErrorLoadFailed => '天气数据加载失败';
+
+  @override
+  String get weatherErrorLocationUnavailable => '无法确定设备位置';
+
+  @override
+  String get weatherRetry => '重试';
+
+  @override
+  String get weatherChooseCity => '选择城市';
+
+  @override
+  String weatherUpdated(String time) {
+    return '$time 更新';
+  }
+
+  @override
+  String get weatherCachedDataNotice => '刷新失败,显示缓存数据';
+
+  @override
+  String get weatherSectionHourly => '逐小时';
+
+  @override
+  String get weatherSectionDaily => '未来 7 天';
+
+  @override
+  String get quickSettingsTitle => '操作面板';
+
+  @override
+  String quickSettingsAppsActive(int count) {
+    return '$count 个活动应用';
+  }
+
+  @override
+  String get quickSettingsScreenshot => '截图';
+
+  @override
+  String networkStatusConnectedTo(String ssid) {
+    return '已连接:$ssid';
+  }
+
+  @override
+  String get networkStatusSecured => '网络已安全连接';
+
+  @override
+  String get networkStatusDisconnected => '网络未连接';
+
+  @override
+  String notificationsShowAll(int count) {
+    return '显示全部($count)';
+  }
+
+  @override
+  String get weatherMetricHumidity => '湿度';
+
+  @override
+  String get weatherMetricWind => '风速风向';
+
+  @override
+  String get weatherMetricAirQuality => '空气质量';
+
+  @override
+  String get weatherMetricPressureVisibility => '气压与能见度';
+
+  @override
+  String get weatherMetricSunCycle => '日出与日落';
+
+  @override
+  String get weatherMetricUnavailable => '暂无数据';
+
+  @override
+  String get weatherMetricPressure => '气压';
+
+  @override
+  String get weatherMetricVisibility => '能见度';
+
+  @override
+  String get weatherMetricSunrise => '日出';
+
+  @override
+  String get weatherMetricSunset => '日落';
+
+  @override
+  String weatherWindDetails(int force, String speed) {
+    return '$force 级 · $speed m/s';
+  }
+
+  @override
+  String get windDirectionNorth => '北风';
+
+  @override
+  String get windDirectionNorthEast => '东北风';
+
+  @override
+  String get windDirectionEast => '东风';
+
+  @override
+  String get windDirectionSouthEast => '东南风';
+
+  @override
+  String get windDirectionSouth => '南风';
+
+  @override
+  String get windDirectionSouthWest => '西南风';
+
+  @override
+  String get windDirectionWest => '西风';
+
+  @override
+  String get windDirectionNorthWest => '西北风';
+
+  @override
+  String get weatherUvLow => '低';
+
+  @override
+  String get weatherUvModerate => '中';
+
+  @override
+  String get weatherUvHigh => '高';
+
+  @override
+  String get weatherUvExtreme => '极高';
+
+  @override
+  String get weatherAqiGood => '优';
+
+  @override
+  String get weatherAqiModerate => '良';
+
+  @override
+  String get weatherAqiLightPollution => '轻度污染';
+
+  @override
+  String get weatherAqiUnhealthy => '中度污染';
+
+  @override
+  String get weatherAqiVeryUnhealthy => '重度污染';
+
+  @override
+  String get weatherAqiHazardous => '严重污染';
+
+  @override
+  String get weatherConditionClear => '晴';
+
+  @override
+  String get weatherConditionMostlyClear => '晴间多云';
+
+  @override
+  String get weatherConditionPartlyCloudy => '多云';
+
+  @override
+  String get weatherConditionOvercast => '阴';
+
+  @override
+  String get weatherConditionFog => '雾';
+
+  @override
+  String get weatherConditionDrizzle => '毛毛雨';
+
+  @override
+  String get weatherConditionLightRain => '小雨';
+
+  @override
+  String get weatherConditionRain => '中雨';
+
+  @override
+  String get weatherConditionHeavyRain => '大雨';
+
+  @override
+  String get weatherConditionFreezingRain => '冻雨';
+
+  @override
+  String get weatherConditionLightSnow => '小雪';
+
+  @override
+  String get weatherConditionSnow => '雪';
+
+  @override
+  String get weatherConditionHeavySnow => '大雪';
+
+  @override
+  String get weatherConditionSnowGrains => '雪粒';
+
+  @override
+  String get weatherConditionShowers => '阵雨';
+
+  @override
+  String get weatherConditionSnowShowers => '阵雪';
+
+  @override
+  String get weatherConditionThunderstorm => '雷雨';
+
+  @override
+  String weatherFeelsLike(String temperature) {
+    return '体感 $temperature';
+  }
+
+  @override
+  String weatherHourLabel(String hour) {
+    return '$hour时';
+  }
+
+  @override
+  String get weatherToday => '今天';
+
+  @override
+  String get weatherTomorrow => '明天';
+
+  @override
+  String get weekdayShortMonday => '一';
+
+  @override
+  String get weekdayShortTuesday => '二';
+
+  @override
+  String get weekdayShortWednesday => '三';
+
+  @override
+  String get weekdayShortThursday => '四';
+
+  @override
+  String get weekdayShortFriday => '五';
+
+  @override
+  String get weekdayShortSaturday => '六';
+
+  @override
+  String get weekdayShortSunday => '日';
+
+  @override
+  String systemCoresLabel(int count) {
+    return '$count 核';
+  }
+
+  @override
+  String get systemMemory => '内存';
+
+  @override
+  String get systemNetwork => '网络';
+
+  @override
+  String get systemStorage => '存储';
+
+  @override
+  String get systemBattery => '电池';
+
+  @override
+  String get systemBatteryUnavailable => '电池不可用';
+
+  @override
+  String get systemDataUnavailable => '暂无数据';
+
+  @override
+  String get systemStatusUnavailable => '不可用';
+
+  @override
+  String get batteryFull => '已充满';
+
+  @override
+  String get batteryOnAcPower => '交流供电';
+
+  @override
+  String get batteryOnBattery => '使用电池';
+
+  @override
+  String get timerPomodoro => '番茄钟';
+
+  @override
+  String get timerStopwatch => '秒表';
+
+  @override
+  String get timerFocus25 => '专注 25 分';
+
+  @override
+  String get timerBreak5 => '休息 5 分';
+
+  @override
+  String get timerBreakLabel => '休息一下';
+
+  @override
+  String get timerFocusLabel => '保持专注';
+
+  @override
+  String get timerNoLaps => '暂无分圈记录';
+
+  @override
+  String timerLapNumber(int number) {
+    return '第 $number 圈';
+  }
+
+  @override
+  String todoOpenCount(int count) {
+    return '未完成 $count';
+  }
+
+  @override
+  String todoDoneCount(int count) {
+    return '已完成 $count';
+  }
+
+  @override
+  String get todoAddHint => '添加待办…';
+
+  @override
+  String get todoNothingCompleted => '暂无已完成';
+
+  @override
+  String get todoAllCaughtUp => '全部完成!';
+
+  @override
+  String get todoClearCompleted => '清除已完成';
+
+  @override
+  String get dashboardTabInfo => '信息';
+
+  @override
+  String get dashboardTabSystem => '系统';
+
+  @override
+  String get dashboardTabWeather => '天气';
+
+  @override
+  String notificationsGroupCount(int count) {
+    return '$count 条通知';
+  }
+
+  @override
+  String get notificationsOneNotification => '1 条通知';
+
+  @override
+  String get notificationsDndShort => '勿扰';
+
+  @override
+  String infoDrawerDateLabel(String date, int todos) {
+    return '$date · $todos 项待办';
+  }
+
+  @override
+  String uptimeDaysHours(int days, int hours) {
+    return '已运行 $days 天 $hours 小时';
+  }
+
+  @override
+  String uptimeHoursMinutes(int hours, int minutes) {
+    return '已运行 $hours 小时 $minutes 分钟';
+  }
+
+  @override
+  String uptimeMinutes(int minutes) {
+    return '已运行 $minutes 分钟';
+  }
+
+  @override
+  String get commonToday => '今天';
+
+  @override
+  String systemStorageFree(String size) {
+    return '剩余 $size';
+  }
+
+  @override
+  String get shelfNewWindow => '新建窗口';
+
+  @override
+  String get shelfCycleWindows => '轮换窗口';
+
+  @override
+  String get shelfOpenApp => '打开';
+
+  @override
+  String get shelfPinToShelf => '固定到 shelf';
+
+  @override
+  String get shelfUnpinFromShelf => '从 shelf 取消固定';
+
+  @override
+  String get shelfClose => '关闭';
+
+  @override
+  String get shelfCloseAllWindows => '关闭全部窗口';
+
+  @override
+  String get weatherMetricUv => '紫外线';
 }

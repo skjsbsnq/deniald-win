@@ -6261,6 +6261,720 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Takes effect after the shell restarts.'**
   String get settingsFontsAndIconsRestartNotice;
+
+  /// Loading state while IP location discovery runs.
+  ///
+  /// In en, this message translates to:
+  /// **'Locating…'**
+  String get weatherLoadingLocating;
+
+  /// Loading state while the weather payload downloads.
+  ///
+  /// In en, this message translates to:
+  /// **'Loading weather…'**
+  String get weatherLoadingData;
+
+  /// Error title when the weather payload cannot be loaded.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to load weather'**
+  String get weatherErrorLoadFailed;
+
+  /// Error title when automatic location discovery fails; offers manual city selection.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t determine this device\'s location'**
+  String get weatherErrorLocationUnavailable;
+
+  /// Retry button on the weather error pane.
+  ///
+  /// In en, this message translates to:
+  /// **'Retry'**
+  String get weatherRetry;
+
+  /// Escape-hatch button that opens weather settings to pick a manual city.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose a city'**
+  String get weatherChooseCity;
+
+  /// Caption showing when the shown snapshot was fetched.
+  ///
+  /// In en, this message translates to:
+  /// **'Updated {time}'**
+  String weatherUpdated(String time);
+
+  /// Inline notice that a refresh failed and cached data is shown.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh failed · cached data'**
+  String get weatherCachedDataNotice;
+
+  /// Section heading above the hourly forecast strip.
+  ///
+  /// In en, this message translates to:
+  /// **'Hourly'**
+  String get weatherSectionHourly;
+
+  /// Section heading above the seven-day forecast list.
+  ///
+  /// In en, this message translates to:
+  /// **'Next 7 days'**
+  String get weatherSectionDaily;
+
+  /// Title of the unified tray quick-settings bubble.
+  ///
+  /// In en, this message translates to:
+  /// **'Quick Settings'**
+  String get quickSettingsTitle;
+
+  /// Chip caption counting running applications in the tray bubble.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} active apps'**
+  String quickSettingsAppsActive(int count);
+
+  /// Quick-settings tile that triggers a screenshot.
+  ///
+  /// In en, this message translates to:
+  /// **'Screenshot'**
+  String get quickSettingsScreenshot;
+
+  /// Tray chip caption naming the connected Wi-Fi network.
+  ///
+  /// In en, this message translates to:
+  /// **'Connected: {ssid}'**
+  String networkStatusConnectedTo(String ssid);
+
+  /// Tray chip caption when connectivity is established.
+  ///
+  /// In en, this message translates to:
+  /// **'This device is connected'**
+  String get networkStatusSecured;
+
+  /// Tray chip caption when no network is connected.
+  ///
+  /// In en, this message translates to:
+  /// **'Disconnected'**
+  String get networkStatusDisconnected;
+
+  /// Expands a capped notification group to every record.
+  ///
+  /// In en, this message translates to:
+  /// **'Show all ({count})'**
+  String notificationsShowAll(int count);
+
+  /// Weather metric card label.
+  ///
+  /// In en, this message translates to:
+  /// **'Humidity'**
+  String get weatherMetricHumidity;
+
+  /// Weather metric card label.
+  ///
+  /// In en, this message translates to:
+  /// **'Wind'**
+  String get weatherMetricWind;
+
+  /// Weather metric card label.
+  ///
+  /// In en, this message translates to:
+  /// **'Air quality'**
+  String get weatherMetricAirQuality;
+
+  /// Weather metric card label.
+  ///
+  /// In en, this message translates to:
+  /// **'Pressure & visibility'**
+  String get weatherMetricPressureVisibility;
+
+  /// Weather metric card label.
+  ///
+  /// In en, this message translates to:
+  /// **'Sunrise & sunset'**
+  String get weatherMetricSunCycle;
+
+  /// Placeholder when a weather metric has no data.
+  ///
+  /// In en, this message translates to:
+  /// **'Unavailable'**
+  String get weatherMetricUnavailable;
+
+  /// Weather metric row label.
+  ///
+  /// In en, this message translates to:
+  /// **'Pressure'**
+  String get weatherMetricPressure;
+
+  /// Weather metric row label.
+  ///
+  /// In en, this message translates to:
+  /// **'Visibility'**
+  String get weatherMetricVisibility;
+
+  /// Weather metric row label.
+  ///
+  /// In en, this message translates to:
+  /// **'Sunrise'**
+  String get weatherMetricSunrise;
+
+  /// Weather metric row label.
+  ///
+  /// In en, this message translates to:
+  /// **'Sunset'**
+  String get weatherMetricSunset;
+
+  /// Wind pane detail line.
+  ///
+  /// In en, this message translates to:
+  /// **'{force} · {speed} m/s'**
+  String weatherWindDetails(int force, String speed);
+
+  /// Compass sector.
+  ///
+  /// In en, this message translates to:
+  /// **'N'**
+  String get windDirectionNorth;
+
+  /// Compass sector.
+  ///
+  /// In en, this message translates to:
+  /// **'NE'**
+  String get windDirectionNorthEast;
+
+  /// Compass sector.
+  ///
+  /// In en, this message translates to:
+  /// **'E'**
+  String get windDirectionEast;
+
+  /// Compass sector.
+  ///
+  /// In en, this message translates to:
+  /// **'SE'**
+  String get windDirectionSouthEast;
+
+  /// Compass sector.
+  ///
+  /// In en, this message translates to:
+  /// **'S'**
+  String get windDirectionSouth;
+
+  /// Compass sector.
+  ///
+  /// In en, this message translates to:
+  /// **'SW'**
+  String get windDirectionSouthWest;
+
+  /// Compass sector.
+  ///
+  /// In en, this message translates to:
+  /// **'W'**
+  String get windDirectionWest;
+
+  /// Compass sector.
+  ///
+  /// In en, this message translates to:
+  /// **'NW'**
+  String get windDirectionNorthWest;
+
+  /// UV rating band.
+  ///
+  /// In en, this message translates to:
+  /// **'Low'**
+  String get weatherUvLow;
+
+  /// UV rating band.
+  ///
+  /// In en, this message translates to:
+  /// **'Moderate'**
+  String get weatherUvModerate;
+
+  /// UV rating band.
+  ///
+  /// In en, this message translates to:
+  /// **'High'**
+  String get weatherUvHigh;
+
+  /// UV rating band.
+  ///
+  /// In en, this message translates to:
+  /// **'Extreme'**
+  String get weatherUvExtreme;
+
+  /// Air-quality rating band.
+  ///
+  /// In en, this message translates to:
+  /// **'Good'**
+  String get weatherAqiGood;
+
+  /// Air-quality rating band.
+  ///
+  /// In en, this message translates to:
+  /// **'Moderate'**
+  String get weatherAqiModerate;
+
+  /// Air-quality rating band.
+  ///
+  /// In en, this message translates to:
+  /// **'Light pollution'**
+  String get weatherAqiLightPollution;
+
+  /// Air-quality rating band.
+  ///
+  /// In en, this message translates to:
+  /// **'Unhealthy'**
+  String get weatherAqiUnhealthy;
+
+  /// Air-quality rating band.
+  ///
+  /// In en, this message translates to:
+  /// **'Very unhealthy'**
+  String get weatherAqiVeryUnhealthy;
+
+  /// Air-quality rating band.
+  ///
+  /// In en, this message translates to:
+  /// **'Hazardous'**
+  String get weatherAqiHazardous;
+
+  /// WMO weather condition.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear'**
+  String get weatherConditionClear;
+
+  /// WMO weather condition.
+  ///
+  /// In en, this message translates to:
+  /// **'Mostly clear'**
+  String get weatherConditionMostlyClear;
+
+  /// WMO weather condition.
+  ///
+  /// In en, this message translates to:
+  /// **'Partly cloudy'**
+  String get weatherConditionPartlyCloudy;
+
+  /// WMO weather condition.
+  ///
+  /// In en, this message translates to:
+  /// **'Overcast'**
+  String get weatherConditionOvercast;
+
+  /// WMO weather condition.
+  ///
+  /// In en, this message translates to:
+  /// **'Fog'**
+  String get weatherConditionFog;
+
+  /// WMO weather condition.
+  ///
+  /// In en, this message translates to:
+  /// **'Drizzle'**
+  String get weatherConditionDrizzle;
+
+  /// WMO weather condition.
+  ///
+  /// In en, this message translates to:
+  /// **'Light rain'**
+  String get weatherConditionLightRain;
+
+  /// WMO weather condition.
+  ///
+  /// In en, this message translates to:
+  /// **'Rain'**
+  String get weatherConditionRain;
+
+  /// WMO weather condition.
+  ///
+  /// In en, this message translates to:
+  /// **'Heavy rain'**
+  String get weatherConditionHeavyRain;
+
+  /// WMO weather condition.
+  ///
+  /// In en, this message translates to:
+  /// **'Freezing rain'**
+  String get weatherConditionFreezingRain;
+
+  /// WMO weather condition.
+  ///
+  /// In en, this message translates to:
+  /// **'Light snow'**
+  String get weatherConditionLightSnow;
+
+  /// WMO weather condition.
+  ///
+  /// In en, this message translates to:
+  /// **'Snow'**
+  String get weatherConditionSnow;
+
+  /// WMO weather condition.
+  ///
+  /// In en, this message translates to:
+  /// **'Heavy snow'**
+  String get weatherConditionHeavySnow;
+
+  /// WMO weather condition.
+  ///
+  /// In en, this message translates to:
+  /// **'Snow grains'**
+  String get weatherConditionSnowGrains;
+
+  /// WMO weather condition.
+  ///
+  /// In en, this message translates to:
+  /// **'Showers'**
+  String get weatherConditionShowers;
+
+  /// WMO weather condition.
+  ///
+  /// In en, this message translates to:
+  /// **'Snow showers'**
+  String get weatherConditionSnowShowers;
+
+  /// WMO weather condition.
+  ///
+  /// In en, this message translates to:
+  /// **'Thunderstorm'**
+  String get weatherConditionThunderstorm;
+
+  /// Apparent temperature caption.
+  ///
+  /// In en, this message translates to:
+  /// **'Feels like {temperature}'**
+  String weatherFeelsLike(String temperature);
+
+  /// Hourly strip time label.
+  ///
+  /// In en, this message translates to:
+  /// **'{hour}:00'**
+  String weatherHourLabel(String hour);
+
+  /// Forecast row label.
+  ///
+  /// In en, this message translates to:
+  /// **'Today'**
+  String get weatherToday;
+
+  /// Forecast row label.
+  ///
+  /// In en, this message translates to:
+  /// **'Tomorrow'**
+  String get weatherTomorrow;
+
+  /// Compact weekday symbol.
+  ///
+  /// In en, this message translates to:
+  /// **'Mo'**
+  String get weekdayShortMonday;
+
+  /// Compact weekday symbol.
+  ///
+  /// In en, this message translates to:
+  /// **'Tu'**
+  String get weekdayShortTuesday;
+
+  /// Compact weekday symbol.
+  ///
+  /// In en, this message translates to:
+  /// **'We'**
+  String get weekdayShortWednesday;
+
+  /// Compact weekday symbol.
+  ///
+  /// In en, this message translates to:
+  /// **'Th'**
+  String get weekdayShortThursday;
+
+  /// Compact weekday symbol.
+  ///
+  /// In en, this message translates to:
+  /// **'Fr'**
+  String get weekdayShortFriday;
+
+  /// Compact weekday symbol.
+  ///
+  /// In en, this message translates to:
+  /// **'Sa'**
+  String get weekdayShortSaturday;
+
+  /// Compact weekday symbol.
+  ///
+  /// In en, this message translates to:
+  /// **'Su'**
+  String get weekdayShortSunday;
+
+  /// CPU detail chip.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} cores'**
+  String systemCoresLabel(int count);
+
+  /// System card label.
+  ///
+  /// In en, this message translates to:
+  /// **'Memory'**
+  String get systemMemory;
+
+  /// System card label.
+  ///
+  /// In en, this message translates to:
+  /// **'Network'**
+  String get systemNetwork;
+
+  /// System card label.
+  ///
+  /// In en, this message translates to:
+  /// **'Storage'**
+  String get systemStorage;
+
+  /// System card label.
+  ///
+  /// In en, this message translates to:
+  /// **'Battery'**
+  String get systemBattery;
+
+  /// Battery card without a battery.
+  ///
+  /// In en, this message translates to:
+  /// **'No battery'**
+  String get systemBatteryUnavailable;
+
+  /// Placeholder without data.
+  ///
+  /// In en, this message translates to:
+  /// **'Unavailable'**
+  String get systemDataUnavailable;
+
+  /// Battery status line.
+  ///
+  /// In en, this message translates to:
+  /// **'Unavailable'**
+  String get systemStatusUnavailable;
+
+  /// Battery status.
+  ///
+  /// In en, this message translates to:
+  /// **'Full'**
+  String get batteryFull;
+
+  /// Battery status.
+  ///
+  /// In en, this message translates to:
+  /// **'On AC power'**
+  String get batteryOnAcPower;
+
+  /// Battery status.
+  ///
+  /// In en, this message translates to:
+  /// **'On battery'**
+  String get batteryOnBattery;
+
+  /// Timer tool tab.
+  ///
+  /// In en, this message translates to:
+  /// **'Pomodoro'**
+  String get timerPomodoro;
+
+  /// Timer tool tab.
+  ///
+  /// In en, this message translates to:
+  /// **'Stopwatch'**
+  String get timerStopwatch;
+
+  /// Pomodoro preset.
+  ///
+  /// In en, this message translates to:
+  /// **'Focus 25m'**
+  String get timerFocus25;
+
+  /// Pomodoro preset.
+  ///
+  /// In en, this message translates to:
+  /// **'Break 5m'**
+  String get timerBreak5;
+
+  /// Timer status caption.
+  ///
+  /// In en, this message translates to:
+  /// **'Break'**
+  String get timerBreakLabel;
+
+  /// Timer status caption.
+  ///
+  /// In en, this message translates to:
+  /// **'Focus'**
+  String get timerFocusLabel;
+
+  /// Stopwatch lap list placeholder.
+  ///
+  /// In en, this message translates to:
+  /// **'No laps yet'**
+  String get timerNoLaps;
+
+  /// Stopwatch lap row.
+  ///
+  /// In en, this message translates to:
+  /// **'Lap {number}'**
+  String timerLapNumber(int number);
+
+  /// Todo tab label.
+  ///
+  /// In en, this message translates to:
+  /// **'Open {count}'**
+  String todoOpenCount(int count);
+
+  /// Todo tab label.
+  ///
+  /// In en, this message translates to:
+  /// **'Done {count}'**
+  String todoDoneCount(int count);
+
+  /// Todo quick-add hint.
+  ///
+  /// In en, this message translates to:
+  /// **'Add a task…'**
+  String get todoAddHint;
+
+  /// Todo completed tab placeholder.
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing completed yet'**
+  String get todoNothingCompleted;
+
+  /// Todo open tab placeholder.
+  ///
+  /// In en, this message translates to:
+  /// **'All caught up!'**
+  String get todoAllCaughtUp;
+
+  /// Todo completed tab action.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear completed'**
+  String get todoClearCompleted;
+
+  /// Dashboard tab label.
+  ///
+  /// In en, this message translates to:
+  /// **'Info'**
+  String get dashboardTabInfo;
+
+  /// Dashboard tab label.
+  ///
+  /// In en, this message translates to:
+  /// **'System'**
+  String get dashboardTabSystem;
+
+  /// Dashboard tab label.
+  ///
+  /// In en, this message translates to:
+  /// **'Weather'**
+  String get dashboardTabWeather;
+
+  /// Notification group count.
+  ///
+  /// In en, this message translates to:
+  /// **'{count} notifications'**
+  String notificationsGroupCount(int count);
+
+  /// Notification group count singular.
+  ///
+  /// In en, this message translates to:
+  /// **'1 notification'**
+  String get notificationsOneNotification;
+
+  /// Do-not-disturb capsule short label.
+  ///
+  /// In en, this message translates to:
+  /// **'DND'**
+  String get notificationsDndShort;
+
+  /// Tool drawer collapsed date capsule.
+  ///
+  /// In en, this message translates to:
+  /// **'{date} · {todos} todos'**
+  String infoDrawerDateLabel(String date, int todos);
+
+  /// System uptime badge.
+  ///
+  /// In en, this message translates to:
+  /// **'Up · {days}d {hours}h'**
+  String uptimeDaysHours(int days, int hours);
+
+  /// System uptime badge.
+  ///
+  /// In en, this message translates to:
+  /// **'Up · {hours}h {minutes}m'**
+  String uptimeHoursMinutes(int hours, int minutes);
+
+  /// System uptime badge.
+  ///
+  /// In en, this message translates to:
+  /// **'Up · {minutes}m'**
+  String uptimeMinutes(int minutes);
+
+  /// Jump-to-today chip.
+  ///
+  /// In en, this message translates to:
+  /// **'Today'**
+  String get commonToday;
+
+  /// Storage card free-space caption.
+  ///
+  /// In en, this message translates to:
+  /// **'{size} free'**
+  String systemStorageFree(String size);
+
+  /// Context menu entry to open a new window of a shelf app.
+  ///
+  /// In en, this message translates to:
+  /// **'New window'**
+  String get shelfNewWindow;
+
+  /// Context menu entry to cycle through an app's windows.
+  ///
+  /// In en, this message translates to:
+  /// **'Cycle windows'**
+  String get shelfCycleWindows;
+
+  /// Context menu entry to launch a pinned app with no windows.
+  ///
+  /// In en, this message translates to:
+  /// **'Open'**
+  String get shelfOpenApp;
+
+  /// Context menu entry to pin an app to the shelf.
+  ///
+  /// In en, this message translates to:
+  /// **'Pin to shelf'**
+  String get shelfPinToShelf;
+
+  /// Context menu entry to unpin an app from the shelf.
+  ///
+  /// In en, this message translates to:
+  /// **'Unpin from shelf'**
+  String get shelfUnpinFromShelf;
+
+  /// Context menu entry to close the app's single window.
+  ///
+  /// In en, this message translates to:
+  /// **'Close'**
+  String get shelfClose;
+
+  /// Context menu entry to close every window of the app.
+  ///
+  /// In en, this message translates to:
+  /// **'Close all windows'**
+  String get shelfCloseAllWindows;
+
+  /// Label for the UV index metric card.
+  ///
+  /// In en, this message translates to:
+  /// **'UV'**
+  String get weatherMetricUv;
 }
 
 class _AppLocalizationsDelegate

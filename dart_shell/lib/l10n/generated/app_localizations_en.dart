@@ -3525,4 +3525,396 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get settingsFontsAndIconsRestartNotice =>
       'Takes effect after the shell restarts.';
+
+  @override
+  String get weatherLoadingLocating => 'Locating…';
+
+  @override
+  String get weatherLoadingData => 'Loading weather…';
+
+  @override
+  String get weatherErrorLoadFailed => 'Failed to load weather';
+
+  @override
+  String get weatherErrorLocationUnavailable =>
+      'Couldnt determine this devices location';
+
+  @override
+  String get weatherRetry => 'Retry';
+
+  @override
+  String get weatherChooseCity => 'Choose a city';
+
+  @override
+  String weatherUpdated(String time) {
+    return 'Updated $time';
+  }
+
+  @override
+  String get weatherCachedDataNotice => 'Refresh failed · cached data';
+
+  @override
+  String get weatherSectionHourly => 'Hourly';
+
+  @override
+  String get weatherSectionDaily => 'Next 7 days';
+
+  @override
+  String get quickSettingsTitle => 'Quick Settings';
+
+  @override
+  String quickSettingsAppsActive(int count) {
+    return '$count active apps';
+  }
+
+  @override
+  String get quickSettingsScreenshot => 'Screenshot';
+
+  @override
+  String networkStatusConnectedTo(String ssid) {
+    return 'Connected: $ssid';
+  }
+
+  @override
+  String get networkStatusSecured => 'This device is connected';
+
+  @override
+  String get networkStatusDisconnected => 'Disconnected';
+
+  @override
+  String notificationsShowAll(int count) {
+    return 'Show all ($count)';
+  }
+
+  @override
+  String get weatherMetricHumidity => 'Humidity';
+
+  @override
+  String get weatherMetricWind => 'Wind';
+
+  @override
+  String get weatherMetricAirQuality => 'Air quality';
+
+  @override
+  String get weatherMetricPressureVisibility => 'Pressure & visibility';
+
+  @override
+  String get weatherMetricSunCycle => 'Sunrise & sunset';
+
+  @override
+  String get weatherMetricUnavailable => 'Unavailable';
+
+  @override
+  String get weatherMetricPressure => 'Pressure';
+
+  @override
+  String get weatherMetricVisibility => 'Visibility';
+
+  @override
+  String get weatherMetricSunrise => 'Sunrise';
+
+  @override
+  String get weatherMetricSunset => 'Sunset';
+
+  @override
+  String weatherWindDetails(int force, String speed) {
+    return '$force · $speed m/s';
+  }
+
+  @override
+  String get windDirectionNorth => 'N';
+
+  @override
+  String get windDirectionNorthEast => 'NE';
+
+  @override
+  String get windDirectionEast => 'E';
+
+  @override
+  String get windDirectionSouthEast => 'SE';
+
+  @override
+  String get windDirectionSouth => 'S';
+
+  @override
+  String get windDirectionSouthWest => 'SW';
+
+  @override
+  String get windDirectionWest => 'W';
+
+  @override
+  String get windDirectionNorthWest => 'NW';
+
+  @override
+  String get weatherUvLow => 'Low';
+
+  @override
+  String get weatherUvModerate => 'Moderate';
+
+  @override
+  String get weatherUvHigh => 'High';
+
+  @override
+  String get weatherUvExtreme => 'Extreme';
+
+  @override
+  String get weatherAqiGood => 'Good';
+
+  @override
+  String get weatherAqiModerate => 'Moderate';
+
+  @override
+  String get weatherAqiLightPollution => 'Light pollution';
+
+  @override
+  String get weatherAqiUnhealthy => 'Unhealthy';
+
+  @override
+  String get weatherAqiVeryUnhealthy => 'Very unhealthy';
+
+  @override
+  String get weatherAqiHazardous => 'Hazardous';
+
+  @override
+  String get weatherConditionClear => 'Clear';
+
+  @override
+  String get weatherConditionMostlyClear => 'Mostly clear';
+
+  @override
+  String get weatherConditionPartlyCloudy => 'Partly cloudy';
+
+  @override
+  String get weatherConditionOvercast => 'Overcast';
+
+  @override
+  String get weatherConditionFog => 'Fog';
+
+  @override
+  String get weatherConditionDrizzle => 'Drizzle';
+
+  @override
+  String get weatherConditionLightRain => 'Light rain';
+
+  @override
+  String get weatherConditionRain => 'Rain';
+
+  @override
+  String get weatherConditionHeavyRain => 'Heavy rain';
+
+  @override
+  String get weatherConditionFreezingRain => 'Freezing rain';
+
+  @override
+  String get weatherConditionLightSnow => 'Light snow';
+
+  @override
+  String get weatherConditionSnow => 'Snow';
+
+  @override
+  String get weatherConditionHeavySnow => 'Heavy snow';
+
+  @override
+  String get weatherConditionSnowGrains => 'Snow grains';
+
+  @override
+  String get weatherConditionShowers => 'Showers';
+
+  @override
+  String get weatherConditionSnowShowers => 'Snow showers';
+
+  @override
+  String get weatherConditionThunderstorm => 'Thunderstorm';
+
+  @override
+  String weatherFeelsLike(String temperature) {
+    return 'Feels like $temperature';
+  }
+
+  @override
+  String weatherHourLabel(String hour) {
+    return '$hour:00';
+  }
+
+  @override
+  String get weatherToday => 'Today';
+
+  @override
+  String get weatherTomorrow => 'Tomorrow';
+
+  @override
+  String get weekdayShortMonday => 'Mo';
+
+  @override
+  String get weekdayShortTuesday => 'Tu';
+
+  @override
+  String get weekdayShortWednesday => 'We';
+
+  @override
+  String get weekdayShortThursday => 'Th';
+
+  @override
+  String get weekdayShortFriday => 'Fr';
+
+  @override
+  String get weekdayShortSaturday => 'Sa';
+
+  @override
+  String get weekdayShortSunday => 'Su';
+
+  @override
+  String systemCoresLabel(int count) {
+    return '$count cores';
+  }
+
+  @override
+  String get systemMemory => 'Memory';
+
+  @override
+  String get systemNetwork => 'Network';
+
+  @override
+  String get systemStorage => 'Storage';
+
+  @override
+  String get systemBattery => 'Battery';
+
+  @override
+  String get systemBatteryUnavailable => 'No battery';
+
+  @override
+  String get systemDataUnavailable => 'Unavailable';
+
+  @override
+  String get systemStatusUnavailable => 'Unavailable';
+
+  @override
+  String get batteryFull => 'Full';
+
+  @override
+  String get batteryOnAcPower => 'On AC power';
+
+  @override
+  String get batteryOnBattery => 'On battery';
+
+  @override
+  String get timerPomodoro => 'Pomodoro';
+
+  @override
+  String get timerStopwatch => 'Stopwatch';
+
+  @override
+  String get timerFocus25 => 'Focus 25m';
+
+  @override
+  String get timerBreak5 => 'Break 5m';
+
+  @override
+  String get timerBreakLabel => 'Break';
+
+  @override
+  String get timerFocusLabel => 'Focus';
+
+  @override
+  String get timerNoLaps => 'No laps yet';
+
+  @override
+  String timerLapNumber(int number) {
+    return 'Lap $number';
+  }
+
+  @override
+  String todoOpenCount(int count) {
+    return 'Open $count';
+  }
+
+  @override
+  String todoDoneCount(int count) {
+    return 'Done $count';
+  }
+
+  @override
+  String get todoAddHint => 'Add a task…';
+
+  @override
+  String get todoNothingCompleted => 'Nothing completed yet';
+
+  @override
+  String get todoAllCaughtUp => 'All caught up!';
+
+  @override
+  String get todoClearCompleted => 'Clear completed';
+
+  @override
+  String get dashboardTabInfo => 'Info';
+
+  @override
+  String get dashboardTabSystem => 'System';
+
+  @override
+  String get dashboardTabWeather => 'Weather';
+
+  @override
+  String notificationsGroupCount(int count) {
+    return '$count notifications';
+  }
+
+  @override
+  String get notificationsOneNotification => '1 notification';
+
+  @override
+  String get notificationsDndShort => 'DND';
+
+  @override
+  String infoDrawerDateLabel(String date, int todos) {
+    return '$date · $todos todos';
+  }
+
+  @override
+  String uptimeDaysHours(int days, int hours) {
+    return 'Up · ${days}d ${hours}h';
+  }
+
+  @override
+  String uptimeHoursMinutes(int hours, int minutes) {
+    return 'Up · ${hours}h ${minutes}m';
+  }
+
+  @override
+  String uptimeMinutes(int minutes) {
+    return 'Up · ${minutes}m';
+  }
+
+  @override
+  String get commonToday => 'Today';
+
+  @override
+  String systemStorageFree(String size) {
+    return '$size free';
+  }
+
+  @override
+  String get shelfNewWindow => 'New window';
+
+  @override
+  String get shelfCycleWindows => 'Cycle windows';
+
+  @override
+  String get shelfOpenApp => 'Open';
+
+  @override
+  String get shelfPinToShelf => 'Pin to shelf';
+
+  @override
+  String get shelfUnpinFromShelf => 'Unpin from shelf';
+
+  @override
+  String get shelfClose => 'Close';
+
+  @override
+  String get shelfCloseAllWindows => 'Close all windows';
+
+  @override
+  String get weatherMetricUv => 'UV';
 }
