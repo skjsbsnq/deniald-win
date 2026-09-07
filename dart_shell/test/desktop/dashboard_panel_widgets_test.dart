@@ -9,6 +9,7 @@ import 'package:denial_dart_shell/src/state/shell_controller.dart';
 import 'package:denial_dart_shell/src/state/system_status.dart';
 import 'package:denial_dart_shell/src/theme/shell_theme.dart';
 import 'package:denial_dart_shell/src/wallpaper/state/wallpaper_controller.dart';
+import 'package:denial_dart_shell/src/widgets/shell_backdrop_blur.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -128,6 +129,61 @@ void main() {
     expect(find.byType(SystemView, skipOffstage: false), findsOneWidget);
   });
 
+  testWidgets('panel keeps its full docked height on every tab', (
+    tester,
+  ) async {
+    final bridge = TestNotificationBridge();
+    addTearDown(bridge.close);
+    // Static host state must not leak into later cases if this one fails
+    // midway (same lesson as the tab bar host).
+    addTearDown(() => _PanelVisibilityHost.visible = true);
+
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          // The real minute clock parks a timer until the next boundary,
+          // which trips the pending-timer invariant at teardown. A finite
+          // stream keeps the drawer deterministic as well.
+          clockProvider.overrideWith(
+            (ref) => Stream<DateTime>.value(DateTime(2026, 9, 7, 14, 30)),
+          ),
+          denialBridgeProvider.overrideWithValue(bridge),
+          notificationPolicyStoreProvider.overrideWithValue(
+            _MemoryPolicyStore(),
+          ),
+          wallpaperControllerProvider.overrideWith(
+            _InitialWallpaperController.new,
+          ),
+        ],
+        child: _wrap(const _PanelVisibilityHost()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // The 800x600 test surface docks the panel at 600 - 56 - 24 = 520.
+    Size panelSize() => tester.getSize(find.byType(ShellBackdropBlur));
+    expect(panelSize(), const Size(420, 520));
+
+    // A page whose content is shorter than the panel (System) must not
+    // shrink it: every tab opens the same fully expanded panel.
+    await tester.tap(find.text('System'));
+    await tester.pumpAndSettle();
+    expect(panelSize(), const Size(420, 520));
+
+    // Reopening on the remembered tab keeps the full height too. Before the
+    // fixed-height fix this reopened as a content-sized stub panel because
+    // only the remembered page remounted.
+    final host = tester.state<_PanelVisibilityHostState>(
+      find.byType(_PanelVisibilityHost),
+    );
+    host.setVisible(false);
+    await tester.pumpAndSettle();
+    host.setVisible(true);
+    await tester.pumpAndSettle();
+    expect(find.byType(SystemView), findsOneWidget);
+    expect(panelSize(), const Size(420, 520));
+  });
+
   testWidgets('hidden panel renders nothing until visible flips', (
     tester,
   ) async {
@@ -138,6 +194,32 @@ void main() {
 
     expect(find.byType(DashboardTabBar), findsNothing);
   });
+}
+
+class _PanelVisibilityHost extends StatefulWidget {
+  const _PanelVisibilityHost();
+
+  static bool visible = true;
+
+  @override
+  State<_PanelVisibilityHost> createState() => _PanelVisibilityHostState();
+}
+
+class _PanelVisibilityHostState extends State<_PanelVisibilityHost> {
+  // Public so the test can drive the visibility flip the way the scene
+  // does; calling State.setState from outside would be a protected member.
+  void setVisible(bool value) {
+    setState(() => _PanelVisibilityHost.visible = value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return UnifiedDashboardPanel(
+      visible: _PanelVisibilityHost.visible,
+      onDismiss: () => setVisible(false),
+      shelfHeight: 56.0,
+    );
+  }
 }
 
 class DashboardTabBarHost extends StatefulWidget {

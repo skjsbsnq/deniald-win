@@ -16,8 +16,13 @@ import 'views/weather_view.dart';
 /// The unified dashboard panel opened by the clock capsule on the shelf.
 ///
 /// Replaces the single-purpose calendar bubble: a 420 dp docked panel with
-/// Info / System / Weather pages behind one capsule tab bar. Only the Weather
-/// page mounts on demand; Info and System build statically, so nothing polls
+/// Info / System / Weather pages behind one capsule tab bar. The panel docks
+/// at a fixed height — the screen minus the shelf and margins — on every
+/// tab, so it always opens fully expanded; each page keeps its own scroll
+/// physics inside that frame instead of sizing the panel. (A content-sized
+/// panel made short pages such as System and Weather open as stubs beside
+/// the tall Info page — 2026-09-07 user ruling.) Only the Weather page
+/// mounts on demand; Info and System build statically, so nothing polls
 /// the network or hardware while the panel is closed (D8) and opening the
 /// panel to a non-weather tab never starts a fetch.
 class UnifiedDashboardPanel extends ConsumerStatefulWidget {
@@ -110,9 +115,9 @@ class _UnifiedDashboardPanelState extends ConsumerState<UnifiedDashboardPanel>
         final scale = math.max(0.0, 0.88 + 0.12 * progress);
         final panelRadius = theme.borderRadius(ShellShapeScale.extraLarge);
         final panelWidth = math.min(size.width - 16.0, _panelWidth);
-        // The whole panel scrolls as one column, so each page keeps its own
-        // scroll physics inside it.
-        final maxHeight = math.max(
+        // The height is fixed, not a cap the content can shrink under: every
+        // tab opens the same fully docked panel and pages scroll inside it.
+        final panelHeight = math.max(
           160.0,
           size.height - widget.shelfHeight - 24.0,
         );
@@ -133,25 +138,20 @@ class _UnifiedDashboardPanelState extends ConsumerState<UnifiedDashboardPanel>
                 alignment: Alignment.bottomRight,
                 child: SizedBox(
                   width: panelWidth,
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(maxHeight: maxHeight),
-                    child: ShellBackdropBlur(
-                      strength: clampedProgress,
-                      borderRadius: panelRadius,
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: theme.panelColor(colors.surfaceContainerLow),
-                          borderRadius: panelRadius,
-                          border: Border.all(
-                            color: colors.hairlineSoft,
-                            width: 1.0,
-                          ),
-                        ),
-                        child: ClipRRect(
-                          borderRadius: panelRadius,
-                          child: child,
+                  height: panelHeight,
+                  child: ShellBackdropBlur(
+                    strength: clampedProgress,
+                    borderRadius: panelRadius,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: theme.panelColor(colors.surfaceContainerLow),
+                        borderRadius: panelRadius,
+                        border: Border.all(
+                          color: colors.hairlineSoft,
+                          width: 1.0,
                         ),
                       ),
+                      child: ClipRRect(borderRadius: panelRadius, child: child),
                     ),
                   ),
                 ),
@@ -171,7 +171,6 @@ class _UnifiedDashboardPanelState extends ConsumerState<UnifiedDashboardPanel>
                     widget.onDismiss?.call(),
               },
               child: Column(
-                mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Padding(
@@ -181,7 +180,7 @@ class _UnifiedDashboardPanelState extends ConsumerState<UnifiedDashboardPanel>
                       onSelected: (tab) => setState(() => _tab = tab),
                     ),
                   ),
-                  Flexible(child: _TabPageHost(tab: _tab)),
+                  Expanded(child: _TabPageHost(tab: _tab)),
                 ],
               ),
             ),
