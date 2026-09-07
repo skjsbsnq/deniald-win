@@ -34,9 +34,16 @@ class _InfoToolDrawerState extends ConsumerState<InfoToolDrawer>
 
   bool _expanded = false;
   _InfoDrawerTool _tool = _InfoDrawerTool.calendar;
-  late final AnimationController _toolSlider = AnimationController.unbounded(
-    vsync: this,
-  );
+  // Initialized eagerly (not late): a drawer that stays collapsed never runs
+  // build past the collapsed capsule, and creating the controller lazily in
+  // dispose would look up TickerMode on an already-deactivated element.
+  late final AnimationController _toolSlider;
+
+  @override
+  void initState() {
+    super.initState();
+    _toolSlider = AnimationController.unbounded(vsync: this);
+  }
 
   @override
   void dispose() {
