@@ -18,7 +18,7 @@ use denial_core::portal_protocol::{
 use tracing::info;
 use zbus::blocking::Connection;
 use zbus::blocking::connection::Builder as ConnectionBuilder;
-use zbus::zvariant::{OwnedValue, Structure};
+use zbus::zvariant::{OwnedValue, Str, Structure};
 
 const SERVICE_NAME: &str = "org.freedesktop.impl.portal.desktop.denial";
 #[cfg(test)]
@@ -28,6 +28,14 @@ const INTERFACE_NAME: &str = "org.freedesktop.impl.portal.Settings";
 const APPEARANCE_NAMESPACE: &str = "org.freedesktop.appearance";
 const COLOR_SCHEME_KEY: &str = "color-scheme";
 const ACCENT_COLOR_KEY: &str = "accent-color";
+const GNOME_WM_NAMESPACE: &str = "org.gnome.desktop.wm.preferences";
+const BUTTON_LAYOUT_KEY: &str = "button-layout";
+/// CSD clients that follow the portal (GTK headerbars, Chromium) derive their
+/// window-control layout from this setting. Without it the fallback backend
+/// leaks whatever gsettings-desktop-schemas ships, which defaults to a
+/// close-only GNOME layout. Denial supports minimize and maximize, so both
+/// must be offered.
+const BUTTON_LAYOUT_VALUE: &str = "appmenu:minimize,maximize,close";
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(3);
 const RETRY_INTERVAL: Duration = Duration::from_millis(40);
 
@@ -64,6 +72,9 @@ impl SettingsInterface {
                 _ => {}
             }
         }
+        if namespace == GNOME_WM_NAMESPACE && key == BUTTON_LAYOUT_KEY {
+            return Ok(OwnedValue::from(Str::from(BUTTON_LAYOUT_VALUE)));
+        }
         Err(SettingsError::NotFound(format!(
             "unknown setting {namespace}/{key}"
         )))
@@ -71,23 +82,33 @@ impl SettingsInterface {
 
     #[zbus(name = "ReadAll", out_args("value"))]
     fn read_all(&self, namespaces: Vec<String>) -> SettingsValues {
-        if !namespace_matches(&namespaces, APPEARANCE_NAMESPACE) {
-            return HashMap::new();
-        }
         let snapshot = self.snapshot();
-        HashMap::from([(
-            APPEARANCE_NAMESPACE.to_owned(),
-            HashMap::from([
-                (
-                    COLOR_SCHEME_KEY.to_owned(),
-                    OwnedValue::from(snapshot.portal_color_scheme),
-                ),
-                (
-                    ACCENT_COLOR_KEY.to_owned(),
-                    accent_color_value(snapshot.accent_color),
-                ),
-            ]),
-        )])
+        let mut values = HashMap::new();
+        if namespace_matches(&namespaces, APPEARANCE_NAMESPACE) {
+            values.insert(
+                APPEARANCE_NAMESPACE.to_owned(),
+                HashMap::from([
+                    (
+                        COLOR_SCHEME_KEY.to_owned(),
+                        OwnedValue::from(snapshot.portal_color_scheme),
+                    ),
+                    (
+                        ACCENT_COLOR_KEY.to_owned(),
+                        accent_color_value(snapshot.accent_color),
+                    ),
+                ]),
+            );
+        }
+        if namespace_matches(&namespaces, GNOME_WM_NAMESPACE) {
+            values.insert(
+                GNOME_WM_NAMESPACE.to_owned(),
+                HashMap::from([(
+                    BUTTON_LAYOUT_KEY.to_owned(),
+                    OwnedValue::from(Str::from(BUTTON_LAYOUT_VALUE)),
+                )]),
+            );
+        }
+        values
     }
 
     #[zbus(property, name = "version")]
@@ -463,6 +484,9 @@ mod tests {
     trait SettingsFrontendTest {
         #[zbus(name = "ReadOne")]
         fn read_one(&self, namespace: &str, key: &str) -> zbus::Result<OwnedValue>;
+
+        #[zbus(name = "ReadAll")]
+        fn read_all(&self, namespaces: Vec<String>) -> zbus::Result<SettingsValues>;
     }
 
     #[test]
@@ -567,6 +591,29 @@ mod tests {
             }
             other => panic!("unexpected unknown-setting error: {other}"),
         }
+        let layout = proxy
+            .read(GNOME_WM_NAMESPACE, BUTTON_LAYOUT_KEY)
+            .expect("read window button layout");
+        assert_eq!(
+            String::try_from(layout).expect("string variant"),
+            BUTTON_LAYOUT_VALUE
+        );
+        let gnome_all = proxy
+            .read_all(vec![GNOME_WM_NAMESPACE.to_owned()])
+            .expect("read GNOME window management namespace");
+        assert_eq!(
+            String::try_from(
+                gnome_all[GNOME_WM_NAMESPACE][BUTTON_LAYOUT_KEY]
+                    .try_clone()
+                    .expect("clone D-Bus value")
+            )
+            .expect("string variant"),
+            BUTTON_LAYOUT_VALUE
+        );
+        let no_gnome = proxy
+            .read_all(vec!["org.example".to_owned()])
+            .expect("read unmatched namespace");
+        assert!(no_gnome.is_empty(), "unmatched namespaces stay empty");
         assert_eq!(
             proxy
                 .inner()
@@ -655,6 +702,25 @@ mod tests {
         let initial = wait_for_frontend_value(&proxy, APPEARANCE_NAMESPACE, COLOR_SCHEME_KEY, 0);
         assert_eq!(initial, 0);
         assert_eq!(busctl_read_one(), "v u 0");
+        wait_for_frontend_string(
+            &proxy,
+            GNOME_WM_NAMESPACE,
+            BUTTON_LAYOUT_KEY,
+            BUTTON_LAYOUT_VALUE,
+        );
+        let frontend_all = proxy
+            .read_all(vec![GNOME_WM_NAMESPACE.to_owned()])
+            .expect("read all through the real frontend");
+        assert_eq!(
+            String::try_from(
+                frontend_all[GNOME_WM_NAMESPACE][BUTTON_LAYOUT_KEY]
+                    .try_clone()
+                    .expect("clone frontend value")
+            )
+            .expect("string frontend variant"),
+            BUTTON_LAYOUT_VALUE,
+            "the Denial backend must win the ReadAll merge over later backends"
+        );
         for (preference, expected) in [
             (DesktopColorSchemePreference::PreferDark, 1),
             (DesktopColorSchemePreference::PreferLight, 2),
@@ -735,6 +801,32 @@ mod tests {
                     let value = u32::try_from(value).expect("unsigned frontend variant");
                     if value == expected {
                         return value;
+                    }
+                    format!("last value was {value}")
+                }
+                Err(error) => error.to_string(),
+            };
+            assert!(
+                Instant::now() < deadline,
+                "real Settings frontend did not report {expected}: {detail}"
+            );
+            thread::sleep(Duration::from_millis(25));
+        }
+    }
+
+    fn wait_for_frontend_string(
+        proxy: &SettingsFrontendTestProxyBlocking<'_>,
+        namespace: &str,
+        key: &str,
+        expected: &str,
+    ) {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            let detail = match proxy.read_one(namespace, key) {
+                Ok(value) => {
+                    let value = String::try_from(value).expect("string frontend variant");
+                    if value == expected {
+                        return;
                     }
                     format!("last value was {value}")
                 }
