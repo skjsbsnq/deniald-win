@@ -4,10 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../localization/denial_localizations.dart';
 import '../../../../state/system_status.dart';
-import '../../../../theme/motion.dart';
-import '../../../../theme/shell_color_scheme.dart';
 import '../../../../theme/shell_theme.dart';
-import '../../../../theme/tokens.dart';
+import '../../../../widgets/shell_hover_pill.dart';
 
 /// Month calendar for the dashboard tool drawer.
 ///
@@ -25,7 +23,18 @@ class DrawerCalendarWidget extends ConsumerStatefulWidget {
 class _DrawerCalendarWidgetState extends ConsumerState<DrawerCalendarWidget> {
   late DateTime _displayedMonth;
   late DateTime _selectedDate;
-  int? _hoveredIndex;
+
+  // The 42-cell grid is cached and only rebuilt when one of its inputs
+  // changes; the per-minute clock tick then costs nothing and hover lives
+  // inside each cell, so neither rebuilds the whole grid.
+  ({
+    DateTime gridStart,
+    DateTime today,
+    DateTime selected,
+    DateTime displayedMonth,
+  })?
+  _gridCacheKey;
+  late List<Widget> _gridCache;
 
   @override
   void initState() {
@@ -62,24 +71,10 @@ class _DrawerCalendarWidgetState extends ConsumerState<DrawerCalendarWidget> {
     });
   }
 
-  String _weekdaySymbol(String name, bool isZh) {
-    if (isZh) {
-      if (name.startsWith('星期') && name.length >= 3) {
-        return name.substring(2);
-      }
-      if (name.startsWith('周') && name.length >= 2) {
-        return name.substring(1);
-      }
-    }
-    return name.length >= 2 ? name.substring(0, 2) : name;
-  }
-
   @override
   Widget build(BuildContext context) {
-    final theme = context.shellTheme;
     final colors = context.shellColors;
     final l10n = context.l10n;
-    final isZh = Localizations.localeOf(context).languageCode == 'zh';
 
     final now = ref.watch(clockProvider).value ?? DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -91,19 +86,22 @@ class _DrawerCalendarWidgetState extends ConsumerState<DrawerCalendarWidget> {
         _selectedDate.month == today.month &&
         _selectedDate.day == today.day;
 
-    final monthTitle = isZh
-        ? '${_displayedMonth.year}年${_displayedMonth.month}月'
-        : '${localizedMonth(l10n, _displayedMonth.month)} ${_displayedMonth.year}';
+    final monthTitle =
+        '${localizedMonth(l10n, _displayedMonth.month)} ${_displayedMonth.year}';
 
-    // Calendar grid arithmetic (Monday is index 1 in Dart DateTime).
+    // Calendar grid arithmetic (Monday is index 1 in Dart DateTime). Day
+    // offsets go through the DateTime constructor, never Duration math: a
+    // 23- or 25-hour DST day would otherwise shift a cell's wall date.
     final firstDayOfMonth = DateTime(
       _displayedMonth.year,
       _displayedMonth.month,
       1,
     );
     final leadingOffset = firstDayOfMonth.weekday - 1;
-    final gridStartDate = firstDayOfMonth.subtract(
-      Duration(days: leadingOffset),
+    final gridStartDate = DateTime(
+      _displayedMonth.year,
+      _displayedMonth.month,
+      1 - leadingOffset,
     );
 
     // Weekday headers: Monday to Sunday (1 to 7).
@@ -144,7 +142,7 @@ class _DrawerCalendarWidgetState extends ConsumerState<DrawerCalendarWidget> {
             ),
             if (!isLookingAtCurrentMonth || !isTodaySelected) ...[
               _CalendarTodayChip(
-                label: isZh ? '今天' : 'Today',
+                label: l10n.commonToday,
                 onPressed: () => _jumpToToday(now),
               ),
               const SizedBox(width: 4),
@@ -163,7 +161,7 @@ class _DrawerCalendarWidgetState extends ConsumerState<DrawerCalendarWidget> {
               Expanded(
                 child: Center(
                   child: Text(
-                    _weekdaySymbol(localizedWeekday(l10n, day), isZh),
+                    localizedWeekdaySymbol(l10n, day),
                     style: TextStyle(
                       color: colors.textSecondary,
                       fontSize: 12,
@@ -177,207 +175,203 @@ class _DrawerCalendarWidgetState extends ConsumerState<DrawerCalendarWidget> {
         ),
         const SizedBox(height: 4.0),
         // 42-day calendar matrix (6 rows x 7 days).
-        for (int week = 0; week < 6; week++)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 2.0),
-            child: Row(
-              children: [
-                for (int col = 0; col < 7; col++)
-                  _buildDayCell(
-                    week * 7 + col,
-                    gridStartDate,
-                    today,
-                    theme,
-                    colors,
-                  ),
-              ],
-            ),
-          ),
+        for (final row in _cachedGridRows(gridStartDate, today)) row,
       ],
     );
   }
 
-  Widget _buildDayCell(
-    int index,
-    DateTime gridStartDate,
-    DateTime today,
-    ShellThemeData theme,
-    ShellColorScheme colors,
-  ) {
-    final cellDate = gridStartDate.add(Duration(days: index));
-    final isCurrentMonth = cellDate.month == _displayedMonth.month;
-    final isCellToday =
-        cellDate.year == today.year &&
-        cellDate.month == today.month &&
-        cellDate.day == today.day;
-    final isCellSelected =
-        cellDate.year == _selectedDate.year &&
-        cellDate.month == _selectedDate.month &&
-        cellDate.day == _selectedDate.day;
-    final isHovered = _hoveredIndex == index;
-
-    Color bg;
-    Color fg;
-    FontWeight weight;
-
-    if (isCellToday) {
-      bg = theme.accentPalette.primary;
-      fg = theme.accentPalette.onPrimary;
-      weight = FontWeight.w700;
-    } else if (isCellSelected) {
-      bg = theme.accentPalette.container;
-      fg = theme.accentPalette.onContainer;
-      weight = FontWeight.w600;
-    } else if (isHovered) {
-      bg = colors.panelHighlight;
-      fg = colors.textPrimary;
-      weight = FontWeight.w500;
-    } else {
-      bg = Colors.transparent;
-      fg = isCurrentMonth ? colors.textPrimary : colors.textTertiary;
-      weight = isCurrentMonth ? FontWeight.w500 : FontWeight.w400;
+  List<Widget> _cachedGridRows(DateTime gridStartDate, DateTime today) {
+    final cacheKey = (
+      gridStart: gridStartDate,
+      today: today,
+      selected: _selectedDate,
+      displayedMonth: _displayedMonth,
+    );
+    if (_gridCacheKey == cacheKey) {
+      return _gridCache;
     }
+
+    DateTime cellAt(int index) => DateTime(
+      gridStartDate.year,
+      gridStartDate.month,
+      gridStartDate.day + index,
+    );
+
+    final rows = <Widget>[
+      for (int week = 0; week < 6; week++)
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 2.0),
+          child: Row(
+            children: [
+              for (int col = 0; col < 7; col++)
+                () {
+                  final index = week * 7 + col;
+                  final cellDate = cellAt(index);
+                  return _CalendarDayCell(
+                    key: ValueKey('calendar-cell-$gridStartDate-$index'),
+                    cellDate: cellDate,
+                    isCurrentMonth: _sameMonth(cellDate, _displayedMonth),
+                    isToday:
+                        _sameMonth(cellDate, today) &&
+                        cellDate.day == today.day,
+                    isSelected:
+                        _sameMonth(cellDate, _selectedDate) &&
+                        cellDate.day == _selectedDate.day,
+                    onTap: () => _selectCell(gridStartDate, index),
+                  );
+                }(),
+            ],
+          ),
+        ),
+    ];
+    _gridCacheKey = cacheKey;
+    _gridCache = rows;
+    return rows;
+  }
+
+  void _selectCell(DateTime gridStartDate, int index) {
+    setState(() {
+      _selectedDate = DateTime(
+        gridStartDate.year,
+        gridStartDate.month,
+        gridStartDate.day + index,
+      );
+      if (_selectedDate.month != _displayedMonth.month) {
+        _displayedMonth = DateTime(_selectedDate.year, _selectedDate.month, 1);
+      }
+    });
+  }
+
+  static bool _sameMonth(DateTime date, DateTime month) =>
+      date.year == month.year && date.month == month.month;
+}
+
+/// One calendar day. Hover state is local so sweeping the grid repaints
+/// single cells instead of the whole 42-cell matrix.
+class _CalendarDayCell extends StatelessWidget {
+  const _CalendarDayCell({
+    required this.cellDate,
+    required this.isCurrentMonth,
+    required this.isToday,
+    required this.isSelected,
+    required this.onTap,
+    super.key,
+  });
+
+  final DateTime cellDate;
+  final bool isCurrentMonth;
+  final bool isToday;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = context.shellTheme;
+    final colors = context.shellColors;
+
+    // Today and selection outrank hover; the highlight only surfaces on
+    // otherwise plain cells.
+    final Color bg = isToday
+        ? theme.accentPalette.primary
+        : isSelected
+        ? theme.accentPalette.container
+        : Colors.transparent;
+    final Color hoverBg = isToday
+        ? theme.accentPalette.primary
+        : isSelected
+        ? theme.accentPalette.container
+        : colors.panelHighlight;
 
     return Expanded(
       child: Center(
-        child: MouseRegion(
-          cursor: SystemMouseCursors.click,
-          onEnter: (_) => setState(() => _hoveredIndex = index),
-          onExit: (_) => setState(() => _hoveredIndex = null),
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () {
-              setState(() {
-                _selectedDate = cellDate;
-                if (cellDate.month != _displayedMonth.month) {
-                  _displayedMonth = DateTime(cellDate.year, cellDate.month, 1);
-                }
-              });
-            },
-            child: AnimatedContainer(
-              duration: Motion.pill,
-              curve: Curves.easeOut,
-              width: 32,
-              height: 32,
-              decoration: BoxDecoration(
-                color: bg,
-                borderRadius: theme.borderRadius(ShellShapeScale.full),
+        child: ShellHoverPill.builder(
+          onTap: onTap,
+          width: 32,
+          height: 32,
+          color: bg,
+          hoverColor: hoverBg,
+          childBuilder: (context, hovered, focused) {
+            final Color fg;
+            final FontWeight weight;
+            if (isToday) {
+              fg = theme.accentPalette.onPrimary;
+              weight = FontWeight.w700;
+            } else if (isSelected) {
+              fg = theme.accentPalette.onContainer;
+              weight = FontWeight.w600;
+            } else if (hovered) {
+              fg = colors.textPrimary;
+              weight = FontWeight.w500;
+            } else {
+              fg = isCurrentMonth ? colors.textPrimary : colors.textTertiary;
+              weight = isCurrentMonth ? FontWeight.w500 : FontWeight.w400;
+            }
+            return Text(
+              '${cellDate.day}',
+              style: TextStyle(
+                color: fg,
+                fontSize: 12.5,
+                fontWeight: weight,
+                decoration: TextDecoration.none,
               ),
-              child: Center(
-                child: Text(
-                  '${cellDate.day}',
-                  style: TextStyle(
-                    color: fg,
-                    fontSize: 12.5,
-                    fontWeight: weight,
-                    decoration: TextDecoration.none,
-                  ),
-                ),
-              ),
-            ),
-          ),
+            );
+          },
         ),
       ),
     );
   }
 }
 
-class _CalendarTodayChip extends StatefulWidget {
+class _CalendarTodayChip extends StatelessWidget {
   const _CalendarTodayChip({required this.label, required this.onPressed});
 
   final String label;
   final VoidCallback onPressed;
 
   @override
-  State<_CalendarTodayChip> createState() => _CalendarTodayChipState();
-}
-
-class _CalendarTodayChipState extends State<_CalendarTodayChip> {
-  bool _hovered = false;
-
-  @override
   Widget build(BuildContext context) {
     final theme = context.shellTheme;
     final colors = context.shellColors;
 
-    final bg = _hovered ? colors.panelHighlight : theme.accentPalette.container;
-    final fg = _hovered ? colors.textPrimary : theme.accentPalette.onContainer;
-
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: widget.onPressed,
-        child: AnimatedContainer(
-          duration: Motion.pill,
-          curve: Curves.easeOut,
-          height: 28,
-          padding: const EdgeInsets.symmetric(horizontal: 10),
-          decoration: BoxDecoration(
-            color: bg,
-            borderRadius: theme.borderRadius(ShellShapeScale.full),
-          ),
-          child: Center(
-            child: Text(
-              widget.label,
-              style: TextStyle(
-                color: fg,
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                decoration: TextDecoration.none,
-              ),
-            ),
-          ),
+    return ShellHoverPill.builder(
+      onTap: onPressed,
+      height: 28,
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      color: theme.accentPalette.container,
+      hoverColor: colors.panelHighlight,
+      childBuilder: (context, hovered, focused) => Text(
+        label,
+        style: TextStyle(
+          color: hovered ? colors.textPrimary : theme.accentPalette.onContainer,
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          decoration: TextDecoration.none,
         ),
       ),
     );
   }
 }
 
-class _CalendarNavButton extends StatefulWidget {
+class _CalendarNavButton extends StatelessWidget {
   const _CalendarNavButton({required this.icon, required this.onPressed});
 
   final IconData icon;
   final VoidCallback onPressed;
 
   @override
-  State<_CalendarNavButton> createState() => _CalendarNavButtonState();
-}
-
-class _CalendarNavButtonState extends State<_CalendarNavButton> {
-  bool _hovered = false;
-
-  @override
   Widget build(BuildContext context) {
-    final theme = context.shellTheme;
     final colors = context.shellColors;
 
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: widget.onPressed,
-        child: AnimatedContainer(
-          duration: Motion.pill,
-          curve: Curves.easeOut,
-          width: 28,
-          height: 28,
-          decoration: BoxDecoration(
-            color: _hovered ? colors.panelHighlight : Colors.transparent,
-            borderRadius: theme.borderRadius(ShellShapeScale.full),
-          ),
-          child: Center(
-            child: Icon(
-              widget.icon,
-              size: 18,
-              color: _hovered ? colors.textPrimary : colors.textSecondary,
-            ),
-          ),
-        ),
+    return ShellHoverPill.builder(
+      onTap: onPressed,
+      width: 28,
+      height: 28,
+      color: Colors.transparent,
+      hoverColor: colors.panelHighlight,
+      childBuilder: (context, hovered, focused) => Icon(
+        icon,
+        size: 18,
+        color: hovered ? colors.textPrimary : colors.textSecondary,
       ),
     );
   }

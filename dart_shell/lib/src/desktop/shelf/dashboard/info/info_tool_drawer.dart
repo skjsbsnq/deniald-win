@@ -9,6 +9,7 @@ import '../../../../theme/motion.dart';
 import '../../../../theme/shell_color_scheme.dart';
 import '../../../../theme/shell_theme.dart';
 import '../../../../theme/tokens.dart';
+import '../../../../widgets/shell_hover_pill.dart';
 import 'drawer_calendar_widget.dart';
 import 'drawer_timer_widget.dart';
 import 'drawer_todo_widget.dart';
@@ -62,24 +63,18 @@ class _InfoToolDrawerState extends ConsumerState<InfoToolDrawer>
       return;
     }
     setState(() => _tool = tool);
-    springTo(
-      _toolSlider,
-      tool.index * _railStride,
-      spring: Motion.expressiveSpatialFast,
-      telemetryLabel: 'info_drawer_tool_slider',
-    );
-  }
-
-  String _weekdaySymbol(String name, bool isZh) {
-    if (isZh) {
-      if (name.startsWith('星期') && name.length >= 3) {
-        return name.substring(2);
-      }
-      if (name.startsWith('周') && name.length >= 2) {
-        return name.substring(1);
-      }
+    // Reduce-motion users get the rail thumb in place; the spring is
+    // decorative overshoot.
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _toolSlider.value = tool.index * _railStride;
+    } else {
+      springTo(
+        _toolSlider,
+        tool.index * _railStride,
+        spring: Motion.expressiveSpatialFast,
+        telemetryLabel: 'info_drawer_tool_slider',
+      );
     }
-    return name.length >= 2 ? name.substring(0, 2) : name;
   }
 
   @override
@@ -87,7 +82,6 @@ class _InfoToolDrawerState extends ConsumerState<InfoToolDrawer>
     final theme = context.shellTheme;
     final colors = context.shellColors;
     final l10n = context.l10n;
-    final isZh = Localizations.localeOf(context).languageCode == 'zh';
 
     final now = ref.watch(clockProvider).value ?? DateTime.now();
     final openTodos = ref.watch(
@@ -96,10 +90,10 @@ class _InfoToolDrawerState extends ConsumerState<InfoToolDrawer>
       ),
     );
 
-    final weekday = _weekdaySymbol(localizedWeekday(l10n, now.weekday), isZh);
-    final dateLabel = isZh
-        ? '${now.month}月${now.day}日 $weekday · $openTodos 项待办'
-        : '${localizedShortDate(context, now)} · $openTodos todos';
+    final dateLabel = l10n.infoDrawerDateLabel(
+      localizedShortDate(context, now),
+      openTodos,
+    );
 
     return AnimatedContainer(
       duration: Motion.cardSettle,
@@ -266,7 +260,7 @@ class _DrawerCollapsedCapsule extends StatelessWidget {
   }
 }
 
-class _RailToolButton extends StatefulWidget {
+class _RailToolButton extends StatelessWidget {
   const _RailToolButton({
     required this.icon,
     required this.onPressed,
@@ -278,39 +272,23 @@ class _RailToolButton extends StatefulWidget {
   final bool selected;
 
   @override
-  State<_RailToolButton> createState() => _RailToolButtonState();
-}
-
-class _RailToolButtonState extends State<_RailToolButton> {
-  bool _hovered = false;
-
-  @override
   Widget build(BuildContext context) {
     final theme = context.shellTheme;
     final colors = context.shellColors;
 
-    final showHoverBubble = !widget.selected && _hovered;
-    final fg = widget.selected
-        ? theme.accentPalette.onContainer
-        : (_hovered ? colors.textPrimary : colors.textSecondary);
-
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: widget.onPressed,
-        child: AnimatedContainer(
-          duration: Motion.pill,
-          curve: Curves.easeOut,
-          height: 44,
-          decoration: BoxDecoration(
-            color: showHoverBubble ? colors.panelHighlight : Colors.transparent,
-            borderRadius: theme.borderRadius(ShellShapeScale.full),
-          ),
-          child: Center(child: Icon(widget.icon, size: 22, color: fg)),
-        ),
+    return ShellHoverPill.builder(
+      onTap: onPressed,
+      height: 44,
+      // The rail thumb already marks the selected tool; hover only surfaces
+      // a bubble on unselected entries.
+      color: Colors.transparent,
+      hoverColor: selected ? Colors.transparent : colors.panelHighlight,
+      childBuilder: (context, hovered, focused) => Icon(
+        icon,
+        size: 22,
+        color: selected
+            ? theme.accentPalette.onContainer
+            : (hovered ? colors.textPrimary : colors.textSecondary),
       ),
     );
   }

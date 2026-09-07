@@ -7,12 +7,12 @@ import '../../state/bluetooth.dart';
 import '../../state/desktop_notifications.dart';
 import '../../state/network_connectivity.dart';
 import '../../state/system_status.dart';
-import '../../theme/motion.dart';
 import '../../theme/shell_theme.dart';
 import '../../theme/tokens.dart';
+import '../../widgets/shell_hover_pill.dart';
 
 /// The aggregated tray button on the right edge of the shelf.
-class UnifiedTrayButton extends ConsumerStatefulWidget {
+class UnifiedTrayButton extends ConsumerWidget {
   const UnifiedTrayButton({
     required this.expanded,
     required this.onPressed,
@@ -26,15 +26,7 @@ class UnifiedTrayButton extends ConsumerStatefulWidget {
   final VoidCallback onPressed;
   final VoidCallback? onClockPressed;
 
-  @override
-  ConsumerState<UnifiedTrayButton> createState() => _UnifiedTrayButtonState();
-}
-
-class _UnifiedTrayButtonState extends ConsumerState<UnifiedTrayButton> {
-  bool _statusHovered = false;
-  bool _clockHovered = false;
-
-  IconData _batteryIcon(int? capacity, bool charging) {
+  static IconData _batteryIcon(int? capacity, bool charging) {
     if (capacity == null) {
       return Icons.battery_unknown_rounded;
     }
@@ -51,7 +43,7 @@ class _UnifiedTrayButtonState extends ConsumerState<UnifiedTrayButton> {
     return Icons.battery_alert_rounded;
   }
 
-  IconData _networkIcon(NetworkSnapshot snapshot) {
+  static IconData _networkIcon(NetworkSnapshot snapshot) {
     final status = snapshot.status;
     if (status == NetworkConnectivityStatus.connecting) {
       return Icons.wifi_find_rounded;
@@ -69,7 +61,7 @@ class _UnifiedTrayButtonState extends ConsumerState<UnifiedTrayButton> {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = context.shellTheme;
     final colors = context.shellColors;
     final battery = ref.watch(batteryProvider);
@@ -92,144 +84,117 @@ class _UnifiedTrayButtonState extends ConsumerState<UnifiedTrayButton> {
     final capacity = battery.capacity;
     final hasBattery = capacity != null;
 
-    // Both capsules idle on a solid accent container like the reference
-    // design; when opened (expanded), the active capsule transitions to the
-    // primary accent; hover keeps the shared panel highlight and no border is drawn.
-    final statusBgColor = widget.expanded
-        ? theme.accentPalette.primary
-        : (_statusHovered
-              ? colors.panelHighlight
-              : theme.accentPalette.container);
-
-    final statusFgColor = widget.expanded
-        ? theme.accentPalette.onPrimary
-        : (_statusHovered
-              ? colors.textPrimary
-              : theme.accentPalette.onContainer);
-
-    final clockBgColor = widget.clockExpanded
-        ? theme.accentPalette.primary
-        : (_clockHovered
-              ? colors.panelHighlight
-              : theme.accentPalette.container);
-
-    final clockFgColor = widget.clockExpanded
-        ? theme.accentPalette.onPrimary
-        : (_clockHovered
-              ? colors.textPrimary
-              : theme.accentPalette.onContainer);
-
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        MouseRegion(
-          cursor: SystemMouseCursors.click,
-          onEnter: (_) => setState(() => _statusHovered = true),
-          onExit: (_) => setState(() => _statusHovered = false),
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: widget.onPressed,
-            child: AnimatedContainer(
-              duration: Motion.pill,
-              curve: Curves.easeOut,
-              height: 40,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              decoration: BoxDecoration(
-                color: statusBgColor,
-                borderRadius: theme.borderRadius(ShellShapeScale.full),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  if (unreadCount > 0)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 1,
-                        ),
-                        decoration: BoxDecoration(
-                          color: statusFgColor.withValues(alpha: 0.15),
-                          borderRadius: theme.borderRadius(
-                            ShellShapeScale.full,
-                          ),
-                        ),
-                        child: Text(
-                          unreadCount > 9 ? '9+' : '$unreadCount',
-                          style: ShellText.base.copyWith(
-                            color: statusFgColor,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                          ),
+        ShellHoverPill.builder(
+          onTap: onPressed,
+          height: 40,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          // Both capsules idle on a solid accent container like the reference
+          // design; when opened (expanded), the active capsule transitions to
+          // the primary accent; hover keeps the shared panel highlight and no
+          // border is drawn.
+          color: expanded
+              ? theme.accentPalette.primary
+              : theme.accentPalette.container,
+          hoverColor: expanded
+              ? theme.accentPalette.primary
+              : colors.panelHighlight,
+          childBuilder: (context, hovered, focused) {
+            final statusFgColor = expanded
+                ? theme.accentPalette.onPrimary
+                : (hovered
+                      ? colors.textPrimary
+                      : theme.accentPalette.onContainer);
+            return Row(
+              mainAxisSize: MainAxisSize.min,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                if (unreadCount > 0)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 1,
+                      ),
+                      decoration: BoxDecoration(
+                        color: statusFgColor.withValues(alpha: 0.15),
+                        borderRadius: theme.borderRadius(ShellShapeScale.full),
+                      ),
+                      child: Text(
+                        unreadCount > 9 ? '9+' : '$unreadCount',
+                        style: ShellText.base.copyWith(
+                          color: statusFgColor,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
                     ),
-                  if (doNotDisturb)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: Icon(
-                        Icons.do_not_disturb_on_rounded,
-                        size: 16,
-                        color: statusFgColor,
-                      ),
-                    ),
-                  if (bluetooth)
-                    Padding(
-                      padding: const EdgeInsets.only(right: 8),
-                      child: Icon(
-                        Icons.bluetooth_rounded,
-                        size: 16,
-                        color: statusFgColor,
-                      ),
-                    ),
-                  Icon(
-                    _networkIcon(connectivity),
-                    size: 16,
-                    color: statusFgColor,
                   ),
-                  if (hasBattery) ...[
-                    const SizedBox(width: 6),
-                    Icon(
-                      _batteryIcon(capacity, battery.charging),
+                if (doNotDisturb)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: Icon(
+                      Icons.do_not_disturb_on_rounded,
                       size: 16,
                       color: statusFgColor,
                     ),
-                  ],
+                  ),
+                if (bluetooth)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: Icon(
+                      Icons.bluetooth_rounded,
+                      size: 16,
+                      color: statusFgColor,
+                    ),
+                  ),
+                Icon(
+                  _networkIcon(connectivity),
+                  size: 16,
+                  color: statusFgColor,
+                ),
+                if (hasBattery) ...[
+                  const SizedBox(width: 6),
+                  Icon(
+                    _batteryIcon(capacity, battery.charging),
+                    size: 16,
+                    color: statusFgColor,
+                  ),
                 ],
-              ),
-            ),
-          ),
+              ],
+            );
+          },
         ),
         const SizedBox(width: 8.0),
-        MouseRegion(
-          cursor: SystemMouseCursors.click,
-          onEnter: (_) => setState(() => _clockHovered = true),
-          onExit: (_) => setState(() => _clockHovered = false),
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: widget.onClockPressed ?? widget.onPressed,
-            child: AnimatedContainer(
-              duration: Motion.pill,
-              curve: Curves.easeOut,
-              height: 40,
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              decoration: BoxDecoration(
-                color: clockBgColor,
-                borderRadius: theme.borderRadius(ShellShapeScale.full),
-              ),
-              child: Center(
-                child: Text(
-                  time,
-                  style: ShellText.trayClock.copyWith(
-                    color: clockFgColor,
-                    fontWeight: FontWeight.w700,
-                  ),
+        ShellHoverPill.builder(
+          onTap: onClockPressed ?? onPressed,
+          height: 40,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          color: clockExpanded
+              ? theme.accentPalette.primary
+              : theme.accentPalette.container,
+          hoverColor: clockExpanded
+              ? theme.accentPalette.primary
+              : colors.panelHighlight,
+          childBuilder: (context, hovered, focused) {
+            final clockFgColor = clockExpanded
+                ? theme.accentPalette.onPrimary
+                : (hovered
+                      ? colors.textPrimary
+                      : theme.accentPalette.onContainer);
+            return Center(
+              child: Text(
+                time,
+                style: ShellText.trayClock.copyWith(
+                  color: clockFgColor,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
-            ),
-          ),
+            );
+          },
         ),
       ],
     );

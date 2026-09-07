@@ -38,22 +38,27 @@ class _ShelfLauncherButtonState extends State<ShelfLauncherButton>
   void _updateHover(bool hovered) {
     if (_hovered == hovered) return;
     setState(() => _hovered = hovered);
-    springTo(
-      _hoverController,
-      hovered ? 1.0 : 0.0,
-      spring: Motion.expressiveSpatialFast,
-      telemetryLabel: 'shelf_launcher_hover',
-    );
+    _drive(_hoverController, hovered ? 1.0 : 0.0, 'shelf_launcher_hover');
   }
 
   void _updatePress(bool pressed) {
     if (_pressed == pressed) return;
     setState(() => _pressed = pressed);
+    _drive(_pressController, pressed ? 1.0 : 0.0, 'shelf_launcher_press');
+  }
+
+  // Reduce-motion users get the end state directly; hover and press springs
+  // are decorative overshoot.
+  void _drive(AnimationController controller, double target, String label) {
+    if (MediaQuery.disableAnimationsOf(context)) {
+      controller.value = target;
+      return;
+    }
     springTo(
-      _pressController,
-      pressed ? 1.0 : 0.0,
+      controller,
+      target,
       spring: Motion.expressiveSpatialFast,
-      telemetryLabel: 'shelf_launcher_press',
+      telemetryLabel: label,
     );
   }
 

@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -41,6 +42,7 @@ class _UnifiedDashboardPanelState extends ConsumerState<UnifiedDashboardPanel>
   static const double _panelWidth = 420;
 
   late final AnimationController _controller;
+  late final FocusNode _contentFocus;
   DashboardTab _tab = DashboardTab.info;
 
   @override
@@ -50,24 +52,41 @@ class _UnifiedDashboardPanelState extends ConsumerState<UnifiedDashboardPanel>
       vsync: this,
       value: widget.visible ? 1.0 : 0.0,
     );
+    _contentFocus = FocusNode(debugLabel: 'unified-dashboard-panel');
   }
 
   @override
   void didUpdateWidget(covariant UnifiedDashboardPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.visible != widget.visible) {
-      springTo(
-        _controller,
-        widget.visible ? 1.0 : 0.0,
-        spring: Motion.expressiveSpatialDefault,
-        telemetryLabel: 'dashboard_panel_toggle',
-      );
+      if (widget.visible) {
+        // Taking focus on open lets Escape dismiss the panel and Tab reach
+        // the tab bar and page content with the keyboard.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && widget.visible && !_contentFocus.hasFocus) {
+            _contentFocus.requestFocus();
+          }
+        });
+      }
+      // Reduce-motion users get the end state directly; the settle spring
+      // is a purely decorative overshoot.
+      if (MediaQuery.disableAnimationsOf(context)) {
+        _controller.value = widget.visible ? 1.0 : 0.0;
+      } else {
+        springTo(
+          _controller,
+          widget.visible ? 1.0 : 0.0,
+          spring: Motion.expressiveSpatialDefault,
+          telemetryLabel: 'dashboard_panel_toggle',
+        );
+      }
     }
   }
 
   @override
   void dispose() {
     _controller.dispose();
+    _contentFocus.dispose();
     super.dispose();
   }
 
@@ -142,19 +161,31 @@ class _UnifiedDashboardPanelState extends ConsumerState<UnifiedDashboardPanel>
         );
       },
       child: RepaintBoundary(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(10, 10, 10, 0),
-              child: DashboardTabBar(
-                selected: _tab,
-                onSelected: (tab) => setState(() => _tab = tab),
+        child: Focus(
+          focusNode: _contentFocus,
+          autofocus: widget.visible,
+          child: FocusTraversalGroup(
+            child: CallbackShortcuts(
+              bindings: <ShortcutActivator, VoidCallback>{
+                const SingleActivator(LogicalKeyboardKey.escape): () =>
+                    widget.onDismiss?.call(),
+              },
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(10, 10, 10, 0),
+                    child: DashboardTabBar(
+                      selected: _tab,
+                      onSelected: (tab) => setState(() => _tab = tab),
+                    ),
+                  ),
+                  Flexible(child: _TabPageHost(tab: _tab)),
+                ],
               ),
             ),
-            Flexible(child: _TabPageHost(tab: _tab)),
-          ],
+          ),
         ),
       ),
     );

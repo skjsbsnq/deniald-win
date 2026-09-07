@@ -4,10 +4,11 @@ import 'package:flutter/material.dart' show Colors, Icons;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../localization/denial_localizations.dart';
 import '../../../../state/timer_state.dart';
-import '../../../../theme/motion.dart';
 import '../../../../theme/shell_theme.dart';
 import '../../../../theme/tokens.dart';
+import '../../../../widgets/shell_hover_pill.dart';
 
 /// Timer tools for the dashboard tool drawer: a pomodoro countdown with a
 /// draining progress ring and a stopwatch with lap splits. Both share the
@@ -19,7 +20,6 @@ class DrawerTimerWidget extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = context.shellTheme;
     final colors = context.shellColors;
-    final isZh = Localizations.localeOf(context).languageCode == 'zh';
 
     final state = ref.watch(timerToolProvider);
     final controller = ref.read(timerToolProvider.notifier);
@@ -30,7 +30,6 @@ class DrawerTimerWidget extends ConsumerWidget {
       children: [
         _TimerToolSwitcher(
           stopwatch: isStopwatch,
-          isZh: isZh,
           onSelected: (stopwatch) => controller.switchMode(
             stopwatch ? TimerMode.stopwatch : TimerMode.pomodoroFocus,
           ),
@@ -38,11 +37,10 @@ class DrawerTimerWidget extends ConsumerWidget {
         const SizedBox(height: 12),
         Expanded(
           child: isStopwatch
-              ? _StopwatchPane(state: state, controller: controller, isZh: isZh)
+              ? _StopwatchPane(state: state, controller: controller)
               : _PomodoroPane(
                   state: state,
                   controller: controller,
-                  isZh: isZh,
                   trackColor: colors.surfaceContainerHighest,
                   accentColor: theme.accentPalette.primary,
                 ),
@@ -53,20 +51,16 @@ class DrawerTimerWidget extends ConsumerWidget {
 }
 
 class _TimerToolSwitcher extends StatelessWidget {
-  const _TimerToolSwitcher({
-    required this.stopwatch,
-    required this.isZh,
-    required this.onSelected,
-  });
+  const _TimerToolSwitcher({required this.stopwatch, required this.onSelected});
 
   final bool stopwatch;
-  final bool isZh;
   final ValueChanged<bool> onSelected;
 
   @override
   Widget build(BuildContext context) {
     final theme = context.shellTheme;
     final colors = context.shellColors;
+    final l10n = context.l10n;
     final radius = theme.borderRadius(ShellShapeScale.full);
 
     return Container(
@@ -80,17 +74,15 @@ class _TimerToolSwitcher extends StatelessWidget {
         children: [
           _TimerToolButton(
             icon: Icons.local_fire_department_rounded,
-            label: isZh ? '番茄钟' : 'Pomodoro',
+            label: l10n.timerPomodoro,
             selected: !stopwatch,
-            radius: radius,
             onPressed: () => onSelected(false),
           ),
           const SizedBox(width: 4),
           _TimerToolButton(
             icon: Icons.timer_rounded,
-            label: isZh ? '秒表' : 'Stopwatch',
+            label: l10n.timerStopwatch,
             selected: stopwatch,
-            radius: radius,
             onPressed: () => onSelected(true),
           ),
         ],
@@ -99,73 +91,55 @@ class _TimerToolSwitcher extends StatelessWidget {
   }
 }
 
-class _TimerToolButton extends StatefulWidget {
+class _TimerToolButton extends StatelessWidget {
   const _TimerToolButton({
     required this.icon,
     required this.label,
     required this.selected,
-    required this.radius,
     required this.onPressed,
   });
 
   final IconData icon;
   final String label;
   final bool selected;
-  final BorderRadius radius;
   final VoidCallback onPressed;
-
-  @override
-  State<_TimerToolButton> createState() => _TimerToolButtonState();
-}
-
-class _TimerToolButtonState extends State<_TimerToolButton> {
-  bool _hovered = false;
 
   @override
   Widget build(BuildContext context) {
     final theme = context.shellTheme;
     final colors = context.shellColors;
 
-    final bg = widget.selected
-        ? theme.accentPalette.container
-        : (_hovered ? colors.panelHighlight : Colors.transparent);
-    final fg = widget.selected
-        ? theme.accentPalette.onContainer
-        : colors.textSecondary;
-
     return Expanded(
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        onEnter: (_) => setState(() => _hovered = true),
-        onExit: (_) => setState(() => _hovered = false),
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: widget.onPressed,
-          child: AnimatedContainer(
-            duration: Motion.pill,
-            curve: Curves.easeOut,
-            decoration: BoxDecoration(color: bg, borderRadius: widget.radius),
-            child: Center(
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(widget.icon, size: 15, color: fg),
-                  const SizedBox(width: 5),
-                  Text(
-                    widget.label,
-                    style: TextStyle(
-                      color: fg,
-                      fontSize: 11.5,
-                      fontWeight: widget.selected
-                          ? FontWeight.w700
-                          : FontWeight.w600,
-                      decoration: TextDecoration.none,
-                    ),
-                  ),
-                ],
+      child: ShellHoverPill(
+        onTap: onPressed,
+        radius: ShellShapeScale.full,
+        color: selected ? theme.accentPalette.container : Colors.transparent,
+        hoverColor: selected
+            ? theme.accentPalette.container
+            : colors.panelHighlight,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 15,
+              color: selected
+                  ? theme.accentPalette.onContainer
+                  : colors.textSecondary,
+            ),
+            const SizedBox(width: 5),
+            Text(
+              label,
+              style: TextStyle(
+                color: selected
+                    ? theme.accentPalette.onContainer
+                    : colors.textSecondary,
+                fontSize: 11.5,
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+                decoration: TextDecoration.none,
               ),
             ),
-          ),
+          ],
         ),
       ),
     );
@@ -176,20 +150,19 @@ class _PomodoroPane extends StatelessWidget {
   const _PomodoroPane({
     required this.state,
     required this.controller,
-    required this.isZh,
     required this.trackColor,
     required this.accentColor,
   });
 
   final TimerToolState state;
   final TimerToolController controller;
-  final bool isZh;
   final Color trackColor;
   final Color accentColor;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.shellColors;
+    final l10n = context.l10n;
     final remaining = state.target - state.elapsed;
 
     return Column(
@@ -200,13 +173,13 @@ class _PomodoroPane extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             _PomodoroModeChip(
-              label: isZh ? '专注 25 分' : 'Focus 25m',
+              label: l10n.timerFocus25,
               selected: state.mode == TimerMode.pomodoroFocus,
               onPressed: () => controller.switchMode(TimerMode.pomodoroFocus),
             ),
             const SizedBox(width: 8),
             _PomodoroModeChip(
-              label: isZh ? '休息 5 分' : 'Break 5m',
+              label: l10n.timerBreak5,
               selected: state.mode == TimerMode.pomodoroBreak,
               onPressed: () => controller.switchMode(TimerMode.pomodoroBreak),
             ),
@@ -233,15 +206,15 @@ class _PomodoroPane extends StatelessWidget {
                         fontSize: 27,
                         fontWeight: FontWeight.w700,
                         height: 1.1,
-                        letterSpacing: 1,
+                        letterSpacing: 0,
                         decoration: TextDecoration.none,
                       ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       state.mode == TimerMode.pomodoroBreak
-                          ? (isZh ? '休息一下' : 'Break')
-                          : (isZh ? '保持专注' : 'Focus'),
+                          ? l10n.timerBreakLabel
+                          : l10n.timerFocusLabel,
                       style: TextStyle(
                         color: colors.textSecondary,
                         fontSize: 11,
@@ -289,7 +262,7 @@ class _PomodoroPane extends StatelessWidget {
   }
 }
 
-class _PomodoroModeChip extends StatefulWidget {
+class _PomodoroModeChip extends StatelessWidget {
   const _PomodoroModeChip({
     required this.label,
     required this.selected,
@@ -301,51 +274,29 @@ class _PomodoroModeChip extends StatefulWidget {
   final VoidCallback onPressed;
 
   @override
-  State<_PomodoroModeChip> createState() => _PomodoroModeChipState();
-}
-
-class _PomodoroModeChipState extends State<_PomodoroModeChip> {
-  bool _hovered = false;
-
-  @override
   Widget build(BuildContext context) {
     final theme = context.shellTheme;
     final colors = context.shellColors;
 
-    final bg = widget.selected
-        ? theme.accentPalette.container
-        : (_hovered ? colors.panelHighlight : colors.surfaceContainerHighest);
-    final fg = widget.selected
-        ? theme.accentPalette.onContainer
-        : colors.textSecondary;
-
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: widget.onPressed,
-        child: AnimatedContainer(
-          duration: Motion.pill,
-          curve: Curves.easeOut,
-          height: 28,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          decoration: BoxDecoration(
-            color: bg,
-            borderRadius: theme.borderRadius(ShellShapeScale.full),
-          ),
-          child: Center(
-            child: Text(
-              widget.label,
-              style: TextStyle(
-                color: fg,
-                fontSize: 11.5,
-                fontWeight: widget.selected ? FontWeight.w700 : FontWeight.w600,
-                decoration: TextDecoration.none,
-              ),
-            ),
-          ),
+    return ShellHoverPill(
+      onTap: onPressed,
+      height: 28,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      color: selected
+          ? theme.accentPalette.container
+          : colors.surfaceContainerHighest,
+      hoverColor: selected
+          ? theme.accentPalette.container
+          : colors.panelHighlight,
+      child: Text(
+        label,
+        style: TextStyle(
+          color: selected
+              ? theme.accentPalette.onContainer
+              : colors.textSecondary,
+          fontSize: 11.5,
+          fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+          decoration: TextDecoration.none,
         ),
       ),
     );
@@ -353,15 +304,10 @@ class _PomodoroModeChipState extends State<_PomodoroModeChip> {
 }
 
 class _StopwatchPane extends StatelessWidget {
-  const _StopwatchPane({
-    required this.state,
-    required this.controller,
-    required this.isZh,
-  });
+  const _StopwatchPane({required this.state, required this.controller});
 
   final TimerToolState state;
   final TimerToolController controller;
-  final bool isZh;
 
   @override
   Widget build(BuildContext context) {
@@ -379,7 +325,7 @@ class _StopwatchPane extends StatelessWidget {
               fontSize: 30,
               fontWeight: FontWeight.w700,
               height: 1.1,
-              letterSpacing: 1,
+
               decoration: TextDecoration.none,
             ),
           ),
@@ -413,7 +359,7 @@ class _StopwatchPane extends StatelessWidget {
           child: laps.isEmpty
               ? Center(
                   child: Text(
-                    isZh ? '暂无分圈记录' : 'No laps yet',
+                    context.l10n.timerNoLaps,
                     style: TextStyle(
                       color: colors.textTertiary,
                       fontSize: 11.5,
@@ -440,7 +386,7 @@ class _StopwatchPane extends StatelessWidget {
                       child: Row(
                         children: [
                           Text(
-                            isZh ? '第 $lapNumber 圈' : 'Lap $lapNumber',
+                            context.l10n.timerLapNumber(lapNumber),
                             style: TextStyle(
                               color: colors.textSecondary,
                               fontSize: 12,
@@ -469,7 +415,7 @@ class _StopwatchPane extends StatelessWidget {
   }
 }
 
-class _TimerActionButton extends StatefulWidget {
+class _TimerActionButton extends StatelessWidget {
   const _TimerActionButton({
     required this.icon,
     required this.onPressed,
@@ -483,54 +429,34 @@ class _TimerActionButton extends StatefulWidget {
   final bool enabled;
 
   @override
-  State<_TimerActionButton> createState() => _TimerActionButtonState();
-}
-
-class _TimerActionButtonState extends State<_TimerActionButton> {
-  bool _hovered = false;
-
-  @override
   Widget build(BuildContext context) {
     final theme = context.shellTheme;
     final colors = context.shellColors;
-    final size = widget.primary ? 52.0 : 44.0;
+    final size = primary ? 52.0 : 44.0;
 
-    Color bg;
-    Color fg;
-    if (!widget.enabled) {
-      bg = colors.tileOff;
-      fg = colors.glyphInactive;
-    } else if (widget.primary) {
-      bg = _hovered
-          ? theme.accentPalette.primary
-          : theme.accentPalette.container;
-      fg = _hovered
-          ? theme.accentPalette.onPrimary
-          : theme.accentPalette.onContainer;
-    } else {
-      bg = _hovered ? colors.panelHighlight : colors.surfaceContainerHighest;
-      fg = colors.textPrimary;
-    }
-
-    return MouseRegion(
-      cursor: widget.enabled
-          ? SystemMouseCursors.click
-          : SystemMouseCursors.basic,
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: widget.enabled ? widget.onPressed : null,
-        child: AnimatedContainer(
-          duration: Motion.pill,
-          curve: Curves.easeOut,
-          width: size,
-          height: size,
-          decoration: BoxDecoration(color: bg, shape: BoxShape.circle),
-          child: Center(
-            child: Icon(widget.icon, size: widget.primary ? 26 : 20, color: fg),
-          ),
-        ),
+    // A square pill at full scale renders the same circle the bespoke
+    // BoxShape.circle decoration did.
+    return ShellHoverPill.builder(
+      onTap: onPressed,
+      enabled: enabled,
+      width: size,
+      height: size,
+      color: !enabled
+          ? colors.tileOff
+          : primary
+          ? theme.accentPalette.container
+          : colors.surfaceContainerHighest,
+      hoverColor: primary ? theme.accentPalette.primary : colors.panelHighlight,
+      childBuilder: (context, hovered, focused) => Icon(
+        icon,
+        size: primary ? 26 : 20,
+        color: !enabled
+            ? colors.glyphInactive
+            : primary
+            ? (hovered
+                  ? theme.accentPalette.onPrimary
+                  : theme.accentPalette.onContainer)
+            : colors.textPrimary,
       ),
     );
   }

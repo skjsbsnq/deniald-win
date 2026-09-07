@@ -414,7 +414,9 @@ class _MediaPlaybackPopup extends StatelessWidget {
                           context.l10n.mediaNowPlaying.toUpperCase(),
                           style: ShellText.systemBarCaption.copyWith(
                             color: context.shellTheme.accent,
-                            letterSpacing: 1.05,
+                            // Zero tracking: wide uppercase tracking smears
+                            // glyph phase at fractional scale factors.
+                            letterSpacing: 0,
                           ),
                         ),
                       ],

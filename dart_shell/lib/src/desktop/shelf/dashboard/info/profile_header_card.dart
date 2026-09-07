@@ -5,6 +5,8 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../launcher/launcher_providers.dart';
+import '../../../../../l10n/generated/app_localizations.dart';
+import '../../../../localization/denial_localizations.dart';
 import '../../../../state/system_identity.dart';
 import '../../../../theme/shell_color_scheme.dart';
 import '../../../../theme/shell_theme.dart';
@@ -24,7 +26,9 @@ class ProfileHeaderCard extends ConsumerStatefulWidget {
 }
 
 class _ProfileHeaderCardState extends ConsumerState<ProfileHeaderCard> {
-  static const double _coverHeight = 160;
+  // A short cover keeps the notification list above the fold on 1080p
+  // panels; the avatar straddling its edge carries the visual weight.
+  static const double _coverHeight = 80;
   static const double _avatarSize = 92;
 
   // Cached once per mount; the lookup is not free and the hostname cannot
@@ -35,7 +39,7 @@ class _ProfileHeaderCardState extends ConsumerState<ProfileHeaderCard> {
   Widget build(BuildContext context) {
     final theme = context.shellTheme;
     final colors = context.shellColors;
-    final isZh = Localizations.localeOf(context).languageCode == 'zh';
+    final l10n = context.l10n;
 
     final identity = ref.watch(systemIdentityProvider);
     final assignment = ref.watch(
@@ -98,8 +102,8 @@ class _ProfileHeaderCardState extends ConsumerState<ProfileHeaderCard> {
                           if (identity.uptimeSeconds != null)
                             _UptimeBadge(
                               label: _formatUptime(
+                                l10n,
                                 identity.uptimeSeconds!,
-                                isZh,
                               ),
                             ),
                         ],
@@ -193,27 +197,18 @@ class _ProfileHeaderCardState extends ConsumerState<ProfileHeaderCard> {
     );
   }
 
-  String _formatUptime(double seconds, bool isZh) {
+  String _formatUptime(AppLocalizations l10n, double seconds) {
     final total = seconds.round();
     final days = total ~/ 86400;
     final hours = (total % 86400) ~/ 3600;
     final minutes = (total % 3600) ~/ 60;
-    if (isZh) {
-      if (days > 0) {
-        return '已运行 $days 天 $hours 小时';
-      }
-      if (hours > 0) {
-        return '已运行 $hours 小时 $minutes 分钟';
-      }
-      return '已运行 $minutes 分钟';
-    }
     if (days > 0) {
-      return 'Up · ${days}d ${hours}h';
+      return l10n.uptimeDaysHours(days, hours);
     }
     if (hours > 0) {
-      return 'Up · ${hours}h ${minutes}m';
+      return l10n.uptimeHoursMinutes(hours, minutes);
     }
-    return 'Up · ${minutes}m';
+    return l10n.uptimeMinutes(minutes);
   }
 }
 

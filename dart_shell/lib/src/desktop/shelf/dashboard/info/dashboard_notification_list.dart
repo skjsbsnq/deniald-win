@@ -8,19 +8,28 @@ import '../../../../state/desktop_notifications.dart';
 import '../../../../theme/motion.dart';
 import '../../../../theme/shell_theme.dart';
 import '../../../../theme/tokens.dart';
+import '../../../../widgets/shell_hover_pill.dart';
 import '../../../../widgets/notification_banner.dart';
 import '../../../../widgets/notification_media.dart';
 
 /// Notification center for the dashboard Info view. History is grouped by
 /// application with collapsible groups, an elastic swipe-to-dismiss gesture,
 /// a do-not-disturb capsule, and a clear-all action.
-class DashboardNotificationList extends ConsumerWidget {
+class DashboardNotificationList extends ConsumerStatefulWidget {
   const DashboardNotificationList({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<DashboardNotificationList> createState() =>
+      _DashboardNotificationListState();
+}
+
+class _DashboardNotificationListState
+    extends ConsumerState<DashboardNotificationList> {
+  bool _markReadScheduled = false;
+
+  @override
+  Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final isZh = Localizations.localeOf(context).languageCode == 'zh';
 
     final notificationState = ref.watch(
       desktopNotificationsProvider.select(
@@ -32,6 +41,21 @@ class DashboardNotificationList extends ConsumerWidget {
       ),
     );
     final controller = ref.read(desktopNotificationsProvider.notifier);
+
+    // Seeing the list consumes the unread markers, matching the classic
+    // notification center: the badge clears the moment this page is shown.
+    final unreadCount = ref.watch(
+      desktopNotificationsProvider.select((state) => state.unreadCount),
+    );
+    if (unreadCount > 0 && !_markReadScheduled) {
+      _markReadScheduled = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _markReadScheduled = false;
+        if (mounted) {
+          ref.read(desktopNotificationsProvider.notifier).markAllRead();
+        }
+      });
+    }
 
     final groups = <String, List<DesktopNotificationRecord>>{};
     for (final record in notificationState.history) {
@@ -69,7 +93,6 @@ class DashboardNotificationList extends ConsumerWidget {
           doNotDisturb: notificationState.doNotDisturb,
           policyLoaded: notificationState.policyLoaded,
           count: notificationState.history.length,
-          isZh: isZh,
           onToggleDoNotDisturb: controller.toggleDoNotDisturb,
           onClearAll: controller.clearAll,
         ),
@@ -103,7 +126,13 @@ class _NotificationGroupCardState extends State<_NotificationGroupCard>
   static const double _dismissDistance = 96;
   static const double _dismissFlingVelocity = 700;
 
+  // Expanded groups render in chunks so a pathological group (a hundred
+  // piled-up notifications from one app) inflates progressively instead of
+  // materializing every card in one frame.
+  static const int _expandedChunk = 25;
+
   bool _expanded = false;
+  int _visibleCount = _expandedChunk;
   late final AnimationController _drag = AnimationController.unbounded(
     vsync: this,
   );
@@ -126,6 +155,10 @@ class _NotificationGroupCardState extends State<_NotificationGroupCard>
       // settle animation is scheduled afterwards.
       widget.onDismissGroup();
       _drag.value = 0;
+    } else if (MediaQuery.disableAnimationsOf(context)) {
+      // Reduce-motion users get the resting offset directly; the settle
+      // spring is decorative overshoot.
+      _drag.value = 0.0;
     } else {
       springTo(
         _drag,
@@ -141,7 +174,6 @@ class _NotificationGroupCardState extends State<_NotificationGroupCard>
   Widget build(BuildContext context) {
     final theme = context.shellTheme;
     final colors = context.shellColors;
-    final isZh = Localizations.localeOf(context).languageCode == 'zh';
 
     final latest = widget.records.first;
     final latestSummary = _latestSummary(latest.notification);
@@ -166,7 +198,12 @@ class _NotificationGroupCardState extends State<_NotificationGroupCard>
             ),
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
-              onTap: () => setState(() => _expanded = !_expanded),
+              onTap: () => setState(() {
+                _expanded = !_expanded;
+                if (_expanded) {
+                  _visibleCount = _expandedChunk;
+                }
+              }),
               onHorizontalDragUpdate: _handleDragUpdate,
               onHorizontalDragEnd: _handleDragEnd,
               child: SizedBox(
@@ -228,7 +265,11 @@ class _NotificationGroupCardState extends State<_NotificationGroupCard>
                     ),
                     const SizedBox(width: 10),
                     _GroupCountCapsule(
-                      label: _groupCountLabel(widget.records.length, isZh),
+                      label: widget.records.length == 1
+                          ? context.l10n.notificationsOneNotification
+                          : context.l10n.notificationsGroupCount(
+                              widget.records.length,
+                            ),
                       expanded: _expanded,
                     ),
                   ],
@@ -249,7 +290,8 @@ class _NotificationGroupCardState extends State<_NotificationGroupCard>
                       children: [
                         for (
                           var index = 0;
-                          index < widget.records.length;
+                          index < widget.records.length &&
+                              index < _visibleCount;
                           index += 1
                         ) ...[
                           if (index > 0) const SizedBox(height: 6),
@@ -270,6 +312,16 @@ class _NotificationGroupCardState extends State<_NotificationGroupCard>
                             );
                           }(),
                         ],
+                        if (widget.records.length > _visibleCount) ...[
+                          const SizedBox(height: 6),
+                          _ShowMoreCapsule(
+                            label: context.l10n.notificationsShowAll(
+                              widget.records.length,
+                            ),
+                            onPressed: () =>
+                                setState(() => _visibleCount += _expandedChunk),
+                          ),
+                        ],
                       ],
                     ),
                   )
@@ -287,13 +339,6 @@ class _NotificationGroupCardState extends State<_NotificationGroupCard>
     }
     return notification.summary;
   }
-}
-
-String _groupCountLabel(int count, bool isZh) {
-  if (isZh) {
-    return '$count 条通知';
-  }
-  return count == 1 ? '1 notification' : '$count notifications';
 }
 
 class _GroupCountCapsule extends StatelessWidget {
@@ -343,12 +388,43 @@ class _GroupCountCapsule extends StatelessWidget {
   }
 }
 
+/// Centered capsule that raises a capped group's visible card count.
+class _ShowMoreCapsule extends StatelessWidget {
+  const _ShowMoreCapsule({required this.label, required this.onPressed});
+
+  final String label;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.shellColors;
+
+    return Center(
+      child: ShellHoverPill(
+        onTap: onPressed,
+        height: 26,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        color: colors.surfaceContainerHighest,
+        hoverColor: colors.panelHighlight,
+        child: Text(
+          label,
+          style: TextStyle(
+            color: colors.textSecondary,
+            fontSize: 10.5,
+            fontWeight: FontWeight.w600,
+            decoration: TextDecoration.none,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _NotificationListStatusBar extends StatelessWidget {
   const _NotificationListStatusBar({
     required this.doNotDisturb,
     required this.policyLoaded,
     required this.count,
-    required this.isZh,
     required this.onToggleDoNotDisturb,
     required this.onClearAll,
   });
@@ -356,7 +432,6 @@ class _NotificationListStatusBar extends StatelessWidget {
   final bool doNotDisturb;
   final bool policyLoaded;
   final int count;
-  final bool isZh;
   final VoidCallback onToggleDoNotDisturb;
   final VoidCallback onClearAll;
 
@@ -369,7 +444,6 @@ class _NotificationListStatusBar extends StatelessWidget {
         _DoNotDisturbCapsule(
           active: doNotDisturb,
           enabled: policyLoaded,
-          isZh: isZh,
           semanticsLabel: doNotDisturb
               ? l10n.notificationsDisableDoNotDisturb
               : l10n.notificationsEnableDoNotDisturb,
@@ -378,7 +452,9 @@ class _NotificationListStatusBar extends StatelessWidget {
         Expanded(
           child: Center(
             child: Text(
-              _groupCountLabel(count, isZh),
+              count == 1
+                  ? l10n.notificationsOneNotification
+                  : l10n.notificationsGroupCount(count),
               style: TextStyle(
                 color: context.shellColors.textTertiary,
                 fontSize: 11,
@@ -398,98 +474,70 @@ class _NotificationListStatusBar extends StatelessWidget {
   }
 }
 
-class _DoNotDisturbCapsule extends StatefulWidget {
+class _DoNotDisturbCapsule extends StatelessWidget {
   const _DoNotDisturbCapsule({
     required this.active,
     required this.enabled,
-    required this.isZh,
     required this.semanticsLabel,
     required this.onToggle,
   });
 
   final bool active;
   final bool enabled;
-  final bool isZh;
   final String semanticsLabel;
   final VoidCallback onToggle;
-
-  @override
-  State<_DoNotDisturbCapsule> createState() => _DoNotDisturbCapsuleState();
-}
-
-class _DoNotDisturbCapsuleState extends State<_DoNotDisturbCapsule> {
-  bool _hovered = false;
 
   @override
   Widget build(BuildContext context) {
     final theme = context.shellTheme;
     final colors = context.shellColors;
 
-    final Color bg;
-    final Color fg;
-    if (!widget.enabled) {
-      bg = colors.tileOff;
-      fg = colors.glyphInactive;
-    } else if (widget.active) {
-      bg = theme.accentPalette.container;
-      fg = theme.accentPalette.onContainer;
-    } else {
-      bg = _hovered ? colors.panelHighlight : colors.surfaceContainerHighest;
-      fg = colors.textPrimary;
-    }
-
-    return Semantics(
-      button: true,
-      enabled: widget.enabled,
-      label: widget.semanticsLabel,
-      child: MouseRegion(
-        cursor: widget.enabled
-            ? SystemMouseCursors.click
-            : SystemMouseCursors.basic,
-        onEnter: (_) => setState(() => _hovered = true),
-        onExit: (_) => setState(() => _hovered = false),
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: widget.enabled ? widget.onToggle : null,
-          child: AnimatedContainer(
-            duration: Motion.pill,
-            curve: Curves.easeOut,
-            height: 30,
-            padding: const EdgeInsets.symmetric(horizontal: 11),
-            decoration: BoxDecoration(
-              color: bg,
-              borderRadius: theme.borderRadius(ShellShapeScale.full),
+    return ShellHoverPill.builder(
+      onTap: onToggle,
+      enabled: enabled,
+      semanticLabel: semanticsLabel,
+      height: 30,
+      padding: const EdgeInsets.symmetric(horizontal: 11),
+      color: !enabled
+          ? colors.tileOff
+          : active
+          ? theme.accentPalette.container
+          : colors.surfaceContainerHighest,
+      hoverColor: colors.panelHighlight,
+      childBuilder: (context, hovered, focused) {
+        final fg = !enabled
+            ? colors.glyphInactive
+            : active
+            ? theme.accentPalette.onContainer
+            : colors.textPrimary;
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              active
+                  ? Icons.notifications_off_rounded
+                  : Icons.notifications_active_rounded,
+              size: 15,
+              color: fg,
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  widget.active
-                      ? Icons.notifications_off_rounded
-                      : Icons.notifications_active_rounded,
-                  size: 15,
-                  color: fg,
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  widget.isZh ? '勿扰' : 'DND',
-                  style: TextStyle(
-                    color: fg,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    decoration: TextDecoration.none,
-                  ),
-                ),
-              ],
+            const SizedBox(width: 6),
+            Text(
+              context.l10n.notificationsDndShort,
+              style: TextStyle(
+                color: fg,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                decoration: TextDecoration.none,
+              ),
             ),
-          ),
-        ),
-      ),
+          ],
+        );
+      },
     );
   }
 }
 
-class _ClearAllButton extends StatefulWidget {
+class _ClearAllButton extends StatelessWidget {
   const _ClearAllButton({
     required this.enabled,
     required this.semanticsLabel,
@@ -501,49 +549,21 @@ class _ClearAllButton extends StatefulWidget {
   final VoidCallback onPressed;
 
   @override
-  State<_ClearAllButton> createState() => _ClearAllButtonState();
-}
-
-class _ClearAllButtonState extends State<_ClearAllButton> {
-  bool _hovered = false;
-
-  @override
   Widget build(BuildContext context) {
-    final theme = context.shellTheme;
     final colors = context.shellColors;
 
-    final bg = !widget.enabled
-        ? colors.tileOff
-        : (_hovered ? colors.panelHighlight : colors.surfaceContainerHighest);
-    final fg = widget.enabled ? colors.textPrimary : colors.glyphInactive;
-
-    return Semantics(
-      button: true,
-      enabled: widget.enabled,
-      label: widget.semanticsLabel,
-      child: MouseRegion(
-        cursor: widget.enabled
-            ? SystemMouseCursors.click
-            : SystemMouseCursors.basic,
-        onEnter: (_) => setState(() => _hovered = true),
-        onExit: (_) => setState(() => _hovered = false),
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: widget.enabled ? widget.onPressed : null,
-          child: AnimatedContainer(
-            duration: Motion.pill,
-            curve: Curves.easeOut,
-            width: 30,
-            height: 30,
-            decoration: BoxDecoration(
-              color: bg,
-              borderRadius: theme.borderRadius(ShellShapeScale.full),
-            ),
-            child: Center(
-              child: Icon(Icons.delete_sweep_rounded, size: 16, color: fg),
-            ),
-          ),
-        ),
+    return ShellHoverPill(
+      onTap: onPressed,
+      enabled: enabled,
+      semanticLabel: semanticsLabel,
+      width: 30,
+      height: 30,
+      color: enabled ? colors.surfaceContainerHighest : colors.tileOff,
+      hoverColor: colors.panelHighlight,
+      child: Icon(
+        Icons.delete_sweep_rounded,
+        size: 16,
+        color: enabled ? colors.textPrimary : colors.glyphInactive,
       ),
     );
   }

@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart' show Icons;
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -22,6 +23,7 @@ import '../../widgets/session/power_session_surface.dart';
 import '../../widgets/shade/quick_settings_tiles.dart';
 import '../../widgets/shade/range_bar.dart';
 import '../../widgets/shell_backdrop_blur.dart';
+import '../../widgets/shell_hover_pill.dart';
 import '../../widgets/shell_surface_host.dart';
 
 /// The popup bubble originating from the unified tray on the shelf.
@@ -46,6 +48,7 @@ class UnifiedTrayBubble extends ConsumerStatefulWidget {
 class _UnifiedTrayBubbleState extends ConsumerState<UnifiedTrayBubble>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
+  late final FocusNode _contentFocus;
 
   @override
   void initState() {
@@ -54,24 +57,43 @@ class _UnifiedTrayBubbleState extends ConsumerState<UnifiedTrayBubble>
       vsync: this,
       value: widget.visible ? 1.0 : 0.0,
     );
+    _contentFocus = FocusNode(debugLabel: 'unified-tray-bubble');
   }
 
   @override
   void didUpdateWidget(covariant UnifiedTrayBubble oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.visible != widget.visible) {
-      springTo(
-        _controller,
-        widget.visible ? 1.0 : 0.0,
-        spring: Motion.expressiveSpatialDefault,
-        telemetryLabel: 'tray_bubble_toggle',
-      );
+      if (widget.visible) {
+        // The bubble takes keyboard focus when it opens so Tab traversal
+        // and the Escape dismiss work like every other shell surface.
+        // Descendants that later take focus keep it; requestFocus only
+        // claims the initially unowned focus scope.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted && widget.visible && !_contentFocus.hasFocus) {
+            _contentFocus.requestFocus();
+          }
+        });
+      }
+      // Reduce-motion users get the end state directly; the settle spring
+      // is a purely decorative overshoot.
+      if (MediaQuery.disableAnimationsOf(context)) {
+        _controller.value = widget.visible ? 1.0 : 0.0;
+      } else {
+        springTo(
+          _controller,
+          widget.visible ? 1.0 : 0.0,
+          spring: Motion.expressiveSpatialDefault,
+          telemetryLabel: 'tray_bubble_toggle',
+        );
+      }
     }
   }
 
   @override
   void dispose() {
     _controller.dispose();
+    _contentFocus.dispose();
     super.dispose();
   }
 
@@ -137,9 +159,21 @@ class _UnifiedTrayBubbleState extends ConsumerState<UnifiedTrayBubble>
       child: RepaintBoundary(
         child: Padding(
           padding: const EdgeInsets.all(16.0),
-          child: _TrayBubbleContent(
-            onDismiss: widget.onDismiss,
-            onOpenOverview: widget.onOpenOverview,
+          child: Focus(
+            focusNode: _contentFocus,
+            autofocus: widget.visible,
+            child: FocusTraversalGroup(
+              child: CallbackShortcuts(
+                bindings: <ShortcutActivator, VoidCallback>{
+                  const SingleActivator(LogicalKeyboardKey.escape): () =>
+                      widget.onDismiss?.call(),
+                },
+                child: _TrayBubbleContent(
+                  onDismiss: widget.onDismiss,
+                  onOpenOverview: widget.onOpenOverview,
+                ),
+              ),
+            ),
           ),
         ),
       ),
@@ -155,19 +189,13 @@ class _TrayBubbleContent extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final theme = context.shellTheme;
-    final colors = context.shellColors;
     final l10n = context.l10n;
 
-    final quickSettings = ref.watch(
-      quickSettingsProvider.select(
-        (state) => (
-          rotationLock: state.rotationLock,
-          profile: state.profile,
-          brightness: state.brightness,
-          volume: state.volume,
-        ),
-      ),
+    // The sliders watch their own value in narrow consumers below; this
+    // widget only subscribes to the profile so a drag does not rebuild the
+    // whole column (header, chips, and tiles) on every pointer delta.
+    final profile = ref.watch(
+      quickSettingsProvider.select((state) => state.profile),
     );
     final quickSettingsController = ref.read(quickSettingsProvider.notifier);
 
@@ -223,7 +251,7 @@ class _TrayBubbleContent extends ConsumerWidget {
           bluetoothBusy: bluetooth.powerChanging,
           dnd: notificationPolicy.doNotDisturb,
           dndReady: notificationPolicy.loaded,
-          profile: quickSettings.profile,
+          profile: profile,
           onToggleWifi: networkController.toggleWireless,
           onOpenWifi: () {
             ref
@@ -254,49 +282,86 @@ class _TrayBubbleContent extends ConsumerWidget {
           },
         ),
         const SizedBox(height: 10.0),
-        RangeBar(
-          icon: Icons.brightness_6_rounded,
-          value: quickSettings.brightness,
-          activeColor: theme.accent,
-          inactiveColor: colors.surfaceContainerHighest,
-          onChanged: quickSettingsController.setBrightness,
-          onChangeEnd: quickSettingsController.commitBrightness,
-          height: 36.0,
-          trailing: _TrayTrailingActionButton(
-            icon: Icons.brightness_auto_rounded,
-            onPressed: () {
-              launchSettingsPage(
-                ref,
-                context,
-                SettingsPageId.displays,
-                onDispatched: onDismiss,
-              );
-            },
-          ),
-        ),
+        _BrightnessRangeBar(onDismiss: onDismiss),
         const SizedBox(height: 8.0),
-        RangeBar(
-          icon: Icons.volume_up_rounded,
-          value: quickSettings.volume,
-          activeColor: theme.accent,
-          inactiveColor: colors.surfaceContainerHighest,
-          onChangeStart: quickSettingsController.beginVolumeInteraction,
-          onChanged: quickSettingsController.setVolume,
-          onChangeEnd: quickSettingsController.commitVolume,
-          height: 36.0,
-          trailing: _TrayTrailingActionButton(
-            icon: Icons.chevron_right_rounded,
-            onPressed: () {
-              launchSettingsPage(
-                ref,
-                context,
-                SettingsPageId.audio,
-                onDispatched: onDismiss,
-              );
-            },
-          ),
-        ),
+        _VolumeRangeBar(onDismiss: onDismiss),
       ],
+    );
+  }
+}
+
+/// Brightness slider in its own consumer so drag deltas only rebuild this
+/// row; the rest of the bubble stays untouched while the value streams in.
+class _BrightnessRangeBar extends ConsumerWidget {
+  const _BrightnessRangeBar({this.onDismiss});
+
+  final VoidCallback? onDismiss;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = context.shellTheme;
+    final colors = context.shellColors;
+    final brightness = ref.watch(
+      quickSettingsProvider.select((state) => state.brightness),
+    );
+    final controller = ref.read(quickSettingsProvider.notifier);
+    return RangeBar(
+      icon: Icons.brightness_6_rounded,
+      value: brightness,
+      activeColor: theme.accent,
+      inactiveColor: colors.surfaceContainerHighest,
+      onChanged: controller.setBrightness,
+      onChangeEnd: controller.commitBrightness,
+      height: 36.0,
+      trailing: _TrayTrailingActionButton(
+        icon: Icons.brightness_auto_rounded,
+        onPressed: () {
+          launchSettingsPage(
+            ref,
+            context,
+            SettingsPageId.displays,
+            onDispatched: onDismiss,
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// Volume slider in its own consumer; see [_BrightnessRangeBar].
+class _VolumeRangeBar extends ConsumerWidget {
+  const _VolumeRangeBar({this.onDismiss});
+
+  final VoidCallback? onDismiss;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final theme = context.shellTheme;
+    final colors = context.shellColors;
+    final volume = ref.watch(
+      quickSettingsProvider.select((state) => state.volume),
+    );
+    final controller = ref.read(quickSettingsProvider.notifier);
+    return RangeBar(
+      icon: Icons.volume_up_rounded,
+      value: volume,
+      activeColor: theme.accent,
+      inactiveColor: colors.surfaceContainerHighest,
+      onChangeStart: controller.beginVolumeInteraction,
+      onChanged: controller.setVolume,
+      onChangeEnd: controller.commitVolume,
+      height: 36.0,
+      trailing: _TrayTrailingActionButton(
+        icon: Icons.chevron_right_rounded,
+        onPressed: () {
+          launchSettingsPage(
+            ref,
+            context,
+            SettingsPageId.audio,
+            onDispatched: onDismiss,
+          );
+        },
+      ),
     );
   }
 }
@@ -309,8 +374,7 @@ class _TrayHeader extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final colors = context.shellColors;
-    final isZh = Localizations.localeOf(context).languageCode == 'zh';
-    final title = isZh ? '操作面板' : 'Quick Settings';
+    final l10n = context.l10n;
 
     return Row(
       children: [
@@ -320,7 +384,7 @@ class _TrayHeader extends ConsumerWidget {
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                title,
+                l10n.quickSettingsTitle,
                 style: TextStyle(
                   color: colors.textPrimary,
                   fontSize: 18,
@@ -383,7 +447,6 @@ class _TrayStatusChips extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final l10n = context.l10n;
-    final isZh = Localizations.localeOf(context).languageCode == 'zh';
 
     final network = ref.watch(networkConnectivityProvider);
     final networkSnapshot = network.snapshot;
@@ -398,13 +461,13 @@ class _TrayStatusChips extends ConsumerWidget {
     final IconData networkIcon;
     if (isWifiConnected && ssid != null && ssid.isNotEmpty) {
       networkIcon = Icons.vpn_key_rounded;
-      networkLabel = isZh ? '已连接: $ssid' : 'Connected: $ssid';
+      networkLabel = l10n.networkStatusConnectedTo(ssid);
     } else if (networkSnapshot.wirelessEnabled) {
       networkIcon = Icons.vpn_key_rounded;
-      networkLabel = isZh ? '网络已安全连接' : 'This device is connected';
+      networkLabel = l10n.networkStatusSecured;
     } else {
       networkIcon = Icons.wifi_off_rounded;
-      networkLabel = isZh ? '网络未连接' : 'Disconnected';
+      networkLabel = l10n.networkStatusDisconnected;
     }
 
     final activeAppsCount = ref.watch(
@@ -413,7 +476,7 @@ class _TrayStatusChips extends ConsumerWidget {
 
     final appsText = activeAppsCount == 1
         ? l10n.quickSettingsOneAppActive
-        : (isZh ? '$activeAppsCount 个活动应用' : '$activeAppsCount active apps');
+        : l10n.quickSettingsAppsActive(activeAppsCount);
 
     return Row(
       children: [
@@ -436,9 +499,7 @@ class _TrayStatusChips extends ConsumerWidget {
           icon: Icons.info_outline_rounded,
           label: appsText,
           onPressed: () {
-            if (onOpenOverview != null) {
-              onOpenOverview?.call();
-            }
+            onOpenOverview?.call();
             onDismiss?.call();
           },
         ),
@@ -447,55 +508,29 @@ class _TrayStatusChips extends ConsumerWidget {
   }
 }
 
-class _TrayHeaderActionButton extends StatefulWidget {
+class _TrayHeaderActionButton extends StatelessWidget {
   const _TrayHeaderActionButton({required this.icon, required this.onPressed});
 
   final IconData icon;
   final VoidCallback onPressed;
 
   @override
-  State<_TrayHeaderActionButton> createState() =>
-      _TrayHeaderActionButtonState();
-}
-
-class _TrayHeaderActionButtonState extends State<_TrayHeaderActionButton> {
-  bool _hovered = false;
-
-  @override
   Widget build(BuildContext context) {
-    final theme = context.shellTheme;
     final colors = context.shellColors;
-    final radius = theme.borderRadius(ShellShapeScale.full);
 
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: widget.onPressed,
-        child: AnimatedContainer(
-          duration: Motion.pill,
-          curve: Curves.easeOut,
-          width: 34,
-          height: 34,
-          decoration: BoxDecoration(
-            color: _hovered
-                ? colors.panelHighlight
-                : colors.surfaceContainerHigh,
-            borderRadius: radius,
-            border: Border.all(color: colors.hairlineSoft),
-          ),
-          child: Center(
-            child: Icon(widget.icon, size: 18, color: colors.textPrimary),
-          ),
-        ),
-      ),
+    return ShellHoverPill(
+      onTap: onPressed,
+      width: 34,
+      height: 34,
+      color: colors.surfaceContainerHigh,
+      hoverColor: colors.panelHighlight,
+      border: Border.all(color: colors.hairlineSoft),
+      child: Icon(icon, size: 18, color: colors.textPrimary),
     );
   }
 }
 
-class _TrayTrailingActionButton extends StatefulWidget {
+class _TrayTrailingActionButton extends StatelessWidget {
   const _TrayTrailingActionButton({
     required this.icon,
     required this.onPressed,
@@ -505,48 +540,22 @@ class _TrayTrailingActionButton extends StatefulWidget {
   final VoidCallback onPressed;
 
   @override
-  State<_TrayTrailingActionButton> createState() =>
-      _TrayTrailingActionButtonState();
-}
-
-class _TrayTrailingActionButtonState extends State<_TrayTrailingActionButton> {
-  bool _hovered = false;
-
-  @override
   Widget build(BuildContext context) {
-    final theme = context.shellTheme;
     final colors = context.shellColors;
-    final radius = theme.borderRadius(ShellShapeScale.full);
 
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: widget.onPressed,
-        child: AnimatedContainer(
-          duration: Motion.pill,
-          curve: Curves.easeOut,
-          width: 36,
-          height: 36,
-          decoration: BoxDecoration(
-            color: _hovered
-                ? colors.panelHighlight
-                : colors.surfaceContainerHighest,
-            borderRadius: radius,
-            border: Border.all(color: colors.hairlineSoft),
-          ),
-          child: Center(
-            child: Icon(widget.icon, size: 18, color: colors.textPrimary),
-          ),
-        ),
-      ),
+    return ShellHoverPill(
+      onTap: onPressed,
+      width: 36,
+      height: 36,
+      color: colors.surfaceContainerHighest,
+      hoverColor: colors.panelHighlight,
+      border: Border.all(color: colors.hairlineSoft),
+      child: Icon(icon, size: 18, color: colors.textPrimary),
     );
   }
 }
 
-class _TrayStatusChip extends StatefulWidget {
+class _TrayStatusChip extends StatelessWidget {
   const _TrayStatusChip({
     required this.icon,
     required this.label,
@@ -558,62 +567,40 @@ class _TrayStatusChip extends StatefulWidget {
   final VoidCallback onPressed;
 
   @override
-  State<_TrayStatusChip> createState() => _TrayStatusChipState();
-}
-
-class _TrayStatusChipState extends State<_TrayStatusChip> {
-  bool _hovered = false;
-
-  @override
   Widget build(BuildContext context) {
-    final theme = context.shellTheme;
     final colors = context.shellColors;
-    final radius = theme.borderRadius(ShellShapeScale.full);
 
     return Expanded(
-      child: MouseRegion(
-        cursor: SystemMouseCursors.click,
-        onEnter: (_) => setState(() => _hovered = true),
-        onExit: (_) => setState(() => _hovered = false),
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: widget.onPressed,
-          child: AnimatedContainer(
-            duration: Motion.pill,
-            curve: Curves.easeOut,
-            height: 34,
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            decoration: BoxDecoration(
-              color: _hovered
-                  ? colors.panelHighlight
-                  : colors.surfaceContainerHighest,
-              borderRadius: radius,
-              border: Border.all(color: colors.hairlineSoft),
-            ),
-            child: Row(
-              children: [
-                Icon(widget.icon, size: 16, color: colors.textPrimary),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    widget.label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: ShellText.base.copyWith(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: colors.textPrimary,
-                    ),
-                  ),
+      child: ShellHoverPill(
+        onTap: onPressed,
+        height: 34,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        color: colors.surfaceContainerHighest,
+        hoverColor: colors.panelHighlight,
+        border: Border.all(color: colors.hairlineSoft),
+        alignment: Alignment.centerLeft,
+        child: Row(
+          children: [
+            Icon(icon, size: 16, color: colors.textPrimary),
+            const SizedBox(width: 6),
+            Expanded(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: ShellText.base.copyWith(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: colors.textPrimary,
                 ),
-                Icon(
-                  Icons.chevron_right_rounded,
-                  size: 16,
-                  color: colors.textSecondary,
-                ),
-              ],
+              ),
             ),
-          ),
+            Icon(
+              Icons.chevron_right_rounded,
+              size: 16,
+              color: colors.textSecondary,
+            ),
+          ],
         ),
       ),
     );

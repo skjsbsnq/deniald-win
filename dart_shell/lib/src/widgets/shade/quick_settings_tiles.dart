@@ -7,6 +7,7 @@ import '../../../l10n/generated/app_localizations.dart';
 import '../../localization/denial_localizations.dart';
 import '../../services/power_profile_service.dart';
 import '../../theme/motion.dart';
+import '../../theme/shell_color_scheme.dart';
 import '../../theme/shell_theme.dart';
 import '../../theme/tokens.dart';
 
@@ -63,8 +64,6 @@ class QuickSettingsTiles extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final isZh = Localizations.localeOf(context).languageCode == 'zh';
-    final screenshotTitle = isZh ? '截图' : 'Screenshot';
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -144,7 +143,7 @@ class QuickSettingsTiles extends StatelessWidget {
                   height: tileHeight,
                   child: QuickTile(
                     icon: Icons.screenshot_monitor_rounded,
-                    title: screenshotTitle,
+                    title: l10n.quickSettingsScreenshot,
                     active: false,
                     onTap: onScreenshot,
                     wide: false,
@@ -189,22 +188,65 @@ class QuickTile extends StatefulWidget {
   State<QuickTile> createState() => _QuickTileState();
 }
 
-class _QuickTileState extends State<QuickTile> {
+class _QuickTileState extends State<QuickTile> with TickerProviderStateMixin {
   bool _focused = false;
+  bool _hovered = false;
+  bool _pressed = false;
+  late final AnimationController _hoverController;
+  late final AnimationController _pressController;
+
+  @override
+  void initState() {
+    super.initState();
+    _hoverController = AnimationController.unbounded(vsync: this, value: 0.0);
+    _pressController = AnimationController.unbounded(vsync: this, value: 0.0);
+  }
+
+  @override
+  void dispose() {
+    _hoverController.dispose();
+    _pressController.dispose();
+    super.dispose();
+  }
+
+  void _updateHover(bool hovered) {
+    if (_hovered == hovered || !widget.enabled) {
+      return;
+    }
+    setState(() => _hovered = hovered);
+    _drive(_hoverController, hovered ? 1.0 : 0.0, 'quick_tile_hover');
+  }
+
+  void _updatePress(bool pressed) {
+    if (_pressed == pressed || !widget.enabled) {
+      return;
+    }
+    setState(() => _pressed = pressed);
+    _drive(_pressController, pressed ? 1.0 : 0.0, 'quick_tile_press');
+  }
+
+  void _drive(AnimationController controller, double target, String label) {
+    if (MediaQuery.disableAnimationsOf(context)) {
+      controller.value = target;
+      return;
+    }
+    springTo(
+      controller,
+      target,
+      spring: Motion.expressiveSpatialFast,
+      telemetryLabel: label,
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final theme = ShellTheme.of(context);
     final accent = theme.accentPalette;
-    final background = widget.active
-        ? accent.primary
-        : context.shellColors.surfaceContainerHigh;
-    final foreground = widget.active
-        ? accent.onPrimary
-        : context.shellColors.textPrimary;
-    final secondary = widget.active
-        ? accent.onPrimary.withValues(alpha: 0.82)
-        : context.shellColors.textSecondary;
+    final colors = context.shellColors;
+    // Container tones carry the active state (02-VISUAL-SPEC section 3):
+    // full-tone primary would out-shout the header once several tiles run.
+    final activeBackground = accent.container;
+    final activeForeground = accent.onContainer;
 
     return Semantics(
       button: true,
@@ -220,6 +262,7 @@ class _QuickTileState extends State<QuickTile> {
             ? SystemMouseCursors.click
             : SystemMouseCursors.basic,
         onShowFocusHighlight: (focused) => setState(() => _focused = focused),
+        onShowHoverHighlight: (hovered) => _updateHover(hovered),
         shortcuts: const <ShortcutActivator, Intent>{
           SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
           SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
@@ -236,39 +279,75 @@ class _QuickTileState extends State<QuickTile> {
         },
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
+          onTapDown: (_) => _updatePress(true),
+          onTapUp: (_) => _updatePress(false),
+          onTapCancel: () => _updatePress(false),
           onTap: widget.enabled ? widget.onTap : null,
-          child: AnimatedContainer(
-            duration: MediaQuery.disableAnimationsOf(context)
-                ? Duration.zero
-                : Motion.tile,
-            curve: Motion.standard,
-            padding: EdgeInsets.symmetric(horizontal: widget.wide ? 12 : 6),
-            decoration: BoxDecoration(
-              color: background,
-              // Full roundness turns wide tiles into pills and the square
-              // compact tiles into circles, matching the M3E shape language.
-              borderRadius: context.shellTheme.borderRadius(
-                ShellShapeScale.full,
-              ),
-              border: Border.all(
-                color: _focused
-                    ? accent.primary
-                    : widget.active
-                    ? accent.primary
-                    : context.shellColors.hairlineSoft,
-                width: _focused ? 1.5 : 1,
-              ),
+          child: AnimatedBuilder(
+            animation: Listenable.merge([_hoverController, _pressController]),
+            builder: (context, child) {
+              final hoverT = _hoverController.value.clamp(0.0, 1.0);
+              final pressT = _pressController.value.clamp(0.0, 1.0);
+              final Color background;
+              if (widget.active) {
+                background = Color.lerp(
+                  activeBackground,
+                  accent.subtle,
+                  pressT,
+                )!;
+              } else {
+                final hoverColor = Color.lerp(
+                  colors.surfaceContainerHigh,
+                  colors.panelHighlight,
+                  hoverT,
+                )!;
+                background = Color.lerp(hoverColor, accent.subtle, pressT)!;
+              }
+              // The press reads as a spring-loaded dip, matching the shelf
+              // icons these tiles sit next to.
+              final scale = 1.0 - 0.06 * _pressController.value;
+
+              return Transform.scale(
+                scale: scale,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: background,
+                    // Full roundness turns wide tiles into pills and the
+                    // square compact tiles into circles, matching the M3E
+                    // shape language.
+                    borderRadius: context.shellTheme.borderRadius(
+                      ShellShapeScale.full,
+                    ),
+                    border: Border.all(
+                      color: _focused
+                          ? accent.primary
+                          : widget.active
+                          ? accent.primary
+                          : context.shellColors.hairlineSoft,
+                      width: _focused ? 1.5 : 1,
+                    ),
+                  ),
+                  child: child,
+                ),
+              );
+            },
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: widget.wide ? 12 : 6),
+              child: widget.wide
+                  ? _buildWide(activeForeground, colors)
+                  : _buildSmall(activeForeground),
             ),
-            child: widget.wide
-                ? _buildWide(foreground, secondary)
-                : _buildSmall(foreground),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildWide(Color foreground, Color secondary) {
+  Widget _buildWide(Color activeForeground, ShellColorScheme colors) {
+    final foreground = widget.active ? activeForeground : colors.textPrimary;
+    final secondary = widget.active
+        ? activeForeground.withValues(alpha: 0.82)
+        : colors.textSecondary;
     return Row(
       children: [
         _TileIcon(
@@ -329,7 +408,10 @@ class _QuickTileState extends State<QuickTile> {
     );
   }
 
-  Widget _buildSmall(Color foreground) {
+  Widget _buildSmall(Color activeForeground) {
+    final foreground = widget.active
+        ? activeForeground
+        : context.shellColors.textPrimary;
     return Center(
       child: widget.busy
           ? Padding(

@@ -19,13 +19,18 @@ class Motion {
   static const Duration focusZoom = Duration(milliseconds: 320);
   static const Duration shade = Duration(milliseconds: 230);
   static const Duration desktopPanelOpen = Duration(milliseconds: 300);
-  static const Duration desktopPanelClose = Duration(milliseconds: 320);
+  // Closing stays faster than opening, per MD3 motion guidance: an exiting
+  // surface should never outlast its entrance.
+  static const Duration desktopPanelClose = Duration(milliseconds: 240);
   static const Duration desktopPanelFadeOpen = Duration(milliseconds: 180);
   static const Duration desktopPanelFadeClose = Duration(milliseconds: 150);
   static const Duration homeFlyAway = Duration(milliseconds: 280);
   static const Duration tile = Duration(milliseconds: 160);
   static const Duration inputMethodPopup = Duration(milliseconds: 180);
-  static const Duration pill = Duration(milliseconds: 90);
+  // Hover and other effect-level crossfades share one duration floor of
+  // 160 ms so capsules across the shell never split into fast and slow
+  // tracks; spatial response (springs) remains faster where it already is.
+  static const Duration pill = Duration(milliseconds: 160);
   static const Duration cardSettle = Duration(milliseconds: 220);
   static const Duration wallpaperSelector = Duration(milliseconds: 360);
   static const Duration wallpaperTilesFade = Duration(milliseconds: 300);

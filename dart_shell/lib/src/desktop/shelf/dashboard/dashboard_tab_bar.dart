@@ -2,9 +2,12 @@ import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart' show Icons;
 import 'package:flutter/widgets.dart';
 
+import '../../../../l10n/generated/app_localizations.dart';
+import '../../../localization/denial_localizations.dart';
 import '../../../theme/motion.dart';
 import '../../../theme/shell_theme.dart';
 import '../../../theme/tokens.dart';
+import '../../../widgets/shell_hover_pill.dart';
 
 enum DashboardTab { info, system, weather }
 
@@ -49,12 +52,18 @@ class _DashboardTabBarState extends State<DashboardTabBar>
   void didUpdateWidget(covariant DashboardTabBar oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.selected != widget.selected) {
-      springTo(
-        _pill,
-        widget.selected.index.toDouble(),
-        spring: Motion.expressiveSpatialFast,
-        telemetryLabel: 'dashboard_tab_pill',
-      );
+      // Reduce-motion users get the selection pill in place; the spring is
+      // decorative overshoot.
+      if (MediaQuery.disableAnimationsOf(context)) {
+        _pill.value = widget.selected.index.toDouble();
+      } else {
+        springTo(
+          _pill,
+          widget.selected.index.toDouble(),
+          spring: Motion.expressiveSpatialFast,
+          telemetryLabel: 'dashboard_tab_pill',
+        );
+      }
     }
   }
 
@@ -78,7 +87,7 @@ class _DashboardTabBarState extends State<DashboardTabBar>
   Widget build(BuildContext context) {
     final theme = context.shellTheme;
     final colors = context.shellColors;
-    final isZh = Localizations.localeOf(context).languageCode == 'zh';
+    final l10n = context.l10n;
 
     return SizedBox(
       height: DashboardTabBar.barHeight,
@@ -120,7 +129,7 @@ class _DashboardTabBarState extends State<DashboardTabBar>
                           Expanded(
                             child: _Entry(
                               tab: tab,
-                              label: _Entry._label(tab, isZh),
+                              label: _Entry._label(l10n, tab),
                               selected: tab == widget.selected,
                               onTap: () => widget.onSelected(tab),
                             ),
@@ -155,7 +164,7 @@ class _DashboardTabBarState extends State<DashboardTabBar>
   }
 }
 
-class _Entry extends StatefulWidget {
+class _Entry extends StatelessWidget {
   const _Entry({
     required this.tab,
     required this.label,
@@ -168,11 +177,11 @@ class _Entry extends StatefulWidget {
   final bool selected;
   final VoidCallback onTap;
 
-  static String _label(DashboardTab tab, bool isZh) {
+  static String _label(AppLocalizations l10n, DashboardTab tab) {
     return switch (tab) {
-      DashboardTab.info => isZh ? '信息' : 'Info',
-      DashboardTab.system => isZh ? '系统' : 'System',
-      DashboardTab.weather => isZh ? '天气' : 'Weather',
+      DashboardTab.info => l10n.dashboardTabInfo,
+      DashboardTab.system => l10n.dashboardTabSystem,
+      DashboardTab.weather => l10n.dashboardTabWeather,
     };
   }
 
@@ -185,61 +194,43 @@ class _Entry extends StatefulWidget {
   }
 
   @override
-  State<_Entry> createState() => _EntryState();
-}
-
-class _EntryState extends State<_Entry> {
-  bool _hovered = false;
-
-  @override
   Widget build(BuildContext context) {
     final theme = context.shellTheme;
     final colors = context.shellColors;
-    final icon = _Entry._icon(widget.tab);
+    final icon = _Entry._icon(tab);
 
-    // The selected entry inverts over the accent pill; selection also swaps
-    // to the filled glyph where a rounded pair exists.
-    final fg = widget.selected
-        ? theme.accentPalette.onContainer
-        : (_hovered ? colors.textPrimary : colors.textSecondary);
-
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => setState(() => _hovered = true),
-      onExit: (_) => setState(() => _hovered = false),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: widget.onTap,
-        child: SizedBox(
-          height: double.infinity,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                widget.selected && widget.tab == DashboardTab.info
-                    ? Icons.info_rounded
-                    : icon,
-                size: 18,
+    return ShellHoverPill.builder(
+      onTap: onTap,
+      height: double.infinity,
+      childBuilder: (context, hovered, focused) {
+        // The selected entry inverts over the accent pill; selection also
+        // swaps to the filled glyph where a rounded pair exists.
+        final fg = selected
+            ? theme.accentPalette.onContainer
+            : (hovered ? colors.textPrimary : colors.textSecondary);
+        return Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              selected && tab == DashboardTab.info ? Icons.info_rounded : icon,
+              size: 18,
+              color: fg,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
                 color: fg,
+                fontSize: 12.5,
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+                decoration: TextDecoration.none,
               ),
-              const SizedBox(width: 6),
-              Text(
-                widget.label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: fg,
-                  fontSize: 12.5,
-                  fontWeight: widget.selected
-                      ? FontWeight.w700
-                      : FontWeight.w600,
-                  decoration: TextDecoration.none,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+            ),
+          ],
+        );
+      },
     );
   }
 }

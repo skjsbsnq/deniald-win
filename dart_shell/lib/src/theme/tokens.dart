@@ -130,7 +130,9 @@ abstract final class ShellText {
     height: 1,
     leadingDistribution: TextLeadingDistribution.even,
     fontWeight: FontWeight.w700,
-    letterSpacing: 0.3,
+    // Letter spacing stays zero: fractional tracking smears glyph phase at
+    // 150% scale and is a direct source of blurry text.
+    letterSpacing: 0,
     decoration: TextDecoration.none,
   );
 
@@ -143,7 +145,7 @@ abstract final class ShellText {
     height: 1,
     leadingDistribution: TextLeadingDistribution.even,
     fontWeight: FontWeight.w500,
-    letterSpacing: 0.2,
+    letterSpacing: 0,
     decoration: TextDecoration.none,
   );
 
@@ -221,7 +223,7 @@ abstract final class ShellText {
     fontSize: 13,
     height: 1,
     fontWeight: FontWeight.w600,
-    letterSpacing: 0.1,
+    letterSpacing: 0,
     decoration: TextDecoration.none,
   );
 
