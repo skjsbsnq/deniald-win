@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:denial_dart_shell/src/desktop/shelf/dashboard/system/network_metric_card.dart';
 import 'package:denial_dart_shell/src/desktop/shelf/dashboard/system/storage_battery_cards.dart';
 import 'package:denial_dart_shell/src/desktop/shelf/dashboard/views/system_view.dart';
@@ -189,6 +191,93 @@ void main() {
     expect(find.text('Sunset'), findsOneWidget);
   });
 
+  testWidgets('extended status reports storage from the first sample', (
+    tester,
+  ) async {
+    final service = _ScriptedHardwareService();
+    final container = ProviderContainer.test(
+      overrides: [systemHardwareServiceProvider.overrideWithValue(service)],
+    );
+    final sub = container.listen(systemExtendedStatusProvider, (_, _) {});
+    try {
+      await tester.pump();
+      await tester.pump();
+      final first = container.read(systemExtendedStatusProvider);
+      expect(first.memory, isNotNull);
+      // Regression: the very first sample discarded its results and storage
+      // was never written, leaving the card on "Unavailable" forever.
+      expect(first.storage, isNotNull);
+      // A rate needs a completed counter pair; the first sample has none.
+      expect(first.downloadBytesPerSecond, isNull);
+      expect(service.storageReads, 1);
+
+      // Let real wall-clock time pass so the rate interval clears the 0.5 s
+      // guard, then take the second sample.
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 600)),
+      );
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pump();
+      final second = container.read(systemExtendedStatusProvider);
+      expect(second.storage, isNotNull);
+      expect(second.downloadBytesPerSecond, greaterThan(0));
+      expect(second.uploadBytesPerSecond, greaterThan(0));
+      // The `df` subprocess stays on its slow cadence between samples.
+      expect(service.storageReads, 1);
+
+      // Advance the full storage refresh period: exactly one more reading.
+      for (var tick = 0; tick < 30; tick++) {
+        await tester.pump(const Duration(seconds: 2));
+        await tester.pump();
+      }
+      expect(service.storageReads, 2);
+      expect(
+        container.read(systemExtendedStatusProvider).storage?.fraction,
+        closeTo(0.4, 0.01),
+      );
+    } finally {
+      // Tear the sampler down inside the body: addTearDown runs after the
+      // binding's pending-timer invariant, so its periodic timer must be
+      // cancelled before the test completes.
+      sub.close();
+      container.dispose();
+    }
+  });
+
+  testWidgets('weather service outlives an in-flight fetch', (tester) async {
+    final events = <String>[];
+    final container = ProviderContainer.test(
+      overrides: [
+        weatherServiceProvider.overrideWith((ref) {
+          final service = _SlowWeatherService(events);
+          ref.onDispose(() {
+            events.add('service-disposed');
+            service.dispose();
+          });
+          return service;
+        }),
+      ],
+    );
+    addTearDown(container.dispose);
+    final sub = container.listen(weatherProvider, (_, _) {});
+    addTearDown(sub.close);
+
+    unawaited(container.read(weatherProvider.notifier).refresh());
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 300));
+
+    // Regression: a transiently-read autoDispose service was reclaimed while
+    // the fetch was still awaiting, and its dispose force-closed the
+    // HttpClient, aborting the request into a permanent failure state.
+    expect(events, containsAllInOrder(<String>['fetch-start', 'fetch-end']));
+    expect(events, isNot(contains('service-disposed')));
+
+    final state = container.read(weatherProvider);
+    expect(state.status, WeatherStatus.ready);
+    expect(state.snapshot, isNotNull);
+    expect(state.snapshot?.location.city, 'Beijing');
+  });
+
   group('dashboard formatting helpers', () {
     test('formatDataRate adapts units', () {
       expect(formatDataRate(null), '--');
@@ -332,7 +421,10 @@ class _FixedExtendedStatusController extends SystemExtendedStatusController {
   @override
   SystemExtendedStatus build() {
     return SystemExtendedStatus(
-      memory: MemoryUsage(used: (7.8 * _gib).round(), total: (15.4 * _gib).round()),
+      memory: MemoryUsage(
+        used: (7.8 * _gib).round(),
+        total: (15.4 * _gib).round(),
+      ),
       downloadBytesPerSecond: 2621440,
       uploadBytesPerSecond: 327680,
       storage: StorageUsage(used: 195 * _gib, total: 500 * _gib),
@@ -372,5 +464,58 @@ class _FixedWeatherController extends WeatherController {
   @override
   Future<void> forceRefresh() async {
     _forceRefreshCalls++;
+  }
+}
+
+/// Scripted hardware reader with monotonically growing network counters and
+/// a fixed 40% storage occupancy.
+class _ScriptedHardwareService extends SystemHardwareService {
+  int storageReads = 0;
+  int _rx = 1024;
+  int _tx = 512;
+
+  @override
+  Future<MemoryUsage?> readMemory() async {
+    return MemoryUsage(
+      used: 8 * 1024 * 1024 * 1024,
+      total: 16 * 1024 * 1024 * 1024,
+    );
+  }
+
+  @override
+  Future<NetworkCounters?> readNetworkCounters() async {
+    _rx += 2621440;
+    _tx += 327680;
+    return NetworkCounters(rxBytes: _rx, txBytes: _tx);
+  }
+
+  @override
+  Future<StorageUsage?> readRootStorage() async {
+    storageReads++;
+    return StorageUsage(
+      used: 200 * 1024 * 1024 * 1024,
+      total: 500 * 1024 * 1024 * 1024,
+    );
+  }
+}
+
+/// Weather service whose fetch takes a moment, so the test can observe
+/// whether the provider layer reclaims it mid-flight.
+class _SlowWeatherService extends WeatherService {
+  _SlowWeatherService(this.events);
+
+  final List<String> events;
+
+  @override
+  Future<GeoLocation?> resolveLocation() async {
+    return const GeoLocation(latitude: 39.9, longitude: 116.4, city: 'Beijing');
+  }
+
+  @override
+  Future<WeatherSnapshot> fetch(GeoLocation location) async {
+    events.add('fetch-start');
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+    events.add('fetch-end');
+    return _snapshot();
   }
 }

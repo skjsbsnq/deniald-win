@@ -74,31 +74,24 @@ class SystemExtendedStatusController extends Notifier<SystemExtendedStatus> {
     // Serialise refreshes: rate math depends on strictly ordered counter
     // pairs, so overlapping samples would corrupt the deltas.
     final sample = ++_samplingGeneration;
-    await Future.wait(<Future<Object?>>[
+    final storageDue = _sampleCount >= _nextStorageSample;
+    final results = await Future.wait<Object?>(<Future<Object?>>[
       service.readMemory(),
       service.readNetworkCounters(),
-      if (_sampleCount >= _nextStorageSample)
-        service.readRootStorage() as Future<Object?>,
+      if (storageDue) service.readRootStorage(),
     ]);
     if (_isStale(generation) || sample != _samplingGeneration) {
       return;
     }
     _sampleCount++;
-    _nextStorageSample = _sampleCount + _storageRefreshPeriod;
-
-    final memory = await service.readMemory();
-    final counters = await service.readNetworkCounters();
-    if (_isStale(generation) || sample != _samplingGeneration) {
-      return;
+    if (storageDue) {
+      // Advance the schedule even when the reading fails: a host without
+      // `df` would otherwise spawn the subprocess again on every tick.
+      _nextStorageSample = _sampleCount + _storageRefreshPeriod;
     }
-    _sampleCount++;
-    _nextStorageSample = _sampleCount + _storageRefreshPeriod;
-    if (memory == null &&
-        counters == null &&
-        state.storage != null &&
-        _sampleCount > 1) {
-      return;
-    }
+    final memory = results[0] as MemoryUsage?;
+    final counters = results[1] as NetworkCounters?;
+    final storage = storageDue ? results[2] as StorageUsage? : null;
 
     double? download;
     double? upload;
@@ -108,7 +101,7 @@ class SystemExtendedStatusController extends Notifier<SystemExtendedStatus> {
     if (previous != null &&
         previousTime != null &&
         counters != null &&
-        _sampleCount > 2) {
+        _sampleCount > 1) {
       final elapsed = now.difference(previousTime).inMilliseconds / 1000.0;
       if (elapsed > 0.5) {
         download = ((counters.rxBytes - previous.rxBytes) / elapsed)
@@ -124,11 +117,16 @@ class SystemExtendedStatusController extends Notifier<SystemExtendedStatus> {
       _lastCounterTime = now;
     }
 
+    // Keep the last good storage reading on ticks that skipped or failed it.
+    final effectiveStorage = storage ?? state.storage;
+    if (memory == null && counters == null && effectiveStorage == null) {
+      return;
+    }
     state = SystemExtendedStatus(
       memory: memory ?? state.memory,
       downloadBytesPerSecond: download,
       uploadBytesPerSecond: upload,
-      storage: state.storage,
+      storage: effectiveStorage,
     );
   }
 

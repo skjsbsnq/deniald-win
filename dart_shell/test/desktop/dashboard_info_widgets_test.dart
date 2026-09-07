@@ -121,7 +121,9 @@ void main() {
     expect(store.items.single.done, isTrue);
   });
 
-  testWidgets('info tool drawer expands and switches tools', (tester) async {
+  testWidgets('info tool drawer opens expanded and switches tools', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
@@ -136,13 +138,9 @@ void main() {
         child: _wrap(const SizedBox(height: 420, child: InfoToolDrawer())),
       ),
     );
-    await tester.pump();
-
-    expect(find.byIcon(Icons.keyboard_arrow_up_rounded), findsOneWidget);
-    expect(find.textContaining('todos'), findsOneWidget);
-
-    await tester.tap(find.byIcon(Icons.keyboard_arrow_up_rounded));
     await tester.pumpAndSettle();
+
+    // The drawer opens expanded so the calendar greets the user directly.
     expect(find.byIcon(Icons.calendar_month_rounded), findsOneWidget);
 
     // The rail icon is the first match: the timer and checklist glyphs also
@@ -155,6 +153,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Open 0'), findsOneWidget);
 
+    // Collapsing folds the tools back into the compact date capsule.
     await tester.tap(find.byIcon(Icons.keyboard_arrow_down_rounded));
     await tester.pumpAndSettle();
     expect(find.byIcon(Icons.keyboard_arrow_up_rounded), findsOneWidget);

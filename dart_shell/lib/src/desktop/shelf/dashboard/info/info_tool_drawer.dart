@@ -32,7 +32,9 @@ class _InfoToolDrawerState extends ConsumerState<InfoToolDrawer>
   static const double _railStride = _railButtonSize + 8;
   static const double _expandedHeight = 340;
 
-  bool _expanded = false;
+  // Opens expanded so the calendar is immediately visible when the dashboard
+  // opens, matching what the old calendar bubble showed on the clock capsule.
+  bool _expanded = true;
   _InfoDrawerTool _tool = _InfoDrawerTool.calendar;
   // Initialized eagerly (not late): a drawer that stays collapsed never runs
   // build past the collapsed capsule, and creating the controller lazily in

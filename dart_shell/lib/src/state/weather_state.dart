@@ -56,6 +56,11 @@ class WeatherController extends Notifier<WeatherState> {
     _generation++;
     _disposed = false;
     _refreshRunning = false;
+    // Watching (not just reading in refresh) pins the autoDispose service to
+    // this controller's lifetime: a transiently-read service is reclaimed
+    // while a fetch is still in flight, and its dispose closes the HttpClient
+    // with force, aborting the request mid-transfer.
+    ref.watch(weatherServiceProvider);
     ref.onDispose(() {
       _disposed = true;
       _generation++;
