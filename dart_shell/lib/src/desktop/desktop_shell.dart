@@ -313,12 +313,18 @@ class _DesktopShellState extends ConsumerState<DesktopShell> {
 
   void _toggleClipboardTray(int? monitorId) {
     _cancelWindowSwitcher();
-    _closePanels();
+    // The helper closes the clipboard tray like every other transient
+    // surface, so a tray that is already open toggles off here (its state
+    // was read before the sweep) instead of being reopened by the toggle.
+    final clipboardWasOpen = ref.read(clipboardTrayProvider).open;
+    _closeTransientSurfaces();
     final workspace = ref.read(desktopWorkspaceProvider);
     if (workspace.overviewActive) {
       ref.read(desktopWorkspaceProvider.notifier).closeOverview();
     }
-    ref.read(clipboardTrayProvider.notifier).toggle(monitorId: monitorId);
+    if (!clipboardWasOpen) {
+      ref.read(clipboardTrayProvider.notifier).toggle(monitorId: monitorId);
+    }
   }
 
   void _cycleWindowSwitcher(
@@ -553,9 +559,33 @@ class _DesktopShellState extends ConsumerState<DesktopShell> {
     );
   }
 
-  void _openLauncher() {
+  void _closePanels() {
+    _panelHoverController.reset();
+    ref.read(desktopWorkspaceProvider.notifier).closePanels();
+    _applicationSearchFocusNode.unfocus();
+  }
+
+  /// Single choke point for desktop surface mutual exclusion: opening any
+  /// transient surface (launcher, dashboard panel, clipboard tray) first
+  /// closes every other transient surface — the workspace panel, the
+  /// clipboard tray, and the two ChromeOS-shelf bubbles. The overview is
+  /// closed separately by callers that can open over it (Super and the
+  /// dashboard hotkey, matching the clipboard entry's behavior).
+  void _closeTransientSurfaces() {
+    _closePanels();
     ref.read(clipboardTrayProvider.notifier).close();
-    final workspace = ref.read(desktopWorkspaceProvider);
+    ref.read(desktopShelfBubblesProvider.notifier).close();
+  }
+
+  void _openLauncher() {
+    _closeTransientSurfaces();
+    var workspace = ref.read(desktopWorkspaceProvider);
+    if (workspace.overviewActive) {
+      // The Super entry opens over the overview, matching the clipboard
+      // hotkey's behavior; showPanel alone would no-op instead.
+      ref.read(desktopWorkspaceProvider.notifier).closeOverview();
+      workspace = ref.read(desktopWorkspaceProvider);
+    }
     if (!workspace.overviewActive && !workspace.launcherOpen) {
       _panelHoverController.beginOpening();
     } else {
@@ -579,15 +609,15 @@ class _DesktopShellState extends ConsumerState<DesktopShell> {
     _openLauncher();
   }
 
-  void _closePanels() {
-    _panelHoverController.reset();
-    ref.read(desktopWorkspaceProvider.notifier).closePanels();
-    _applicationSearchFocusNode.unfocus();
-  }
-
   void _openDashboard() {
-    ref.read(clipboardTrayProvider.notifier).close();
-    final workspace = ref.read(desktopWorkspaceProvider);
+    _closeTransientSurfaces();
+    var workspace = ref.read(desktopWorkspaceProvider);
+    if (workspace.overviewActive) {
+      // The dashboard hotkey opens over the overview, matching the clipboard
+      // hotkey's behavior; showPanel alone would no-op instead.
+      ref.read(desktopWorkspaceProvider.notifier).closeOverview();
+      workspace = ref.read(desktopWorkspaceProvider);
+    }
     if (!workspace.overviewActive && !workspace.dashboardOpen) {
       _panelHoverController.beginOpening();
     } else {

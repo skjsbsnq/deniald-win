@@ -1,5 +1,54 @@
 part of 'desktop_shell.dart';
 
+/// Owns the two ChromeOS-shelf bubble expansions (tray and dashboard) as one
+/// unit so every surface-opening path can close them from a single source.
+///
+/// Desktop surfaces are mutually exclusive: opening the launcher, the
+/// dashboard panel, the clipboard tray, or the overview closes both bubbles;
+/// opening a bubble closes the panels and the other bubble. The bubbles live
+/// outside the [DesktopPanel] state machine, so this controller is the one
+/// place that knows both notifiers, and the shell's transient-surface helper
+/// calls [close] whenever any peer surface opens.
+///
+/// The overview additionally closes (not merely hides) the bubbles, so they
+/// never reappear on overview exit.
+final desktopShelfBubblesProvider =
+    NotifierProvider<DesktopShelfBubblesController, DesktopShelfBubblesState>(
+      DesktopShelfBubblesController.new,
+    );
+
+@immutable
+class DesktopShelfBubblesState {
+  const DesktopShelfBubblesState({
+    this.trayExpanded = false,
+    this.dashboardExpanded = false,
+  });
+
+  final bool trayExpanded;
+  final bool dashboardExpanded;
+}
+
+class DesktopShelfBubblesController extends Notifier<DesktopShelfBubblesState> {
+  @override
+  DesktopShelfBubblesState build() => const DesktopShelfBubblesState();
+
+  void toggleTray() {
+    final next = !state.trayExpanded;
+    state = DesktopShelfBubblesState(trayExpanded: next);
+  }
+
+  void toggleDashboard() {
+    final next = !state.dashboardExpanded;
+    state = DesktopShelfBubblesState(dashboardExpanded: next);
+  }
+
+  void close() {
+    if (state.trayExpanded || state.dashboardExpanded) {
+      state = const DesktopShelfBubblesState();
+    }
+  }
+}
+
 typedef _DesktopHomeSceneLayout = ({
   List<HomeGridItem> widgets,
   Map<String, Rect> widgetFrames,
@@ -522,15 +571,26 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
   _DesktopHomeLayoutCache? _homeLayoutCache;
   _DesktopSceneTopologyCache? _topologyCache;
   // Tray and dashboard expansions are notifier-backed so toggling them
-  // rebuilds only the tray button and the bubbles instead of the whole desktop scene.
-  final ValueNotifier<bool> _shelfTrayExpanded = ValueNotifier<bool>(false);
-  final ValueNotifier<bool> _shelfDashboardExpanded = ValueNotifier<bool>(
+  // rebuilds only the tray button and the bubbles instead of the whole
+  // desktop scene. The notifiers mirror the provider state because
+  // [ShelfLayer] and the bubble layers listen to [ValueListenable]s.
+  late final ValueNotifier<bool> _shelfTrayExpanded = ValueNotifier<bool>(
+    false,
+  );
+  late final ValueNotifier<bool> _shelfDashboardExpanded = ValueNotifier<bool>(
     false,
   );
 
   @override
   void initState() {
     super.initState();
+    // The bubble expansions live in the provider so the shell can close them
+    // from its transient-surface helper; mirror them into the local
+    // ValueNotifiers that the shelf and bubble layers already listen to.
+    ref.listenManual(desktopShelfBubblesProvider, (previous, next) {
+      _shelfTrayExpanded.value = next.trayExpanded;
+      _shelfDashboardExpanded.value = next.dashboardExpanded;
+    }, fireImmediately: true);
     _minimizeLayerHandoff = DesktopMinimizeLayerHandoffController(
       handoffDelay: Motion.desktopWindowLayerHandoff,
       desktopEntryDuration: Motion.desktopWindowWidgetEnter,
@@ -605,6 +665,17 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
   void didUpdateWidget(covariant _DesktopScene oldWidget) {
     super.didUpdateWidget(oldWidget);
 
+    // Entering the overview closes the shelf bubbles outright instead of
+    // hiding them, so they do not pop back when the overview exits. The
+    // overview barrier below never paints while the bubbles are open, so
+    // deferring the close past this frame cannot leak a visible bubble.
+    if (widget.desktop.overviewActive && !oldWidget.desktop.overviewActive) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && widget.desktop.overviewActive) {
+          ref.read(desktopShelfBubblesProvider.notifier).close();
+        }
+      });
+    }
     final activeObjectIds = <int>{
       for (final window in widget.windows) window.objectId,
     };
@@ -828,6 +899,11 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
     final useChromeOsShelf = ref.watch(
       shellSettingsProvider.select((s) => s.layout.useChromeOsShelf),
     );
+    // The provider (not a local notifier) backs the bubble expansions so the
+    // shell's transient-surface helper can close them from outside the scene.
+    // Watching here rebuilds only the shelf button strip and bubbles.
+    ref.watch(desktopShelfBubblesProvider);
+    final shelfBubbles = ref.read(desktopShelfBubblesProvider.notifier);
     final homeLayout = _cachedDesktopHomeLayout(
       viewSize: viewSize,
       displayLayout: displayLayout,
@@ -925,27 +1001,40 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
                           ? ShelfLayer(
                               height: bar.rect.height,
                               onLauncherPressed: () {
-                                _shelfTrayExpanded.value = false;
-                                _shelfDashboardExpanded.value = false;
+                                shelfBubbles.close();
                                 onOpenLauncher();
                               },
                               trayExpanded: _shelfTrayExpanded,
                               onTrayPressed: () {
-                                if (!_shelfTrayExpanded.value) {
+                                if (!ref
+                                    .read(desktopShelfBubblesProvider)
+                                    .trayExpanded) {
                                   onDismissLauncher();
-                                  _shelfDashboardExpanded.value = false;
+                                  // A bubble owns the screen above the
+                                  // overview, so opening it dismisses the
+                                  // overview instead of stacking on it.
+                                  if (desktop.overviewActive) {
+                                    ref
+                                        .read(desktopWorkspaceProvider.notifier)
+                                        .closeOverview();
+                                  }
                                 }
-                                _shelfTrayExpanded.value =
-                                    !_shelfTrayExpanded.value;
+                                shelfBubbles.toggleTray();
                               },
                               calendarExpanded: _shelfDashboardExpanded,
                               onClockPressed: () {
-                                if (!_shelfDashboardExpanded.value) {
+                                if (!ref
+                                    .read(desktopShelfBubblesProvider)
+                                    .dashboardExpanded) {
                                   onDismissLauncher();
-                                  _shelfTrayExpanded.value = false;
+                                  // Same mutual exclusion as the tray button.
+                                  if (desktop.overviewActive) {
+                                    ref
+                                        .read(desktopWorkspaceProvider.notifier)
+                                        .closeOverview();
+                                  }
                                 }
-                                _shelfDashboardExpanded.value =
-                                    !_shelfDashboardExpanded.value;
+                                shelfBubbles.toggleDashboard();
                               },
                             )
                           : DesktopSystemBar(
@@ -1044,8 +1133,7 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
                       child: ValueListenableBuilder<bool>(
                         valueListenable: _shelfTrayExpanded,
                         builder: (context, shelfTrayExpanded, _) {
-                          final trayVisible =
-                              shelfTrayExpanded && !desktop.overviewActive;
+                          final trayVisible = shelfTrayExpanded;
                           return ShellInputRegion(
                             debugLabel: 'Unified tray bubble',
                             active: trayVisible,
@@ -1060,10 +1148,9 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
                                   'shelf-unified-tray-bubble',
                                 ),
                                 visible: trayVisible,
-                                onDismiss: () =>
-                                    _shelfTrayExpanded.value = false,
+                                onDismiss: () => shelfBubbles.close(),
                                 onOpenOverview: () {
-                                  _shelfTrayExpanded.value = false;
+                                  shelfBubbles.close();
                                   widget.onToggleOverview();
                                 },
                                 shelfHeight: visibleSystemBars.isNotEmpty
@@ -1080,8 +1167,7 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
                       child: ValueListenableBuilder<bool>(
                         valueListenable: _shelfDashboardExpanded,
                         builder: (context, shelfDashboardExpanded, _) {
-                          final dashboardVisible =
-                              shelfDashboardExpanded && !desktop.overviewActive;
+                          final dashboardVisible = shelfDashboardExpanded;
                           return ShellInputRegion(
                             debugLabel: 'Unified dashboard panel',
                             active: dashboardVisible,
@@ -1096,8 +1182,7 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
                                   'shelf-unified-dashboard-panel',
                                 ),
                                 visible: dashboardVisible,
-                                onDismiss: () =>
-                                    _shelfDashboardExpanded.value = false,
+                                onDismiss: () => shelfBubbles.close(),
                                 shelfHeight: visibleSystemBars.isNotEmpty
                                     ? visibleSystemBars.first.rect.height
                                     : 56.0,
