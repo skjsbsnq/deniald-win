@@ -19,6 +19,7 @@ import 'package:denial_dart_shell/src/state/network_connectivity.dart';
 import 'package:denial_dart_shell/src/state/quick_settings.dart';
 import 'package:denial_dart_shell/src/state/shell_controller.dart';
 import 'package:denial_dart_shell/src/state/shell_state.dart';
+import 'package:denial_dart_shell/src/state/system_identity.dart';
 import 'package:denial_dart_shell/src/state/system_status.dart';
 import 'package:denial_dart_shell/src/state/system_tray.dart';
 import 'package:denial_dart_shell/src/widgets/shell_hover_pill.dart';
@@ -175,6 +176,10 @@ void main() {
         displayLayoutProvider.overrideWithBuild(
           (ref, controller) => displayLayout,
         ),
+        // The real identity controller parks a 1-minute periodic timer; a
+        // static fake keeps the pending-timer invariant checkable now that
+        // the dashboard hotkey expands the unified bubble (A04).
+        systemIdentityProvider.overrideWith(_FakeSystemIdentity.new),
         clockProvider.overrideWith(
           (ref) => Stream<DateTime>.value(DateTime(2026, 9, 8, 14, 30)),
         ),
@@ -277,7 +282,8 @@ void main() {
   );
 
   testWidgets(
-    'dashboard hotkey while the overview is open closes it and opens the dashboard',
+    'dashboard hotkey while the overview is open closes it and opens the '
+    'dashboard',
     (tester) async {
       tester.view.physicalSize = const Size(1200, 800);
       tester.view.devicePixelRatio = 1.0;
@@ -295,7 +301,12 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(container.read(desktopWorkspaceProvider).overviewActive, isFalse);
-      expect(container.read(desktopWorkspaceProvider).dashboardOpen, isTrue);
+      // In the ChromeOS shelf layout (this harness) the dashboard hotkey
+      // drives the unified dashboard bubble (A04), not the legacy panel.
+      expect(
+        container.read(desktopShelfBubblesProvider).dashboardExpanded,
+        isTrue,
+      );
     },
   );
 
@@ -502,4 +513,9 @@ class _FakePowerModes extends DesktopPowerModesController {
 
   @override
   Future<void> refreshIfStale() async {}
+}
+
+class _FakeSystemIdentity extends SystemIdentityController {
+  @override
+  SystemIdentityState build() => const SystemIdentityState();
 }

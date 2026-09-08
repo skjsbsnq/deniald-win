@@ -633,11 +633,38 @@ class _DesktopShellState extends ConsumerState<DesktopShell> {
   }
 
   void _toggleDashboard() {
+    // In the ChromeOS shelf layout the unified dashboard bubble owns this
+    // role (COR-4): the hotkey toggles the bubble through the same
+    // mutual-exclusion channel the shelf clock button uses. The legacy path
+    // below is untouched for the non-shelf layout.
+    if (ref.read(shellSettingsProvider).layout.useChromeOsShelf) {
+      _toggleShelfDashboardBubble();
+      return;
+    }
     if (ref.read(desktopWorkspaceProvider).dashboardOpen) {
       _closePanels();
       return;
     }
     _openDashboard();
+  }
+
+  void _toggleShelfDashboardBubble() {
+    // The sweep closes the dashboard bubble like every other transient
+    // surface, so one that is already expanded toggles off here (its state
+    // was read before the sweep) instead of being reopened by the toggle.
+    final dashboardWasExpanded = ref
+        .read(desktopShelfBubblesProvider)
+        .dashboardExpanded;
+    _closeTransientSurfaces();
+    if (ref.read(desktopWorkspaceProvider).overviewActive) {
+      // The dashboard hotkey opens over the overview, matching the legacy
+      // path; the overview entry also clears the bubbles post-frame, so only
+      // the opening branch ever reaches this.
+      ref.read(desktopWorkspaceProvider.notifier).closeOverview();
+    }
+    if (!dashboardWasExpanded) {
+      ref.read(desktopShelfBubblesProvider.notifier).toggleDashboard();
+    }
   }
 
   void _openWallpaperSelector() {

@@ -15,6 +15,7 @@ class TimerToolState {
     this.elapsed = Duration.zero,
     this.target = _focusDuration,
     this.laps = const <Duration>[],
+    this._lapAnchor,
   });
 
   static const Duration _focusDuration = Duration(minutes: 25);
@@ -27,6 +28,17 @@ class TimerToolState {
   final Duration elapsed;
   final Duration target;
   final List<Duration> laps;
+  final Duration? _lapAnchor;
+
+  /// Laps kept per stopwatch, oldest first; the oldest is dropped once the
+  /// cap is hit (a lap is a tiny value, but an unbounded list never
+  /// shrinks). Same ring-buffer shape as [LoadSeries.capacity].
+  static const int lapCapacity = 99;
+
+  /// Elapsed time at the last recorded lap; the next lap's split is
+  /// `elapsed - lapAnchor`. Untracked in [copyWith] deliberately: internal
+  /// only, so callers cannot desynchronize it from [laps].
+  Duration get lapAnchor => _lapAnchor ?? Duration.zero;
 
   double get pomodoroProgress {
     if (target.inMilliseconds <= 0) {
@@ -126,7 +138,21 @@ class TimerToolController extends Notifier<TimerToolState>
     if (state.mode != TimerMode.stopwatch || !state.running) {
       return;
     }
-    state = state.copyWith(laps: <Duration>[...state.laps, state.elapsed]);
+    // Record the split since the previous lap, not the cumulative elapsed:
+    // the lap list feeds the per-row display directly. The anchor derives
+    // from the laps themselves, so a state restored from persistence (no
+    // anchor) laps correctly from the current elapsed.
+    final anchor = state.laps.isEmpty
+        ? state.lapAnchor
+        : state.laps.fold<Duration>(
+            state.lapAnchor,
+            (total, lap) => total + lap,
+          );
+    final next = <Duration>[...state.laps, state.elapsed - anchor];
+    if (next.length > TimerToolState.lapCapacity) {
+      next.removeRange(0, next.length - TimerToolState.lapCapacity);
+    }
+    state = state.copyWith(laps: List<Duration>.unmodifiable(next));
   }
 
   void _tick() {
