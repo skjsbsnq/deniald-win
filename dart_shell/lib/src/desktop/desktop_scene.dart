@@ -960,7 +960,10 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
                       pointerPolicy: ShellPointerPolicy.fullScene,
                       keyboardPolicy: ShellKeyboardPolicy.capture,
                       compositorPolicy: ShellCompositorPolicy.exclusive,
-                      child: const IgnorePointer(child: SizedBox.expand()),
+                      child: DesktopOverviewEscapeScope(
+                        active: desktop.overviewActive,
+                        onEscape: widget.onToggleOverview,
+                      ),
                     ),
                   ),
                   Positioned.fill(
@@ -1153,6 +1156,85 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Claims the captured keyboard while the desktop overview is active so
+/// Escape can dismiss the overview.
+///
+/// The overview's [ShellInputRegion] routes native keyboard into the shell,
+/// but key events still travel Flutter's focus tree, so the surface needs a
+/// focus scope that answers Escape — the launcher and the shelf bubbles
+/// already follow this convention. Pointer input stays ignored: window
+/// previews sit above this scope and own their own taps.
+class DesktopOverviewEscapeScope extends StatefulWidget {
+  const DesktopOverviewEscapeScope({
+    required this.active,
+    required this.onEscape,
+    super.key,
+  });
+
+  final bool active;
+  final VoidCallback onEscape;
+
+  @override
+  State<DesktopOverviewEscapeScope> createState() =>
+      _DesktopOverviewEscapeScopeState();
+}
+
+class _DesktopOverviewEscapeScopeState
+    extends State<DesktopOverviewEscapeScope> {
+  final FocusNode _focusNode = FocusNode(debugLabel: 'desktop-overview-escape');
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.active) {
+      _requestFocus();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant DesktopOverviewEscapeScope oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.active && !oldWidget.active) {
+      _requestFocus();
+    }
+  }
+
+  void _requestFocus() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && widget.active && !_focusNode.hasFocus) {
+        _focusNode.requestFocus();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  KeyEventResult _handleKeyEvent(FocusNode node, KeyEvent event) {
+    if (widget.active &&
+        event is KeyDownEvent &&
+        event.logicalKey == LogicalKeyboardKey.escape) {
+      widget.onEscape();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: Focus(
+        focusNode: _focusNode,
+        onKeyEvent: _handleKeyEvent,
+        child: const SizedBox.expand(),
+      ),
     );
   }
 }

@@ -712,24 +712,14 @@ class _DesktopShellState extends ConsumerState<DesktopShell> {
   }
 
   void _handleOverviewBarrierTap(Offset position) {
-    final workspace = ref.read(desktopWorkspaceProvider);
-    final overview = workspace.overview;
-    if (overview == null || overview.backgroundBounds.contains(position)) {
-      return;
-    }
-    final windowsById = <int, DenialWindow>{
-      for (final window in ref.read(shellControllerProvider).openAppWindows)
-        window.objectId: window,
-    };
-    final target = desktopWindowAtPosition(
+    desktopOverviewBarrierTap(
+      workspace: ref.read(desktopWorkspaceProvider),
+      windows: ref.read(shellControllerProvider).openAppWindows,
       position: position,
-      workspace: workspace,
-      windowsById: windowsById,
+      onDismissOverview: () =>
+          ref.read(desktopWorkspaceProvider.notifier).closeOverview(),
+      onActivateWindow: _activateWindow,
     );
-    ref.read(desktopWorkspaceProvider.notifier).closeOverview();
-    if (target != null) {
-      _activateWindow(target);
-    }
   }
 
   void _beginOverviewDrag(DenialWindow window) {
@@ -906,6 +896,44 @@ List<({int monitorId, Rect rect, SystemBarSide side})> _systemBarGeometries(
           side: displayLayout.systemBarSide,
         ),
   ];
+}
+
+/// Handles a tap on the full-scene overview barrier at [position].
+///
+/// The barrier paints under the overview previews, so it only receives taps
+/// that missed every preview. A tap inside the overview target monitor's
+/// [DesktopOverviewState.backgroundBounds] is therefore empty background and
+/// dismisses the overview directly — without that branch the whole
+/// single-monitor desktop would be a dead zone with no background-tap exit.
+/// A tap on another output dismisses the overview and additionally activates
+/// the window under the tap, keeping the cross-output exit path.
+void desktopOverviewBarrierTap({
+  required DesktopWorkspaceState workspace,
+  required List<DenialWindow> windows,
+  required Offset position,
+  required VoidCallback onDismissOverview,
+  required ValueChanged<DenialWindow> onActivateWindow,
+}) {
+  final overview = workspace.overview;
+  if (overview == null) {
+    return;
+  }
+  if (overview.backgroundBounds.contains(position)) {
+    onDismissOverview();
+    return;
+  }
+  final windowsById = <int, DenialWindow>{
+    for (final window in windows) window.objectId: window,
+  };
+  final target = desktopWindowAtPosition(
+    position: position,
+    workspace: workspace,
+    windowsById: windowsById,
+  );
+  onDismissOverview();
+  if (target != null) {
+    onActivateWindow(target);
+  }
 }
 
 Rect _windowSwitcherStageBounds({
