@@ -30,12 +30,17 @@ class UnifiedDashboardPanel extends ConsumerStatefulWidget {
     required this.visible,
     this.onDismiss,
     this.shelfHeight = 56.0,
+    this.outputRect,
     super.key,
   });
 
   final bool visible;
   final VoidCallback? onDismiss;
   final double shelfHeight;
+
+  /// The logical rect of the output whose shelf anchors this panel. Null
+  /// docks to the full canvas, which is the single-output behavior.
+  final Rect? outputRect;
 
   @override
   ConsumerState<UnifiedDashboardPanel> createState() =>
@@ -111,15 +116,19 @@ class _UnifiedDashboardPanelState extends ConsumerState<UnifiedDashboardPanel>
         final theme = context.shellTheme;
         final colors = context.shellColors;
         final size = MediaQuery.sizeOf(context);
+        // The panel docks to the corner of the anchoring output, not the
+        // global canvas corner, so a shelf clone on another output opens its
+        // panel beside itself (COR-5).
+        final anchorRect = widget.outputRect ?? (Offset.zero & size);
         final clampedProgress = progress.clamp(0.0, 1.0);
         final scale = math.max(0.0, 0.88 + 0.12 * progress);
         final panelRadius = theme.borderRadius(ShellShapeScale.extraLarge);
-        final panelWidth = math.min(size.width - 16.0, _panelWidth);
+        final panelWidth = math.min(anchorRect.width - 16.0, _panelWidth);
         // The height is fixed, not a cap the content can shrink under: every
         // tab opens the same fully docked panel and pages scroll inside it.
         final panelHeight = math.max(
           160.0,
-          size.height - widget.shelfHeight - 24.0,
+          anchorRect.height - widget.shelfHeight - 24.0,
         );
 
         return Stack(
@@ -130,31 +139,43 @@ class _UnifiedDashboardPanelState extends ConsumerState<UnifiedDashboardPanel>
               onTap: widget.onDismiss,
               child: const SizedBox.expand(),
             ),
-            Positioned(
-              right: 8.0,
-              bottom: widget.shelfHeight + 8.0,
-              child: Transform.scale(
-                scale: scale,
-                alignment: Alignment.bottomRight,
-                child: SizedBox(
-                  width: panelWidth,
-                  height: panelHeight,
-                  child: ShellBackdropBlur(
-                    strength: clampedProgress,
-                    borderRadius: panelRadius,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: theme.panelColor(colors.surfaceContainerLow),
-                        borderRadius: panelRadius,
-                        border: Border.all(
-                          color: colors.hairlineSoft,
-                          width: 1.0,
+            Positioned.fromRect(
+              rect: anchorRect,
+              child: Stack(
+                children: [
+                  Positioned(
+                    right: 8.0,
+                    bottom: widget.shelfHeight + 8.0,
+                    child: Transform.scale(
+                      scale: scale,
+                      alignment: Alignment.bottomRight,
+                      child: SizedBox(
+                        width: panelWidth,
+                        height: panelHeight,
+                        child: ShellBackdropBlur(
+                          strength: clampedProgress,
+                          borderRadius: panelRadius,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: theme.panelColor(
+                                colors.surfaceContainerLow,
+                              ),
+                              borderRadius: panelRadius,
+                              border: Border.all(
+                                color: colors.hairlineSoft,
+                                width: 1.0,
+                              ),
+                            ),
+                            child: ClipRRect(
+                              borderRadius: panelRadius,
+                              child: child,
+                            ),
+                          ),
                         ),
                       ),
-                      child: ClipRRect(borderRadius: panelRadius, child: child),
                     ),
                   ),
-                ),
+                ],
               ),
             ),
           ],

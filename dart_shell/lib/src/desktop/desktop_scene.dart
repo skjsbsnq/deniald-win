@@ -22,29 +22,48 @@ class DesktopShelfBubblesState {
   const DesktopShelfBubblesState({
     this.trayExpanded = false,
     this.dashboardExpanded = false,
+    this.anchorMonitorId,
   });
 
   final bool trayExpanded;
   final bool dashboardExpanded;
+
+  /// The output whose shelf clone opened the open bubble, so it docks to
+  /// that output instead of the global canvas corner. Kept while the
+  /// closing spring settles so the bubble never jumps outputs
+  /// mid-animation; null anchors to the primary output.
+  final int? anchorMonitorId;
 }
 
 class DesktopShelfBubblesController extends Notifier<DesktopShelfBubblesState> {
   @override
   DesktopShelfBubblesState build() => const DesktopShelfBubblesState();
 
-  void toggleTray() {
-    final next = !state.trayExpanded;
-    state = DesktopShelfBubblesState(trayExpanded: next);
+  void toggleTray({int? anchorMonitorId}) {
+    if (state.trayExpanded) {
+      state = DesktopShelfBubblesState(anchorMonitorId: state.anchorMonitorId);
+    } else {
+      state = DesktopShelfBubblesState(
+        trayExpanded: true,
+        anchorMonitorId: anchorMonitorId,
+      );
+    }
   }
 
-  void toggleDashboard() {
-    final next = !state.dashboardExpanded;
-    state = DesktopShelfBubblesState(dashboardExpanded: next);
+  void toggleDashboard({int? anchorMonitorId}) {
+    if (state.dashboardExpanded) {
+      state = DesktopShelfBubblesState(anchorMonitorId: state.anchorMonitorId);
+    } else {
+      state = DesktopShelfBubblesState(
+        dashboardExpanded: true,
+        anchorMonitorId: anchorMonitorId,
+      );
+    }
   }
 
   void close() {
     if (state.trayExpanded || state.dashboardExpanded) {
-      state = const DesktopShelfBubblesState();
+      state = DesktopShelfBubblesState(anchorMonitorId: state.anchorMonitorId);
     }
   }
 }
@@ -54,6 +73,51 @@ typedef _DesktopHomeSceneLayout = ({
   Map<String, Rect> widgetFrames,
   Map<int, Rect> windowFrames,
 });
+
+/// Docking geometry for the ChromeOS-shelf bubbles: the logical rect of the
+/// output whose shelf clone opened the bubble — the primary output when
+/// keyboard entry opened it — plus that output's shelf strip height, so the
+/// bubble stays flush with the shelf the user actually clicked on
+/// multi-output layouts. Layouts without monitor identity keep docking to
+/// the whole canvas, which is the single-output behavior.
+({Rect outputRect, double shelfHeight}) desktopShelfBubbleAnchorGeometry({
+  required int? anchorMonitorId,
+  required DisplayLayout? displayLayout,
+  required List<({int monitorId, Rect rect, SystemBarSide side})> systemBars,
+  required Size viewSize,
+}) {
+  final canvas = Offset.zero & viewSize;
+  DisplayOutput? output;
+  if (anchorMonitorId != null) {
+    for (final candidate in displayLayout?.outputs ?? const <DisplayOutput>[]) {
+      if (candidate.monitorId == anchorMonitorId) {
+        output = candidate;
+        break;
+      }
+    }
+  }
+  output ??= displayLayout?.mainOutput;
+  final requestedRect = output?.logicalRect.intersect(canvas);
+  final outputRect = requestedRect == null || requestedRect.isEmpty
+      ? canvas
+      : requestedRect;
+
+  double? shelfHeight;
+  for (final bar in systemBars) {
+    if (bar.rect.isEmpty) {
+      continue;
+    }
+    if (output != null && bar.monitorId == output.monitorId) {
+      shelfHeight = bar.rect.height;
+      break;
+    }
+    shelfHeight ??= bar.rect.height;
+  }
+  return (
+    outputRect: outputRect,
+    shelfHeight: shelfHeight ?? ShelfLayer.defaultThickness,
+  );
+}
 
 typedef _DesktopHomePlacementSignature = ({
   Rect frame,
@@ -902,7 +966,7 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
     // The provider (not a local notifier) backs the bubble expansions so the
     // shell's transient-surface helper can close them from outside the scene.
     // Watching here rebuilds only the shelf button strip and bubbles.
-    ref.watch(desktopShelfBubblesProvider);
+    final bubblesState = ref.watch(desktopShelfBubblesProvider);
     final shelfBubbles = ref.read(desktopShelfBubblesProvider.notifier);
     final homeLayout = _cachedDesktopHomeLayout(
       viewSize: viewSize,
@@ -932,6 +996,14 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
                 .toList(growable: false);
     }
     final canvas = Offset.zero & viewSize;
+    // Bubbles dock to the output whose shelf opened them; keyboard entry
+    // resolves the same geometry through the primary output.
+    final bubbleAnchor = desktopShelfBubbleAnchorGeometry(
+      anchorMonitorId: bubblesState.anchorMonitorId,
+      displayLayout: displayLayout,
+      systemBars: systemBars,
+      viewSize: viewSize,
+    );
     final requestedDisplayRect = mainOutputRect?.intersect(canvas);
     final mainDisplayRect =
         requestedDisplayRect == null || requestedDisplayRect.isEmpty
@@ -1019,7 +1091,9 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
                                         .closeOverview();
                                   }
                                 }
-                                shelfBubbles.toggleTray();
+                                shelfBubbles.toggleTray(
+                                  anchorMonitorId: bar.monitorId,
+                                );
                               },
                               calendarExpanded: _shelfDashboardExpanded,
                               onClockPressed: () {
@@ -1034,7 +1108,9 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
                                         .closeOverview();
                                   }
                                 }
-                                shelfBubbles.toggleDashboard();
+                                shelfBubbles.toggleDashboard(
+                                  anchorMonitorId: bar.monitorId,
+                                );
                               },
                             )
                           : DesktopSystemBar(
@@ -1153,9 +1229,8 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
                                   shelfBubbles.close();
                                   widget.onToggleOverview();
                                 },
-                                shelfHeight: visibleSystemBars.isNotEmpty
-                                    ? visibleSystemBars.first.rect.height
-                                    : 56.0,
+                                shelfHeight: bubbleAnchor.shelfHeight,
+                                outputRect: bubbleAnchor.outputRect,
                               ),
                             ),
                           );
@@ -1183,9 +1258,8 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
                                 ),
                                 visible: dashboardVisible,
                                 onDismiss: () => shelfBubbles.close(),
-                                shelfHeight: visibleSystemBars.isNotEmpty
-                                    ? visibleSystemBars.first.rect.height
-                                    : 56.0,
+                                shelfHeight: bubbleAnchor.shelfHeight,
+                                outputRect: bubbleAnchor.outputRect,
                               ),
                             ),
                           );

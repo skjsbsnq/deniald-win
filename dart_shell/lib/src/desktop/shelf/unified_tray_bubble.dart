@@ -33,6 +33,7 @@ class UnifiedTrayBubble extends ConsumerStatefulWidget {
     this.onDismiss,
     this.onOpenOverview,
     this.shelfHeight = 56.0,
+    this.outputRect,
     super.key,
   });
 
@@ -40,6 +41,10 @@ class UnifiedTrayBubble extends ConsumerStatefulWidget {
   final VoidCallback? onDismiss;
   final VoidCallback? onOpenOverview;
   final double shelfHeight;
+
+  /// The logical rect of the output whose shelf anchors this bubble. Null
+  /// docks to the full canvas, which is the single-output behavior.
+  final Rect? outputRect;
 
   @override
   ConsumerState<UnifiedTrayBubble> createState() => _UnifiedTrayBubbleState();
@@ -113,10 +118,14 @@ class _UnifiedTrayBubbleState extends ConsumerState<UnifiedTrayBubble>
         final theme = context.shellTheme;
         final colors = context.shellColors;
         final size = MediaQuery.sizeOf(context);
+        // The bubble docks to the corner of the anchoring output, not the
+        // global canvas corner, so a shelf clone on another output opens its
+        // bubble beside itself (COR-5).
+        final anchorRect = widget.outputRect ?? (Offset.zero & size);
         final clampedProgress = progress.clamp(0.0, 1.0);
         final scale = math.max(0.0, 0.88 + 0.12 * progress);
         final bubbleRadius = theme.borderRadius(ShellShapeScale.extraLarge);
-        final bubbleWidth = math.min(size.width - 16.0, 420.0);
+        final bubbleWidth = math.min(anchorRect.width - 16.0, 420.0);
 
         return Stack(
           fit: StackFit.expand,
@@ -126,31 +135,41 @@ class _UnifiedTrayBubbleState extends ConsumerState<UnifiedTrayBubble>
               onTap: widget.onDismiss,
               child: const SizedBox.expand(),
             ),
-            Positioned(
-              right: 8.0,
-              bottom: widget.shelfHeight + 8.0,
-              child: Transform.scale(
-                scale: scale,
-                alignment: Alignment.bottomRight,
-                child: SizedBox(
-                  width: bubbleWidth,
-                  child: ShellBackdropBlur(
-                    strength: clampedProgress,
-                    borderRadius: bubbleRadius,
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        // Frosted surface blending with desktop background tones.
-                        color: theme.panelColor(colors.surfaceContainerLow),
-                        borderRadius: bubbleRadius,
-                        border: Border.all(
-                          color: colors.hairlineSoft,
-                          width: 1.0,
+            Positioned.fromRect(
+              rect: anchorRect,
+              child: Stack(
+                children: [
+                  Positioned(
+                    right: 8.0,
+                    bottom: widget.shelfHeight + 8.0,
+                    child: Transform.scale(
+                      scale: scale,
+                      alignment: Alignment.bottomRight,
+                      child: SizedBox(
+                        width: bubbleWidth,
+                        child: ShellBackdropBlur(
+                          strength: clampedProgress,
+                          borderRadius: bubbleRadius,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              // Frosted surface blending with desktop
+                              // background tones.
+                              color: theme.panelColor(
+                                colors.surfaceContainerLow,
+                              ),
+                              borderRadius: bubbleRadius,
+                              border: Border.all(
+                                color: colors.hairlineSoft,
+                                width: 1.0,
+                              ),
+                            ),
+                            child: child,
+                          ),
                         ),
                       ),
-                      child: child,
                     ),
                   ),
-                ),
+                ],
               ),
             ),
           ],

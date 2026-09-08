@@ -663,8 +663,26 @@ class _DesktopShellState extends ConsumerState<DesktopShell> {
       ref.read(desktopWorkspaceProvider.notifier).closeOverview();
     }
     if (!dashboardWasExpanded) {
-      ref.read(desktopShelfBubblesProvider.notifier).toggleDashboard();
+      ref
+          .read(desktopShelfBubblesProvider.notifier)
+          .toggleDashboard(anchorMonitorId: _focusedWindowMonitorId());
     }
+  }
+
+  /// The output hosting the focused window, anchoring keyboard-opened shelf
+  /// bubbles the way the shelf buttons anchor pointer-opened ones. Null when
+  /// no focused window exists, which docks the bubble to the primary output.
+  int? _focusedWindowMonitorId() {
+    final foregroundObjectId = ref
+        .read(shellControllerProvider)
+        .foregroundObjectId;
+    if (foregroundObjectId == null) {
+      return null;
+    }
+    return ref
+        .read(desktopWorkspaceProvider)
+        .placements[foregroundObjectId]
+        ?.monitorId;
   }
 
   void _openWallpaperSelector() {
