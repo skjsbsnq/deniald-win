@@ -11,6 +11,7 @@ import '../../../../theme/tokens.dart';
 import '../../../../widgets/shell_hover_pill.dart';
 import '../../../../widgets/notification_banner.dart';
 import '../../../../widgets/notification_media.dart';
+import '../unified_dashboard_panel.dart';
 
 /// Notification center for the dashboard Info view. History is grouped by
 /// application with collapsible groups, an elastic swipe-to-dismiss gesture,
@@ -44,10 +45,16 @@ class _DashboardNotificationListState
 
     // Seeing the list consumes the unread markers, matching the classic
     // notification center: the badge clears the moment this page is shown.
+    // The panel's closing spring keeps this subtree mounted briefly after it
+    // stops being visible; notifications landing in that window must keep
+    // their unread state for the shelf badge instead of being silently
+    // consumed.
     final unreadCount = ref.watch(
       desktopNotificationsProvider.select((state) => state.unreadCount),
     );
-    if (unreadCount > 0 && !_markReadScheduled) {
+    if (unreadCount > 0 &&
+        DashboardPanelVisibility.of(context) &&
+        !_markReadScheduled) {
       _markReadScheduled = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _markReadScheduled = false;

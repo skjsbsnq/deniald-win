@@ -690,10 +690,7 @@ class DesktopWorkspaceController extends Notifier<DesktopWorkspaceState> {
     }
     final next = Map<int, DesktopWindowPlacement>.of(state.placements);
     next[objectId] = placement.copyWith(minimized: true, dragging: false);
-    state = state.copyWith(
-      placements: next,
-      clearOverview: state.overviewActive,
-    );
+    state = state.copyWith(placements: next);
   }
 
   void maximize(int objectId, {Rect? bounds}) {
@@ -734,10 +731,7 @@ class DesktopWorkspaceController extends Notifier<DesktopWorkspaceState> {
     }
     final next = Map<int, DesktopWindowPlacement>.of(state.placements);
     next[objectId] = placement.copyWith(minimized: !placement.minimized);
-    state = state.copyWith(
-      placements: next,
-      clearOverview: state.overviewActive,
-    );
+    state = state.copyWith(placements: next);
   }
 
   void toggleMaximized(int objectId, {Rect? bounds}) {
@@ -778,10 +772,7 @@ class DesktopWorkspaceController extends Notifier<DesktopWorkspaceState> {
       next[objectId] = maximized;
       _pendingNativeFrames[objectId] = maximized.frame;
     }
-    state = state.copyWith(
-      placements: next,
-      clearOverview: state.overviewActive,
-    );
+    state = state.copyWith(placements: next);
   }
 
   void toggleFullscreen(int objectId, {required Rect bounds}) {
@@ -813,10 +804,7 @@ class DesktopWorkspaceController extends Notifier<DesktopWorkspaceState> {
     );
     next[objectId] = fullscreen;
     _pendingNativeFrames[objectId] = fullscreen.frame;
-    state = state.copyWith(
-      placements: next,
-      clearOverview: state.overviewActive,
-    );
+    state = state.copyWith(placements: next);
   }
 
   void _exitFullscreen(int objectId, DesktopWindowPlacement placement) {

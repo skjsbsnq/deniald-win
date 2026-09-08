@@ -13,6 +13,36 @@ import 'views/info_view.dart';
 import 'views/system_view.dart';
 import 'views/weather_view.dart';
 
+/// Whether the dashboard panel content is currently user-visible.
+///
+/// The closing spring keeps the page subtree mounted for a few hundred
+/// milliseconds after the panel stops being visible, so descendants that
+/// react to being "seen" — such as the notification list consuming unread
+/// markers — must consult this instead of assuming mounted means visible.
+class DashboardPanelVisibility extends InheritedWidget {
+  const DashboardPanelVisibility({
+    required this.visible,
+    required super.child,
+    super.key,
+  });
+
+  final bool visible;
+
+  /// Defaults to visible: the panel is the only host today, and a future
+  /// host without this scope should keep the legacy seen-means-read
+  /// behavior rather than silently swallowing unread state.
+  static bool of(BuildContext context) {
+    return context
+            .dependOnInheritedWidgetOfExactType<DashboardPanelVisibility>()
+            ?.visible ??
+        true;
+  }
+
+  @override
+  bool updateShouldNotify(DashboardPanelVisibility oldWidget) =>
+      visible != oldWidget.visible;
+}
+
 /// The unified dashboard panel opened by the clock capsule on the shelf.
 ///
 /// Replaces the single-purpose calendar bubble: a 420 dp docked panel with
@@ -181,28 +211,31 @@ class _UnifiedDashboardPanelState extends ConsumerState<UnifiedDashboardPanel>
           ],
         );
       },
-      child: RepaintBoundary(
-        child: Focus(
-          focusNode: _contentFocus,
-          autofocus: widget.visible,
-          child: FocusTraversalGroup(
-            child: CallbackShortcuts(
-              bindings: <ShortcutActivator, VoidCallback>{
-                const SingleActivator(LogicalKeyboardKey.escape): () =>
-                    widget.onDismiss?.call(),
-              },
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(10, 10, 10, 0),
-                    child: DashboardTabBar(
-                      selected: _tab,
-                      onSelected: (tab) => setState(() => _tab = tab),
+      child: DashboardPanelVisibility(
+        visible: widget.visible,
+        child: RepaintBoundary(
+          child: Focus(
+            focusNode: _contentFocus,
+            autofocus: widget.visible,
+            child: FocusTraversalGroup(
+              child: CallbackShortcuts(
+                bindings: <ShortcutActivator, VoidCallback>{
+                  const SingleActivator(LogicalKeyboardKey.escape): () =>
+                      widget.onDismiss?.call(),
+                },
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(10, 10, 10, 0),
+                      child: DashboardTabBar(
+                        selected: _tab,
+                        onSelected: (tab) => setState(() => _tab = tab),
+                      ),
                     ),
-                  ),
-                  Expanded(child: _TabPageHost(tab: _tab)),
-                ],
+                    Expanded(child: _TabPageHost(tab: _tab)),
+                  ],
+                ),
               ),
             ),
           ),

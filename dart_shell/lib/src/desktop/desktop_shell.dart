@@ -167,8 +167,38 @@ class _DesktopSceneWindows {
     return true;
   }
 
+  // Only the static-role fields participate: they are the common core of
+  // both per-window equality predicates above ([DenialWindow
+  // .hasSameSceneDescriptionAs] implies hasSameStaticSceneRoleAs), so equal
+  // selections always hash equal whichever predicate matched. The live
+  // placement ids are folded in order-independently because [Set] iteration
+  // order is not part of setEquals.
   @override
-  int get hashCode => runtimeType.hashCode;
+  int get hashCode {
+    final livePlacementObjectIds =
+        _desktopSceneLivePlacementObjectIds[this] ?? const <int>{};
+    var result = windows.length ^ livePlacementObjectIds.length;
+    for (final id in livePlacementObjectIds) {
+      result ^= id;
+    }
+    for (final window in windows) {
+      result = Object.hash(
+        result,
+        window.objectId,
+        window.objectKind,
+        window.surfaceId,
+        window.windowId,
+        window.appId,
+        window.monitorId,
+        window.pinned,
+        window.suppressAnimations,
+        window.restoredAcrossFlutterRestart,
+        window.serverSideDecorated,
+        window.contentKind,
+      );
+    }
+    return result;
+  }
 }
 
 class _DesktopSceneWorkspace {

@@ -38,6 +38,9 @@ class _DashboardAudioDeviceDropdownState
   var _expanded = false;
   var _hovered = false;
   var _focused = false;
+  // Set when a tap arrived while the device list was still empty; the
+  // refresh response then decides whether the dropdown opens.
+  var _openPending = false;
 
   void _toggle() {
     if (widget.state.loading || widget.state.changing) {
@@ -47,13 +50,20 @@ class _DashboardAudioDeviceDropdownState
       _close();
       return;
     }
-    widget.onRefresh();
     if (widget.state.devices.isNotEmpty) {
+      widget.onRefresh();
       setState(() => _expanded = true);
+      return;
     }
+    // The list may simply not be loaded yet: ask for a refresh and let the
+    // refreshed state open the dropdown, instead of testing the stale empty
+    // list and forcing a second click.
+    _openPending = true;
+    widget.onRefresh();
   }
 
   void _close() {
+    _openPending = false;
     if (_expanded) {
       setState(() => _expanded = false);
     }
@@ -72,6 +82,16 @@ class _DashboardAudioDeviceDropdownState
     super.didUpdateWidget(oldWidget);
     if (_expanded && widget.state.devices.isEmpty) {
       _close();
+      return;
+    }
+    if (!_openPending || widget.state.loading || widget.state.changing) {
+      return;
+    }
+    // The refresh cycle finished; consume the pending open so a later
+    // unrelated device change can never expand the dropdown on its own.
+    _openPending = false;
+    if (widget.state.devices.isNotEmpty) {
+      setState(() => _expanded = true);
     }
   }
 
