@@ -403,10 +403,12 @@ impl WindowRequestKind {
   pub const ConfigureWindow: Self = Self(4);
   pub const CreateLocalWindow: Self = Self(5);
   pub const ConfigureSystemBar: Self = Self(6);
-  pub const MinimizeWindow: Self = Self(7);
+  pub const SwitchWorkspace: Self = Self(7);
+  pub const MoveWindowToWorkspace: Self = Self(8);
+  pub const MinimizeWindow: Self = Self(9);
 
   pub const ENUM_MIN: u8 = 0;
-  pub const ENUM_MAX: u8 = 7;
+  pub const ENUM_MAX: u8 = 9;
   pub const ENUM_VALUES: &'static [Self] = &[
     Self::ListWindows,
     Self::GetDisplayLayout,
@@ -415,6 +417,8 @@ impl WindowRequestKind {
     Self::ConfigureWindow,
     Self::CreateLocalWindow,
     Self::ConfigureSystemBar,
+    Self::SwitchWorkspace,
+    Self::MoveWindowToWorkspace,
     Self::MinimizeWindow,
   ];
   /// Returns the variant's name or "" if unknown.
@@ -427,6 +431,8 @@ impl WindowRequestKind {
       Self::ConfigureWindow => Some("ConfigureWindow"),
       Self::CreateLocalWindow => Some("CreateLocalWindow"),
       Self::ConfigureSystemBar => Some("ConfigureSystemBar"),
+      Self::SwitchWorkspace => Some("SwitchWorkspace"),
+      Self::MoveWindowToWorkspace => Some("MoveWindowToWorkspace"),
       Self::MinimizeWindow => Some("MinimizeWindow"),
       _ => None,
     }
@@ -3928,6 +3934,8 @@ impl<'a> Window<'a> {
   pub const VT_OPACITY: flatbuffers::VOffsetT = 72;
   pub const VT_CONTENT_KIND: flatbuffers::VOffsetT = 74;
   pub const VT_OPACITY_CLASS: flatbuffers::VOffsetT = 76;
+  pub const VT_WORKSPACE_ID: flatbuffers::VOffsetT = 78;
+  pub const VT_MINIMIZED: flatbuffers::VOffsetT = 80;
 
   #[inline]
   pub unsafe fn init_from_table(table: flatbuffers::Table<'a>) -> Self {
@@ -3944,6 +3952,7 @@ impl<'a> Window<'a> {
     builder.add_content_y(args.content_y);
     builder.add_content_x(args.content_x);
     builder.add_monitor_id(args.monitor_id);
+    builder.add_workspace_id(args.workspace_id);
     builder.add_geometry_height(args.geometry_height);
     builder.add_geometry_width(args.geometry_width);
     builder.add_geometry_y(args.geometry_y);
@@ -3976,6 +3985,7 @@ impl<'a> Window<'a> {
     builder.add_pinned(args.pinned);
     builder.add_has_status_color(args.has_status_color);
     builder.add_object_kind(args.object_kind);
+    builder.add_minimized(args.minimized);
     builder.finish()
   }
 
@@ -4239,6 +4249,20 @@ impl<'a> Window<'a> {
     // which contains a valid value in this slot
     unsafe { self._tab.get::<WindowOpacityClass>(Window::VT_OPACITY_CLASS, Some(WindowOpacityClass::ContentTranslucent)).unwrap()}
   }
+  #[inline]
+  pub fn workspace_id(&self) -> i64 {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<i64>(Window::VT_WORKSPACE_ID, Some(1)).unwrap()}
+  }
+  #[inline]
+  pub fn minimized(&self) -> bool {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<bool>(Window::VT_MINIMIZED, Some(false)).unwrap()}
+  }
 }
 
 impl flatbuffers::Verifiable for Window<'_> {
@@ -4285,6 +4309,8 @@ impl flatbuffers::Verifiable for Window<'_> {
      .visit_field::<f32>("opacity", Self::VT_OPACITY, false)?
      .visit_field::<WindowContentKind>("content_kind", Self::VT_CONTENT_KIND, false)?
      .visit_field::<WindowOpacityClass>("opacity_class", Self::VT_OPACITY_CLASS, false)?
+     .visit_field::<i64>("workspace_id", Self::VT_WORKSPACE_ID, false)?
+     .visit_field::<bool>("minimized", Self::VT_MINIMIZED, false)?
      .finish();
     Ok(())
   }
@@ -4327,6 +4353,8 @@ pub struct WindowArgs<'a> {
     pub opacity: f32,
     pub content_kind: WindowContentKind,
     pub opacity_class: WindowOpacityClass,
+    pub workspace_id: i64,
+    pub minimized: bool,
 }
 impl<'a> Default for WindowArgs<'a> {
   #[inline]
@@ -4369,6 +4397,8 @@ impl<'a> Default for WindowArgs<'a> {
       opacity: 1.0,
       content_kind: WindowContentKind::SurfaceTree,
       opacity_class: WindowOpacityClass::ContentTranslucent,
+      workspace_id: 1,
+      minimized: false,
     }
   }
 }
@@ -4527,6 +4557,14 @@ impl<'a: 'b, 'b, A: flatbuffers::Allocator + 'a> WindowBuilder<'a, 'b, A> {
     self.fbb_.push_slot::<WindowOpacityClass>(Window::VT_OPACITY_CLASS, opacity_class, WindowOpacityClass::ContentTranslucent);
   }
   #[inline]
+  pub fn add_workspace_id(&mut self, workspace_id: i64) {
+    self.fbb_.push_slot::<i64>(Window::VT_WORKSPACE_ID, workspace_id, 1);
+  }
+  #[inline]
+  pub fn add_minimized(&mut self, minimized: bool) {
+    self.fbb_.push_slot::<bool>(Window::VT_MINIMIZED, minimized, false);
+  }
+  #[inline]
   pub fn new(_fbb: &'b mut flatbuffers::FlatBufferBuilder<'a, A>) -> WindowBuilder<'a, 'b, A> {
     let start = _fbb.start_table();
     WindowBuilder {
@@ -4581,6 +4619,8 @@ impl core::fmt::Debug for Window<'_> {
       ds.field("opacity", &self.opacity());
       ds.field("content_kind", &self.content_kind());
       ds.field("opacity_class", &self.opacity_class());
+      ds.field("workspace_id", &self.workspace_id());
+      ds.field("minimized", &self.minimized());
       ds.finish()
   }
 }
@@ -5205,8 +5245,10 @@ impl<'a> WindowRequest<'a> {
   pub const VT_SYSTEM_BAR_SIDE: flatbuffers::VOffsetT = 14;
   pub const VT_SYSTEM_BAR_MONITOR_IDS: flatbuffers::VOffsetT = 16;
   pub const VT_FLAGS: flatbuffers::VOffsetT = 18;
-  pub const VT_SYSTEM_BAR_THICKNESS: flatbuffers::VOffsetT = 20;
-  pub const VT_MAXIMIZE_PADDING: flatbuffers::VOffsetT = 22;
+  pub const VT_MONITOR_ID: flatbuffers::VOffsetT = 20;
+  pub const VT_WORKSPACE_ID: flatbuffers::VOffsetT = 22;
+  pub const VT_SYSTEM_BAR_THICKNESS: flatbuffers::VOffsetT = 24;
+  pub const VT_MAXIMIZE_PADDING: flatbuffers::VOffsetT = 26;
 
   #[inline]
   pub unsafe fn init_from_table(table: flatbuffers::Table<'a>) -> Self {
@@ -5219,7 +5261,9 @@ impl<'a> WindowRequest<'a> {
   ) -> flatbuffers::WIPOffset<WindowRequest<'bldr>> {
     let mut builder = WindowRequestBuilder::new(_fbb);
     builder.add_window_id(args.window_id);
+    builder.add_monitor_id(args.monitor_id);
     builder.add_flags(args.flags);
+    builder.add_workspace_id(args.workspace_id);
     builder.add_system_bar_thickness(args.system_bar_thickness);
     builder.add_maximize_padding(args.maximize_padding);
     if let Some(x) = args.system_bar_monitor_ids { builder.add_system_bar_monitor_ids(x); }
@@ -5289,6 +5333,20 @@ impl<'a> WindowRequest<'a> {
     unsafe { self._tab.get::<u32>(WindowRequest::VT_FLAGS, Some(0)).unwrap()}
   }
   #[inline]
+  pub fn monitor_id(&self) -> i64 {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<i64>(WindowRequest::VT_MONITOR_ID, Some(-1)).unwrap()}
+  }
+  #[inline]
+  pub fn workspace_id(&self) -> u32 {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<u32>(WindowRequest::VT_WORKSPACE_ID, Some(1)).unwrap()}
+  }
+  #[inline]
   pub fn system_bar_thickness(&self) -> f64 {
     // Safety:
     // Created from valid Table for this object
@@ -5319,6 +5377,8 @@ impl flatbuffers::Verifiable for WindowRequest<'_> {
      .visit_field::<SystemBarSide>("system_bar_side", Self::VT_SYSTEM_BAR_SIDE, false)?
      .visit_field::<flatbuffers::ForwardsUOffset<flatbuffers::Vector<'_, i64>>>("system_bar_monitor_ids", Self::VT_SYSTEM_BAR_MONITOR_IDS, false)?
      .visit_field::<u32>("flags", Self::VT_FLAGS, false)?
+     .visit_field::<i64>("monitor_id", Self::VT_MONITOR_ID, false)?
+     .visit_field::<u32>("workspace_id", Self::VT_WORKSPACE_ID, false)?
      .visit_field::<f64>("system_bar_thickness", Self::VT_SYSTEM_BAR_THICKNESS, false)?
      .visit_field::<f64>("maximize_padding", Self::VT_MAXIMIZE_PADDING, false)?
      .finish();
@@ -5334,6 +5394,8 @@ pub struct WindowRequestArgs<'a> {
     pub system_bar_side: SystemBarSide,
     pub system_bar_monitor_ids: Option<flatbuffers::WIPOffset<flatbuffers::Vector<'a, i64>>>,
     pub flags: u32,
+    pub monitor_id: i64,
+    pub workspace_id: u32,
     pub system_bar_thickness: f64,
     pub maximize_padding: f64,
 }
@@ -5349,6 +5411,8 @@ impl<'a> Default for WindowRequestArgs<'a> {
       system_bar_side: SystemBarSide::Top,
       system_bar_monitor_ids: None,
       flags: 0,
+      monitor_id: -1,
+      workspace_id: 1,
       system_bar_thickness: 0.0,
       maximize_padding: 0.0,
     }
@@ -5393,6 +5457,14 @@ impl<'a: 'b, 'b, A: flatbuffers::Allocator + 'a> WindowRequestBuilder<'a, 'b, A>
     self.fbb_.push_slot::<u32>(WindowRequest::VT_FLAGS, flags, 0);
   }
   #[inline]
+  pub fn add_monitor_id(&mut self, monitor_id: i64) {
+    self.fbb_.push_slot::<i64>(WindowRequest::VT_MONITOR_ID, monitor_id, -1);
+  }
+  #[inline]
+  pub fn add_workspace_id(&mut self, workspace_id: u32) {
+    self.fbb_.push_slot::<u32>(WindowRequest::VT_WORKSPACE_ID, workspace_id, 1);
+  }
+  #[inline]
   pub fn add_system_bar_thickness(&mut self, system_bar_thickness: f64) {
     self.fbb_.push_slot::<f64>(WindowRequest::VT_SYSTEM_BAR_THICKNESS, system_bar_thickness, 0.0);
   }
@@ -5426,6 +5498,8 @@ impl core::fmt::Debug for WindowRequest<'_> {
       ds.field("system_bar_side", &self.system_bar_side());
       ds.field("system_bar_monitor_ids", &self.system_bar_monitor_ids());
       ds.field("flags", &self.flags());
+      ds.field("monitor_id", &self.monitor_id());
+      ds.field("workspace_id", &self.workspace_id());
       ds.field("system_bar_thickness", &self.system_bar_thickness());
       ds.field("maximize_padding", &self.maximize_padding());
       ds.finish()

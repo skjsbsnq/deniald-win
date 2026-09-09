@@ -206,6 +206,72 @@ void main() {
     );
   });
 
+  test('workspace request kinds keep upstream slot numbering distinct', () {
+    // Upstream fdb986e owns SwitchWorkspace = 7 and MoveWindowToWorkspace = 8;
+    // the fork's shelf minimize was renumbered from 7 to 9 so no two kinds
+    // share a wire value. A stale decode of the old value 7 must resolve to
+    // the upstream kind, never to MinimizeWindow.
+    expect(WindowRequestKind.MinimizeWindow.value, 9);
+    expect(WindowRequestKind.SwitchWorkspace.value, 7);
+    expect(WindowRequestKind.MoveWindowToWorkspace.value, 8);
+    expect(
+      WindowRequestKind.values.map((kind) => kind.value).toSet().length,
+      WindowRequestKind.values.length,
+    );
+
+    Uint8List workspaceRequest({
+      required WindowRequestKind kind,
+      int windowId = 0,
+      int monitorId = -1,
+      int workspaceId = 1,
+    }) =>
+        EnvelopeObjectBuilder(
+          protocolVersion: 1,
+          sequence: 1,
+          payloadType: PayloadTypeId.WindowRequest,
+          payload: WindowRequestObjectBuilder(
+            kind: kind,
+            windowId: windowId,
+            monitorId: monitorId,
+            workspaceId: workspaceId,
+          ),
+        ).toBytes('DENW');
+
+    final switchRequest = Envelope(
+      workspaceRequest(
+        kind: WindowRequestKind.SwitchWorkspace,
+        monitorId: 4,
+        workspaceId: 2,
+      ),
+    ).payload as WindowRequest;
+    expect(switchRequest.kind, WindowRequestKind.SwitchWorkspace);
+    expect(switchRequest.monitorId, 4);
+    expect(switchRequest.workspaceId, 2);
+    // Slots 10 and 11 (thickness/padding) stay untouched by workspace
+    // requests and must keep their append-only defaults.
+    expect(switchRequest.systemBarThickness, 0.0);
+    expect(switchRequest.maximizePadding, 0.0);
+
+    final moveRequest = Envelope(
+      workspaceRequest(
+        kind: WindowRequestKind.MoveWindowToWorkspace,
+        windowId: 42,
+        workspaceId: 5,
+      ),
+    ).payload as WindowRequest;
+    expect(moveRequest.kind, WindowRequestKind.MoveWindowToWorkspace);
+    expect(moveRequest.windowId, 42);
+    expect(moveRequest.workspaceId, 5);
+    // monitor_id defaults to -1 (all outputs) when omitted.
+    expect(moveRequest.monitorId, -1);
+
+    final minimize = Envelope(
+      workspaceRequest(kind: WindowRequestKind.MinimizeWindow, windowId: 42),
+    ).payload as WindowRequest;
+    expect(minimize.kind, WindowRequestKind.MinimizeWindow);
+    expect(minimize.workspaceId, 1);
+  });
+
   test(
     'routing comparison is allocation-free and includes surface identity',
     () {

@@ -169,7 +169,9 @@ enum WindowRequestKind {
   ConfigureWindow(4),
   CreateLocalWindow(5),
   ConfigureSystemBar(6),
-  MinimizeWindow(7);
+  SwitchWorkspace(7),
+  MoveWindowToWorkspace(8),
+  MinimizeWindow(9);
 
   final int value;
   const WindowRequestKind(this.value);
@@ -191,6 +193,10 @@ enum WindowRequestKind {
       case 6:
         return WindowRequestKind.ConfigureSystemBar;
       case 7:
+        return WindowRequestKind.SwitchWorkspace;
+      case 8:
+        return WindowRequestKind.MoveWindowToWorkspace;
+      case 9:
         return WindowRequestKind.MinimizeWindow;
       default:
         throw StateError('Invalid value $value for bit flag enum');
@@ -201,7 +207,7 @@ enum WindowRequestKind {
       value == null ? null : WindowRequestKind.fromValue(value);
 
   static const int minValue = 0;
-  static const int maxValue = 7;
+  static const int maxValue = 9;
   static const fb.Reader<WindowRequestKind> reader = _WindowRequestKindReader();
 }
 
@@ -2067,10 +2073,16 @@ class Window {
       const fb.Uint8Reader().vTableGet(_bc, _bcOffset, 74, 0));
   WindowOpacityClass get opacityClass => WindowOpacityClass.fromValue(
       const fb.Uint8Reader().vTableGet(_bc, _bcOffset, 76, 0));
+  // Monitor-local workspace membership. Minimized windows deliberately carry
+  // -1 because minimization is a workspace-less state.
+  int get workspaceId =>
+      const fb.Int64Reader().vTableGet(_bc, _bcOffset, 78, 1);
+  bool get minimized =>
+      const fb.BoolReader().vTableGet(_bc, _bcOffset, 80, false);
 
   @override
   String toString() {
-    return 'Window{objectId: ${objectId}, objectKind: ${objectKind}, surfaceId: ${surfaceId}, windowId: ${windowId}, textureId: ${textureId}, title: ${title}, appId: ${appId}, width: ${width}, height: ${height}, surfaceX: ${surfaceX}, surfaceY: ${surfaceY}, surfaceWidth: ${surfaceWidth}, surfaceHeight: ${surfaceHeight}, textureSourceX: ${textureSourceX}, textureSourceY: ${textureSourceY}, textureSourceWidth: ${textureSourceWidth}, textureSourceHeight: ${textureSourceHeight}, geometryX: ${geometryX}, geometryY: ${geometryY}, geometryWidth: ${geometryWidth}, geometryHeight: ${geometryHeight}, monitorId: ${monitorId}, transform: ${transform}, scale120: ${scale120}, statusColorArgb: ${statusColorArgb}, hasStatusColor: ${hasStatusColor}, contentX: ${contentX}, contentY: ${contentY}, contentWidth: ${contentWidth}, contentHeight: ${contentHeight}, surfaces: ${surfaces}, pinned: ${pinned}, suppressAnimations: ${suppressAnimations}, serverSideDecorated: ${serverSideDecorated}, opacity: ${opacity}, contentKind: ${contentKind}, opacityClass: ${opacityClass}}';
+    return 'Window{objectId: ${objectId}, objectKind: ${objectKind}, surfaceId: ${surfaceId}, windowId: ${windowId}, textureId: ${textureId}, title: ${title}, appId: ${appId}, width: ${width}, height: ${height}, surfaceX: ${surfaceX}, surfaceY: ${surfaceY}, surfaceWidth: ${surfaceWidth}, surfaceHeight: ${surfaceHeight}, textureSourceX: ${textureSourceX}, textureSourceY: ${textureSourceY}, textureSourceWidth: ${textureSourceWidth}, textureSourceHeight: ${textureSourceHeight}, geometryX: ${geometryX}, geometryY: ${geometryY}, geometryWidth: ${geometryWidth}, geometryHeight: ${geometryHeight}, monitorId: ${monitorId}, transform: ${transform}, scale120: ${scale120}, statusColorArgb: ${statusColorArgb}, hasStatusColor: ${hasStatusColor}, contentX: ${contentX}, contentY: ${contentY}, contentWidth: ${contentWidth}, contentHeight: ${contentHeight}, surfaces: ${surfaces}, pinned: ${pinned}, suppressAnimations: ${suppressAnimations}, serverSideDecorated: ${serverSideDecorated}, opacity: ${opacity}, contentKind: ${contentKind}, opacityClass: ${opacityClass}, workspaceId: ${workspaceId}, minimized: ${minimized}}';
   }
 }
 
@@ -2087,7 +2099,7 @@ class WindowBuilder {
   final fb.Builder fbBuilder;
 
   void begin() {
-    fbBuilder.startTable(37);
+    fbBuilder.startTable(39);
   }
 
   int addObjectId(int? objectId) {
@@ -2275,6 +2287,16 @@ class WindowBuilder {
     return fbBuilder.offset;
   }
 
+  int addWorkspaceId(int? workspaceId) {
+    fbBuilder.addInt64(37, workspaceId);
+    return fbBuilder.offset;
+  }
+
+  int addMinimized(bool? minimized) {
+    fbBuilder.addBool(38, minimized);
+    return fbBuilder.offset;
+  }
+
   int finish() {
     return fbBuilder.endTable();
   }
@@ -2318,6 +2340,8 @@ class WindowObjectBuilder extends fb.ObjectBuilder {
   final double? _opacity;
   final WindowContentKind? _contentKind;
   final WindowOpacityClass? _opacityClass;
+  final int? _workspaceId;
+  final bool? _minimized;
 
   WindowObjectBuilder({
     int? objectId,
@@ -2357,6 +2381,8 @@ class WindowObjectBuilder extends fb.ObjectBuilder {
     double? opacity,
     WindowContentKind? contentKind,
     WindowOpacityClass? opacityClass,
+    int? workspaceId,
+    bool? minimized,
   })  : _objectId = objectId,
         _objectKind = objectKind,
         _surfaceId = surfaceId,
@@ -2393,7 +2419,9 @@ class WindowObjectBuilder extends fb.ObjectBuilder {
         _serverSideDecorated = serverSideDecorated,
         _opacity = opacity,
         _contentKind = contentKind,
-        _opacityClass = opacityClass;
+        _opacityClass = opacityClass,
+        _workspaceId = workspaceId,
+        _minimized = minimized;
 
   /// Finish building, and store into the [fbBuilder].
   @override
@@ -2406,7 +2434,7 @@ class WindowObjectBuilder extends fb.ObjectBuilder {
         ? null
         : fbBuilder.writeList(
             _surfaces!.map((b) => b.getOrCreateOffset(fbBuilder)).toList());
-    fbBuilder.startTable(37);
+    fbBuilder.startTable(39);
     fbBuilder.addUint64(0, _objectId);
     fbBuilder.addUint8(1, _objectKind?.value);
     fbBuilder.addUint64(2, _surfaceId);
@@ -2444,6 +2472,8 @@ class WindowObjectBuilder extends fb.ObjectBuilder {
     fbBuilder.addFloat32(34, _opacity);
     fbBuilder.addUint8(35, _contentKind?.value);
     fbBuilder.addUint8(36, _opacityClass?.value);
+    fbBuilder.addInt64(37, _workspaceId);
+    fbBuilder.addBool(38, _minimized);
     return fbBuilder.endTable();
   }
 
@@ -2926,14 +2956,19 @@ class WindowRequest {
       const fb.ListReader<int>(fb.Int64Reader())
           .vTableGetNullable(_bc, _bcOffset, 16);
   int get flags => const fb.Uint32Reader().vTableGet(_bc, _bcOffset, 18, 0);
+  // Workspace requests only. monitor_id selects the independently switching
+  // output; workspace_id is one-based.
+  int get monitorId => const fb.Int64Reader().vTableGet(_bc, _bcOffset, 20, -1);
+  int get workspaceId =>
+      const fb.Uint32Reader().vTableGet(_bc, _bcOffset, 22, 1);
   double get systemBarThickness =>
-      const fb.Float64Reader().vTableGet(_bc, _bcOffset, 20, 0.0);
+      const fb.Float64Reader().vTableGet(_bc, _bcOffset, 24, 0.0);
   double get maximizePadding =>
-      const fb.Float64Reader().vTableGet(_bc, _bcOffset, 22, 0.0);
+      const fb.Float64Reader().vTableGet(_bc, _bcOffset, 26, 0.0);
 
   @override
   String toString() {
-    return 'WindowRequest{kind: ${kind}, windowId: ${windowId}, geometry: ${geometry}, appId: ${appId}, title: ${title}, systemBarSide: ${systemBarSide}, systemBarMonitorIds: ${systemBarMonitorIds}, flags: ${flags}, systemBarThickness: ${systemBarThickness}, maximizePadding: ${maximizePadding}}';
+    return 'WindowRequest{kind: ${kind}, windowId: ${windowId}, geometry: ${geometry}, appId: ${appId}, title: ${title}, systemBarSide: ${systemBarSide}, systemBarMonitorIds: ${systemBarMonitorIds}, flags: ${flags}, monitorId: ${monitorId}, workspaceId: ${workspaceId}, systemBarThickness: ${systemBarThickness}, maximizePadding: ${maximizePadding}}';
   }
 }
 
@@ -2951,7 +2986,7 @@ class WindowRequestBuilder {
   final fb.Builder fbBuilder;
 
   void begin() {
-    fbBuilder.startTable(10);
+    fbBuilder.startTable(12);
   }
 
   int addKind(WindowRequestKind? kind) {
@@ -2994,13 +3029,23 @@ class WindowRequestBuilder {
     return fbBuilder.offset;
   }
 
+  int addMonitorId(int? monitorId) {
+    fbBuilder.addInt64(8, monitorId);
+    return fbBuilder.offset;
+  }
+
+  int addWorkspaceId(int? workspaceId) {
+    fbBuilder.addUint32(9, workspaceId);
+    return fbBuilder.offset;
+  }
+
   int addSystemBarThickness(double? systemBarThickness) {
-    fbBuilder.addFloat64(8, systemBarThickness);
+    fbBuilder.addFloat64(10, systemBarThickness);
     return fbBuilder.offset;
   }
 
   int addMaximizePadding(double? maximizePadding) {
-    fbBuilder.addFloat64(9, maximizePadding);
+    fbBuilder.addFloat64(11, maximizePadding);
     return fbBuilder.offset;
   }
 
@@ -3018,6 +3063,8 @@ class WindowRequestObjectBuilder extends fb.ObjectBuilder {
   final SystemBarSide? _systemBarSide;
   final List<int>? _systemBarMonitorIds;
   final int? _flags;
+  final int? _monitorId;
+  final int? _workspaceId;
   final double? _systemBarThickness;
   final double? _maximizePadding;
 
@@ -3030,6 +3077,8 @@ class WindowRequestObjectBuilder extends fb.ObjectBuilder {
     SystemBarSide? systemBarSide,
     List<int>? systemBarMonitorIds,
     int? flags,
+    int? monitorId,
+    int? workspaceId,
     double? systemBarThickness,
     double? maximizePadding,
   })  : _kind = kind,
@@ -3040,6 +3089,8 @@ class WindowRequestObjectBuilder extends fb.ObjectBuilder {
         _systemBarSide = systemBarSide,
         _systemBarMonitorIds = systemBarMonitorIds,
         _flags = flags,
+        _monitorId = monitorId,
+        _workspaceId = workspaceId,
         _systemBarThickness = systemBarThickness,
         _maximizePadding = maximizePadding;
 
@@ -3053,7 +3104,7 @@ class WindowRequestObjectBuilder extends fb.ObjectBuilder {
     final int? systemBarMonitorIdsOffset = _systemBarMonitorIds == null
         ? null
         : fbBuilder.writeListInt64(_systemBarMonitorIds!);
-    fbBuilder.startTable(10);
+    fbBuilder.startTable(12);
     fbBuilder.addUint8(0, _kind?.value);
     fbBuilder.addUint64(1, _windowId);
     if (_geometry != null) {
@@ -3064,8 +3115,10 @@ class WindowRequestObjectBuilder extends fb.ObjectBuilder {
     fbBuilder.addUint8(5, _systemBarSide?.value);
     fbBuilder.addOffset(6, systemBarMonitorIdsOffset);
     fbBuilder.addUint32(7, _flags);
-    fbBuilder.addFloat64(8, _systemBarThickness);
-    fbBuilder.addFloat64(9, _maximizePadding);
+    fbBuilder.addInt64(8, _monitorId);
+    fbBuilder.addUint32(9, _workspaceId);
+    fbBuilder.addFloat64(10, _systemBarThickness);
+    fbBuilder.addFloat64(11, _maximizePadding);
     return fbBuilder.endTable();
   }
 

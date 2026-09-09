@@ -160,12 +160,12 @@ class _AlignedSystemBarRequestObjectBuilder extends fb.ObjectBuilder {
   @override
   int finish(fb.Builder builder) {
     final monitorIdsOffset = _writeAlignedInt64Vector(builder, monitorIds);
-    builder.startTable(10);
+    builder.startTable(12);
     builder.addUint8(0, wire.WindowRequestKind.ConfigureSystemBar.value);
     builder.addUint8(5, side.value);
     builder.addOffset(6, monitorIdsOffset);
-    builder.addFloat64(8, thickness);
-    builder.addFloat64(9, maximizePadding);
+    builder.addFloat64(10, thickness);
+    builder.addFloat64(11, maximizePadding);
     return builder.endTable();
   }
 
