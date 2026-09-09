@@ -1780,6 +1780,16 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsDisplayScale => '缩放';
 
   @override
+  String get settingsDisplayScaleInvalid => '请输入 50 到 600 之间的数值。';
+
+  @override
+  String get settingsDisplayScalePreset => '预设';
+
+  @override
+  String get settingsDisplayScaleRange =>
+      '输入 50–600%。数值会舍入到最接近的受支持缩放比例。低于 100% 时画面可能较柔和。';
+
+  @override
   String get settingsDisplayVariableRefreshRate => '可变刷新率 (VRR)';
 
   @override

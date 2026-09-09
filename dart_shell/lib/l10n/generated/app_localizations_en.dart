@@ -1850,6 +1850,16 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsDisplayScale => 'Scale';
 
   @override
+  String get settingsDisplayScaleInvalid => 'Enter a value from 50 to 600.';
+
+  @override
+  String get settingsDisplayScalePreset => 'Presets';
+
+  @override
+  String get settingsDisplayScaleRange =>
+      'Enter 50–600%. Values are rounded to the nearest supported scale. Below 100% may look softer.';
+
+  @override
   String get settingsDisplayVariableRefreshRate =>
       'Variable refresh rate (VRR)';
 

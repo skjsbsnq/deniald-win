@@ -2592,6 +2592,18 @@
   "@settingsDisplayScale": {
     "description": "Label for the monitor scale selector."
   },
+  "settingsDisplayScaleInvalid": "Enter a value from 50 to 600.",
+  "@settingsDisplayScaleInvalid": {
+    "description": "Validation error when custom display scale percent is outside 50-600."
+  },
+  "settingsDisplayScalePreset": "Presets",
+  "@settingsDisplayScalePreset": {
+    "description": "Label for the display scale preset dropdown."
+  },
+  "settingsDisplayScaleRange": "Enter 50–600%. Values are rounded to the nearest supported scale. Below 100% may look softer.",
+  "@settingsDisplayScaleRange": {
+    "description": "Helper caption explaining display scale percent ranges and fractional rounding."
+  },
   "settingsDisplayVariableRefreshRate": "Variable refresh rate (VRR)",
   "@settingsDisplayVariableRefreshRate": {
     "description": "Label for enabling variable refresh rate on a supported monitor."

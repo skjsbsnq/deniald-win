@@ -3310,6 +3310,24 @@ abstract class AppLocalizations {
   /// **'Scale'**
   String get settingsDisplayScale;
 
+  /// Validation error when custom display scale percent is outside 50-600.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter a value from 50 to 600.'**
+  String get settingsDisplayScaleInvalid;
+
+  /// Label for the display scale preset dropdown.
+  ///
+  /// In en, this message translates to:
+  /// **'Presets'**
+  String get settingsDisplayScalePreset;
+
+  /// Helper caption explaining display scale percent ranges and fractional rounding.
+  ///
+  /// In en, this message translates to:
+  /// **'Enter 50–600%. Values are rounded to the nearest supported scale. Below 100% may look softer.'**
+  String get settingsDisplayScaleRange;
+
   /// Label for enabling variable refresh rate on a supported monitor.
   ///
   /// In en, this message translates to:
