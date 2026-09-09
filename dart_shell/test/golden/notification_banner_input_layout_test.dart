@@ -69,7 +69,7 @@ const _firstNotification = DesktopNotification(
   hasPosition: false,
   progress: 0,
   hasProgress: false,
-  expireTimeoutMs: 0,
+  expireTimeoutMs: -1,
 );
 
 const _secondNotification = DesktopNotification(
@@ -96,7 +96,7 @@ const _secondNotification = DesktopNotification(
   hasPosition: false,
   progress: 0,
   hasProgress: false,
-  expireTimeoutMs: 0,
+  expireTimeoutMs: -1,
 );
 
 void main() {
