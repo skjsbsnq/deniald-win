@@ -152,37 +152,12 @@ impl WaylandFrontend {
                     }
             });
         let bar_side = hosts_bar.then_some(bar.side);
-        let padding = self.work_area.maximize_padding;
-        let padding = if padding.is_finite() {
-            (padding.ceil() as i32).max(0)
-        } else {
-            0
-        };
-        let bar_thickness = (bar.thickness.ceil() as i32).max(0);
-        let inset = |side: SystemBarSide| {
-            if bar_side == Some(side) {
-                bar_thickness
-            } else {
-                padding
-            }
-        };
-        let mut top = inset(SystemBarSide::Top);
-        let mut bottom = inset(SystemBarSide::Bottom);
-        let mut left = inset(SystemBarSide::Left);
-        let mut right = inset(SystemBarSide::Right);
-        // Misconfigured insets must never consume the whole output.
-        let height_budget = (geometry.size.h - 1).max(0);
-        top = top.min(height_budget);
-        bottom = bottom.min(height_budget - top);
-        let width_budget = (geometry.size.w - 1).max(0);
-        left = left.min(width_budget);
-        right = right.min(width_budget - left);
-        let mut area = geometry;
-        area.loc.x += left;
-        area.loc.y += top;
-        area.size.w -= left + right;
-        area.size.h -= top + bottom;
-        area
+        compute_maximize_work_area(
+            geometry,
+            bar_side,
+            bar.thickness,
+            self.work_area.maximize_padding,
+        )
     }
 
     pub(crate) fn set_work_area(&mut self, work_area: crate::options::WorkAreaOptions) {
@@ -728,5 +703,88 @@ fn output_transform(transform: OutputTransform) -> Transform {
         OutputTransform::Flipped90 => Transform::Flipped90,
         OutputTransform::Flipped180 => Transform::Flipped180,
         OutputTransform::Flipped270 => Transform::Flipped270,
+    }
+}
+
+pub(super) fn compute_maximize_work_area(
+    geometry: Rectangle<i32, Logical>,
+    bar_side: Option<crate::options::SystemBarSide>,
+    bar_thickness: f64,
+    maximize_padding: f64,
+) -> Rectangle<i32, Logical> {
+    use crate::options::SystemBarSide;
+    let padding = if maximize_padding.is_finite() {
+        (maximize_padding.ceil() as i32).max(0)
+    } else {
+        0
+    };
+    let bar_thickness = (bar_thickness.ceil() as i32).max(0);
+    let inset = |side: SystemBarSide| {
+        if bar_side == Some(side) {
+            bar_thickness.saturating_add(padding)
+        } else {
+            padding
+        }
+    };
+    let mut top = inset(SystemBarSide::Top);
+    let mut bottom = inset(SystemBarSide::Bottom);
+    let mut left = inset(SystemBarSide::Left);
+    let mut right = inset(SystemBarSide::Right);
+    // Misconfigured insets must never consume the whole output.
+    let height_budget = (geometry.size.h - 1).max(0);
+    top = top.min(height_budget);
+    bottom = bottom.min(height_budget - top);
+    let width_budget = (geometry.size.w - 1).max(0);
+    left = left.min(width_budget);
+    right = right.min(width_budget - left);
+    let mut area = geometry;
+    area.loc.x += left;
+    area.loc.y += top;
+    area.size.w -= left + right;
+    area.size.h -= top + bottom;
+    area
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::options::SystemBarSide;
+    use smithay::utils::{Point, Size};
+
+    fn rect(x: i32, y: i32, w: i32, h: i32) -> Rectangle<i32, Logical> {
+        Rectangle::new(Point::from((x, y)), Size::from((w, h)))
+    }
+
+    #[test]
+    fn bottom_shelf_work_area_preserves_maximize_padding_above_bar() {
+        let output = rect(0, 0, 1280, 800);
+        let work_area = compute_maximize_work_area(output, Some(SystemBarSide::Bottom), 56.0, 10.0);
+        // Left: 10, Top: 10, Right: 1280 - 10 = 1270, Bottom: 800 - 56 - 10 = 734
+        assert_eq!(work_area, rect(10, 10, 1260, 724));
+        // Gap between bottom of maximized window (734) and top of shelf (744) is exactly 10.
+        assert_eq!(800 - 56 - (work_area.loc.y + work_area.size.h), 10);
+    }
+
+    #[test]
+    fn top_system_bar_work_area_preserves_maximize_padding_below_bar() {
+        let output = rect(0, 0, 1280, 800);
+        let work_area = compute_maximize_work_area(output, Some(SystemBarSide::Top), 32.0, 10.0);
+        // Top: 32 + 10 = 42, Left: 10, Right: 1270, Bottom: 790
+        assert_eq!(work_area, rect(10, 42, 1260, 748));
+        assert_eq!(work_area.loc.y - 32, 10);
+    }
+
+    #[test]
+    fn zero_padding_leaves_maximized_window_flush_to_bar_and_screen() {
+        let output = rect(0, 0, 1280, 800);
+        let work_area = compute_maximize_work_area(output, Some(SystemBarSide::Bottom), 56.0, 0.0);
+        assert_eq!(work_area, rect(0, 0, 1280, 744));
+    }
+
+    #[test]
+    fn hidden_bar_applies_uniform_padding_to_all_edges() {
+        let output = rect(0, 0, 1280, 800);
+        let work_area = compute_maximize_work_area(output, None, 56.0, 10.0);
+        assert_eq!(work_area, rect(10, 10, 1260, 780));
     }
 }

@@ -205,7 +205,7 @@ class DisplayLayout {
   }
 
   /// [outputRect] minus the system bar strip [bar] on [barSide], and minus
-  /// [maximizePadding] on every bar-free edge. The padding is clamped so a
+  /// [maximizePadding] on every edge. The padding is clamped so a
   /// misconfigured value can never swallow the output.
   Rect _workAreaInset(Rect outputRect, Rect bar, SystemBarSide barSide) {
     final padding = maximizePadding.isFinite && maximizePadding > 0.0
@@ -215,17 +215,16 @@ class DisplayLayout {
           )
         : 0.0;
     return Rect.fromLTRB(
-      barSide == SystemBarSide.left ? bar.right : outputRect.left + padding,
-      barSide == SystemBarSide.top ? bar.bottom : outputRect.top + padding,
-      barSide == SystemBarSide.right ? bar.left : outputRect.right - padding,
-      barSide == SystemBarSide.bottom ? bar.top : outputRect.bottom - padding,
+      (barSide == SystemBarSide.left ? bar.right : outputRect.left) + padding,
+      (barSide == SystemBarSide.top ? bar.bottom : outputRect.top) + padding,
+      (barSide == SystemBarSide.right ? bar.left : outputRect.right) - padding,
+      (barSide == SystemBarSide.bottom ? bar.top : outputRect.bottom) - padding,
     );
   }
 
   /// [outputRect] minus the system bar strip when the bar lives on that
-  /// output, and minus [maximizePadding] on every bar-free edge; windows
-  /// maximize into this area while true fullscreen keeps the complete output
-  /// rect.
+  /// output, and minus [maximizePadding] on every edge; windows maximize into
+  /// this area while true fullscreen keeps the complete output rect.
   Rect workAreaWithin(Rect outputRect) {
     final bar = systemBarRectWithin(outputRect);
     final barSide = bar.isEmpty ? SystemBarSide.hidden : systemBarSide;
