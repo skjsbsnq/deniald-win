@@ -458,7 +458,7 @@ impl WaylandFrontend {
                     .last_mut()
                     .filter(|frame| frame.texture_id == surface_id as i64)
                 {
-                    frame.set_feedback(super::presentation::surface_feedback(surface));
+                    frame.set_feedback(super::presentation::surface_feedback(states));
                 }
                 let role = if surface == root {
                     root_role
@@ -529,7 +529,10 @@ impl WaylandFrontend {
                     revision,
                     expects_sample,
                 )
-                .with_feedback(super::presentation::surface_feedback(surface)),
+                .with_feedback(with_states(
+                    surface,
+                    super::presentation::surface_feedback,
+                )),
             );
         }
         self.surface_shm_frames
@@ -537,7 +540,10 @@ impl WaylandFrontend {
             .cloned()
             .map(|frame| {
                 ExternalTextureFrame::from_shm(texture_id, frame, expects_sample)
-                    .with_feedback(super::presentation::surface_feedback(surface))
+                    .with_feedback(with_states(
+                        surface,
+                        super::presentation::surface_feedback,
+                    ))
             })
     }
 

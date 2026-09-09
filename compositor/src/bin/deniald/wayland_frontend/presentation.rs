@@ -10,6 +10,8 @@ use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 #[cfg(feature = "flutter")]
 use smithay::utils::Time;
 use smithay::utils::{Clock, Monotonic};
+#[cfg(feature = "flutter")]
+use smithay::wayland::compositor::SurfaceData;
 use smithay::wayland::compositor::{
     SurfaceAttributes, TraversalAction, with_surface_tree_downward,
 };
@@ -64,19 +66,19 @@ pub(super) fn capture_surface_feedback(surface: &WlSurface) {
     });
 }
 
+// Tree traversal already holds the surface lock. Accept its supplied state
+// instead of a WlSurface so feedback lookup cannot recursively acquire it.
 #[cfg(feature = "flutter")]
 pub(super) fn surface_feedback(
-    surface: &WlSurface,
+    states: &SurfaceData,
 ) -> Option<crate::surface_feedback::SurfaceFeedback> {
-    smithay::wayland::compositor::with_states(surface, |states| {
-        states
-            .data_map
-            .get::<SurfaceFeedbackState>()?
-            .0
-            .lock()
-            .unwrap()
-            .clone()
-    })
+    states
+        .data_map
+        .get::<SurfaceFeedbackState>()?
+        .0
+        .lock()
+        .unwrap()
+        .clone()
 }
 
 /// Keeps frame scheduling and presentation feedback on their distinct
