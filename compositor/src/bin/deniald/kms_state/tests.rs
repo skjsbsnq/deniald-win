@@ -1,6 +1,6 @@
 #[cfg(feature = "flutter")]
 use super::ensure_resident_jit_engine_matches;
-use super::{ScanoutIdentity, ScanoutIdentityError, validate_scanout_identities};
+use super::{DrmModeCloseFb, ScanoutIdentity, ScanoutIdentityError, validate_scanout_identities};
 
 #[cfg(feature = "flutter")]
 #[test]
@@ -61,3 +61,16 @@ fn scanout_identity_validation_rejects_every_alias_class() {
         ));
     }
 }
+
+#[test]
+fn drm_mode_close_fb_layout_and_fields() {
+    assert_eq!(std::mem::size_of::<DrmModeCloseFb>(), 8);
+    assert_eq!(std::mem::align_of::<DrmModeCloseFb>(), 4);
+    let closefb = DrmModeCloseFb {
+        fb_id: 42,
+        pad: 0,
+    };
+    assert_eq!(closefb.fb_id, 42);
+    assert_eq!(closefb.pad, 0);
+}
+

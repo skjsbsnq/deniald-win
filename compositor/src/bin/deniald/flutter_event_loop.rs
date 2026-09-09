@@ -1,6 +1,6 @@
 //! Bounded calloop dispatch for Flutter, Wayland, KMS, and control-plane events.
 
-use super::kms_pipeline::{HotplugRequest, apply_hotplug_topology, ticker_refresh_millihz};
+use super::kms_pipeline::{HotplugRequest, apply_hotplug_topology};
 use super::kms_session::{
     log_shutdown, recover_stalled_kms_presentation, service_session_lifecycle,
 };
@@ -106,32 +106,6 @@ pub(super) fn run_flutter_event_loop(
     use smithay::reexports::calloop::channel::{Event as ChannelEvent, channel, sync_channel};
 
     let persistence_available = output_config.is_some();
-    let native_app_snapshot = topology.snapshot();
-    let native_app_atlas = AtlasPlan::for_snapshot(&native_app_snapshot)
-        .ok_or("native application plugin initialization has no output atlas")?;
-    let native_app_refresh_millihz = ticker_refresh_millihz(&native_app_snapshot)?;
-    let native_app_plugins = native_app_plugin::NativeAppPluginManager::load_configured(
-        drm.as_fd(),
-        native_app_atlas.engine_scale_120,
-        SCALE_BASE,
-        native_app_refresh_millihz,
-    )?;
-    let native_plugin_poll_descriptors = native_app_plugins
-        .as_ref()
-        .map(native_app_plugin::NativeAppPluginManager::poll_descriptors)
-        .transpose()?
-        .unwrap_or_default();
-    let native_plugin_formats = renderer
-        .dmabuf_formats()
-        .iter()
-        .filter(|format| format.modifier != Modifier::Invalid)
-        .take(native_app_plugin::MAX_FORMATS)
-        .map(|format| native_app_plugin::NativeAppFormatV1 {
-            format: format.code as u32,
-            modifier: u64::from(format.modifier),
-        })
-        .collect::<Vec<_>>();
-    let (native_release_sender, native_release_source) = channel();
     let started = Instant::now();
     let deadline = duration
         .map(|duration| {
@@ -211,13 +185,6 @@ pub(super) fn run_flutter_event_loop(
         authentication,
         flutter_active: true,
         flutter_input: flutter_runtime::InputQueue::new(swapchain.desktop_size()),
-        native_app_plugins,
-        native_release_sender: Some(native_release_sender),
-        native_plugin_formats,
-        native_plugin_default_size: (
-            swapchain.desktop_size().width,
-            swapchain.desktop_size().height,
-        ),
         output_control: Some(output_control.clone()),
         ..RuntimeState::default()
     };
@@ -237,34 +204,6 @@ pub(super) fn run_flutter_event_loop(
             None
         }
     };
-    event_loop.handle().insert_source(
-        native_release_source,
-        |event, _, state: &mut RuntimeState| {
-            if let ChannelEvent::Msg(command) = event {
-                state.native_release_commands.push_back(command);
-            }
-        },
-    )?;
-    for (plugin_index, descriptor) in native_plugin_poll_descriptors {
-        event_loop.handle().insert_source(
-            Generic::new(descriptor, Interest::READ, PollMode::Level),
-            move |_, _, state: &mut RuntimeState| {
-                let mut actions = std::mem::take(&mut state.native_plugin_actions);
-                let result = match state.native_app_plugins.as_mut() {
-                    Some(manager) => manager
-                        .dispatch(plugin_index, &mut actions)
-                        .map_err(|error| error.to_string()),
-                    None => Err("native application plugin manager disappeared".to_owned()),
-                };
-                state.native_plugin_actions = actions;
-                if let Err(error) = result {
-                    warn!(plugin_index, %error, "disabled failed native application plugin event source");
-                    return Ok(PostAction::Remove);
-                }
-                Ok(PostAction::Continue)
-            },
-        )?;
-    }
     let (volition_event_sender, volition_event_source) = sync_channel(8);
     event_loop.handle().insert_source(
         volition_event_source,
@@ -345,9 +284,6 @@ pub(super) fn run_flutter_event_loop(
             scheduler.shutdown_volition();
             recover_stalled_kms_presentation(drm, event_loop, &mut events)?;
             continue;
-        }
-        if flutter_session::native_app_plugins_require_service(&events) {
-            service_native_app_plugins(event_loop, &mut events, allocator)?;
         }
         let iteration_now = Instant::now();
         if events.dpms_topology.service_deadline(iteration_now) {

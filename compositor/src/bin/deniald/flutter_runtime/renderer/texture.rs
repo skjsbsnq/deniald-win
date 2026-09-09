@@ -100,13 +100,6 @@ pub(in crate::flutter_runtime) enum ExternalTextureLeaseResource {
         _binding: Arc<CachedTextureBinding>,
         _resource_permit: ExternalTextureResourcePermit,
     },
-    Retained {
-        // Native producer buffers are copied once into this private texture.
-        // Later Flutter frames never sample producer-owned storage after its
-        // release fence signals.
-        _binding: Arc<CachedTextureBinding>,
-        _resource_permit: ExternalTextureResourcePermit,
-    },
 }
 
 struct PreparedExternalTexture {
@@ -452,13 +445,6 @@ impl ShmTextureFrame {
 #[derive(Clone)]
 pub(in crate::flutter_runtime) enum ExternalBufferGuard {
     Wayland { _guard: RendererBufferGuard },
-    Native(NativeBufferRelease),
-}
-
-impl ExternalBufferGuard {
-    fn is_native(&self) -> bool {
-        matches!(self, Self::Native(_))
-    }
 }
 
 #[derive(Clone)]
@@ -579,7 +565,7 @@ impl ExternalTextureSlot {
 struct SampledBufferHold {
     texture_id: i64,
     generation: u64,
-    buffer_guard: ExternalBufferGuard,
+    _buffer_guard: ExternalBufferGuard,
 }
 
 type SampledBufferBatchPool = Mutex<Vec<Vec<SampledBufferHold>>>;
@@ -601,36 +587,6 @@ impl SampledBufferHoldBatch {
             .iter()
             .flatten()
             .map(|hold| (hold.texture_id, hold.generation))
-    }
-
-    pub(crate) fn materialize_native_releases(
-        &self,
-        fence: std::os::fd::BorrowedFd<'_>,
-    ) -> Result<(), Box<dyn Error>> {
-        for hold in self.holds.iter().flatten() {
-            if let ExternalBufferGuard::Native(release) = &hold.buffer_guard {
-                release.materialize(fence)?;
-            }
-        }
-        Ok(())
-    }
-
-    pub(crate) fn complete_native_releases(&self) -> Result<(), Box<dyn Error>> {
-        for hold in self.holds.iter().flatten() {
-            if let ExternalBufferGuard::Native(release) = &hold.buffer_guard {
-                release.complete()?;
-            }
-        }
-        Ok(())
-    }
-
-    pub(crate) fn complete_native_releases_without_fence(&self) -> Result<(), Box<dyn Error>> {
-        for hold in self.holds.iter().flatten() {
-            if let ExternalBufferGuard::Native(release) = &hold.buffer_guard {
-                release.complete_without_fence()?;
-            }
-        }
-        Ok(())
     }
 }
 
@@ -825,25 +781,6 @@ impl ExternalTextureFrame {
                 feedback: None,
             },
             expects_sample: false,
-        }
-    }
-
-    pub(crate) fn from_native_dmabuf(
-        texture_id: i64,
-        dmabuf: Dmabuf,
-        release: NativeBufferRelease,
-        revision: u64,
-        expects_sample: bool,
-    ) -> Self {
-        Self {
-            texture_id,
-            source: ExternalTextureSource::Dmabuf {
-                dmabuf,
-                buffer_guard: Some(ExternalBufferGuard::Native(release)),
-                revision,
-                feedback: None,
-            },
-            expects_sample,
         }
     }
 

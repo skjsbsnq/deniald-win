@@ -54,31 +54,7 @@ pub(super) fn synchronize_flutter_window_management(
             runtime.send_shell_action(action, monitor_id)?;
         }
         let commands = runtime.drain_window_commands().collect::<Vec<_>>();
-        let mut wayland_commands = Vec::with_capacity(commands.len());
-        for command in commands {
-            let native_owned = command.window_id().is_some_and(|window_id| {
-                events
-                    .native_app_plugins
-                    .as_ref()
-                    .is_some_and(|manager| manager.owns_window(window_id))
-            });
-            if native_owned {
-                if let Some(manager) = events.native_app_plugins.as_mut()
-                    && let Err(error) = manager.apply_window_command(&command)
-                {
-                    warn!(%error, "native application plugin window command failed");
-                }
-            } else {
-                if matches!(command, wire::WindowCommand::Focus { .. })
-                    && let Some(manager) = events.native_app_plugins.as_mut()
-                    && let Err(error) = manager.clear_focus()
-                {
-                    warn!(%error, "could not clear native application focus");
-                }
-                wayland_commands.push(command);
-            }
-        }
-        wayland_frontend::apply_window_commands(events, wayland_commands);
+        wayland_frontend::apply_window_commands(events, commands);
     }
     if events.pending_window_events.is_empty() {
         return Ok(());
@@ -1363,7 +1339,6 @@ pub(super) fn synchronize_resident_flutter_geometry_state(
     events
         .flutter_input
         .resize_preserving_state(atlas.pixel_size);
-    events.native_plugin_default_size = (atlas.pixel_size.width, atlas.pixel_size.height);
     events.synchronize_flutter_pointer_position();
     events.scene_sync.mark_dirty();
 }
