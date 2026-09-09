@@ -9,6 +9,54 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {
+  test('cursor artwork filter quality follows the physical pixel ratio', () {
+    // 1:1 artwork-to-output mapping keeps nearest sampling sharp.
+    expect(shellCursorFilterQuality(1.0), FilterQuality.none);
+    // Fractional output scales bilinearly instead of dropping rows.
+    expect(shellCursorFilterQuality(1.5), FilterQuality.low);
+    expect(shellCursorFilterQuality(0.75), FilterQuality.low);
+    // Integral upscales still duplicate pixel rows with nearest sampling.
+    expect(shellCursorFilterQuality(2.0), FilterQuality.low);
+    expect(shellCursorFilterQuality(0.5), FilterQuality.low);
+    // Non-finite or non-positive ratios fall back to a safe 1:1 assumption.
+    expect(shellCursorFilterQuality(double.nan), FilterQuality.none);
+    expect(shellCursorFilterQuality(0), FilterQuality.none);
+  });
+
+  testWidgets('cursor artwork image requests the resolved filter quality', (
+    tester,
+  ) async {
+    Widget host(double devicePixelRatio) => MediaQuery(
+      data: MediaQueryData(
+        devicePixelRatio: devicePixelRatio,
+        size: const Size(200, 120),
+      ),
+      child: Directionality(
+        textDirection: TextDirection.ltr,
+        child: ShellCursorArtwork(
+          theme: ShellCursorThemes.bibataModernIce,
+          kind: ShellCursorKind.normal,
+          longestEdge: 32,
+          running: false,
+        ),
+      ),
+    );
+
+    // Bibata frames are 32px native, so at DPR 1 the ratio is exactly 1:1.
+    await tester.pumpWidget(host(1));
+    expect(
+      tester.widget<Image>(find.byType(Image)).filterQuality,
+      FilterQuality.none,
+    );
+
+    // DPR 1.5 stretches every artwork pixel across 1.5 output pixels.
+    await tester.pumpWidget(host(1.5));
+    expect(
+      tester.widget<Image>(find.byType(Image)).filterQuality,
+      FilterQuality.low,
+    );
+  });
+
   test('cursor artwork priority never combines theme and client surface', () {
     ShellCursorArtworkSource resolve({
       bool positioned = true,

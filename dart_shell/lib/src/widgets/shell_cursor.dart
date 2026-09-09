@@ -570,6 +570,19 @@ class ShellCursorArtwork extends StatefulWidget {
   State<ShellCursorArtwork> createState() => _ShellCursorArtworkState();
 }
 
+/// Bilinear sampling unless artwork pixels map one-to-one onto output pixels,
+/// mirroring [WindowSurfaceTree]'s texture policy. Any other nearest-sampled
+/// ratio drops or duplicates pixel rows, and the pointer's sub-pixel phase
+/// flips which rows get dropped frame to frame, which reads as frayed cursor
+/// edges that shimmer while the pointer moves.
+@visibleForTesting
+FilterQuality shellCursorFilterQuality(double nativeToPhysicalRatio) {
+  final ratio = nativeToPhysicalRatio.isFinite && nativeToPhysicalRatio > 0
+      ? nativeToPhysicalRatio
+      : 1.0;
+  return (ratio - 1.0).abs() < 0.001 ? FilterQuality.none : FilterQuality.low;
+}
+
 class _ShellCursorArtworkState extends State<ShellCursorArtwork> {
   Timer? _timer;
   int _frame = 0;
@@ -635,11 +648,28 @@ class _ShellCursorArtworkState extends State<ShellCursorArtwork> {
     final scale = requestedExtent / nativeExtent;
     final artworkSize = nativeSize * scale;
     final hotspot = role.hotspotAt(_frame);
+    final outputScale = MediaQuery.maybeOf(context)?.devicePixelRatio ?? 1.0;
+    // Artwork layout units are logical while theme frames are rasterized
+    // pixels; ratio is the physical stretch per native artwork pixel.
+    final ratio = scale * outputScale;
+    final cacheWidth = (nativeSize.width * ratio).round();
+    final cacheHeight = (nativeSize.height * ratio).round();
+    // Decode at the requested physical footprint so oversized imported
+    // artwork does not sit in the image cache at full native resolution.
+    // The generic Image constructor has no cacheWidth/cacheHeight parameters,
+    // so the provider itself is resized, and only when the decode cap would
+    // actually shrink the native frame.
+    final provider = widget.theme.imageProvider(widget.kind, _frame)!;
+    final imageProvider =
+        (cacheWidth > 0 && cacheWidth < nativeSize.width) ||
+            (cacheHeight > 0 && cacheHeight < nativeSize.height)
+        ? ResizeImage(provider, width: cacheWidth, height: cacheHeight)
+        : provider;
     final artwork = Image(
-      image: widget.theme.imageProvider(widget.kind, _frame)!,
+      image: imageProvider,
       width: artworkSize.width,
       height: artworkSize.height,
-      filterQuality: FilterQuality.none,
+      filterQuality: shellCursorFilterQuality(ratio),
       gaplessPlayback: true,
       excludeFromSemantics: true,
     );
