@@ -14,8 +14,17 @@ class HomeClockWidget extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final timeSize = math
+        final nominalTimeSize = math
             .min(constraints.maxWidth * 0.36, constraints.maxHeight * 0.42)
+            .clamp(46.0, 124.0)
+            .toDouble();
+        // Snap the headline to a fixed ladder of integer sizes (steps of 4
+        // between the 46 and 124 clamps). A continuous size, or a FittedBox
+        // scaleDown fallback whenever the tile is narrower than the text,
+        // would render the digits under a fractional scale transform and
+        // soften every stroke; the ladder keeps common tile sizes at an
+        // exact 1:1 render.
+        final timeSize = ((nominalTimeSize / 4).floorToDouble() * 4)
             .clamp(46.0, 124.0)
             .toDouble();
         final detailScale = (timeSize / 58).clamp(0.9, 1.28).toDouble();
@@ -30,21 +39,18 @@ class HomeClockWidget extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
-                      localizedTime(context, clock.now),
-                      maxLines: 1,
-                      overflow: TextOverflow.fade,
-                      softWrap: false,
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: ShellMediaColors.lightForeground,
-                        fontSize: timeSize,
-                        height: 0.95,
-                        fontWeight: FontWeight.w300,
-                        letterSpacing: 0,
-                      ),
+                  Text(
+                    localizedTime(context, clock.now),
+                    maxLines: 1,
+                    overflow: TextOverflow.fade,
+                    softWrap: false,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: ShellMediaColors.lightForeground,
+                      fontSize: timeSize,
+                      height: 0.95,
+                      fontWeight: FontWeight.w300,
+                      letterSpacing: 0,
                     ),
                   ),
                   SizedBox(height: _scaled(7, detailScale, 5, 9)),

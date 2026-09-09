@@ -272,7 +272,11 @@ class _DesktopWindowFrame extends ConsumerWidget {
                                   smooth: transformed || resizing,
                                   active: active && !minimized,
                                   localLayoutSize: window.isLocalFlutter
-                                      ? placement.contentRect.size
+                                      ? desktopLocalFlutterLayoutSize(
+                                          frame: placement.frame,
+                                          frameBorder: placement.frameBorder,
+                                          devicePixelRatio: devicePixelRatio,
+                                        )
                                       : null,
                                 ),
                               ),
@@ -470,6 +474,29 @@ class _DesktopSurfaceTexture extends StatefulWidget {
   State<_DesktopSurfaceTexture> createState() => _DesktopSurfaceTextureState();
 }
 
+/// Layout size an embedded local Flutter application should receive.
+///
+/// The desktop presents the window through the device-pixel aligned content
+/// rect produced by [desktopPixelAlignedWindowFrame], so the app must lay
+/// out to exactly that size: even a one-pixel difference would place the
+/// app's text under a fractional scale transform and soften every glyph.
+/// Applying the same rounding here keeps the steady-state scale at exactly
+/// 1:1. Transformed states (overview, switcher) keep using this size so the
+/// app retains its real layout while its surface animates.
+Size desktopLocalFlutterLayoutSize({
+  required Rect frame,
+  required double frameBorder,
+  required double devicePixelRatio,
+}) {
+  return desktopPixelAlignedWindowFrame(
+    frame: frame,
+    contentInset: frameBorder,
+    devicePixelRatio: devicePixelRatio,
+    enabled: true,
+    alignSize: true,
+  ).deflate(frameBorder).size;
+}
+
 class _DesktopWindowContent extends ConsumerWidget {
   const _DesktopWindowContent({
     required this.window,
@@ -522,9 +549,13 @@ class _DesktopWindowContent extends ConsumerWidget {
       // switching, and minimize animate the compositor texture. Give local
       // Flutter apps the same contract: retain the real window layout and
       // scale the complete app as one surface for shell-only transitions.
+      // The layout size matches the aligned content area, so the steady
+      // state maps the app 1:1; contain keeps any transient mismatch
+      // uniform, because an x/y independent fill would additionally distort
+      // every glyph instead of just resampling them.
       return ClipRect(
         child: FittedBox(
-          fit: BoxFit.fill,
+          fit: BoxFit.contain,
           clipBehavior: Clip.hardEdge,
           child: SizedBox.fromSize(size: layoutSize, child: host),
         ),
