@@ -264,7 +264,7 @@ class _MetricChip extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: TextStyle(
               color: colors.textSecondary,
-              fontSize: 10.5,
+              fontSize: 11,
               fontWeight: FontWeight.w600,
               decoration: TextDecoration.none,
             ),

@@ -64,7 +64,7 @@ class SettingsPageLayout extends StatelessWidget {
                             style: ShellText.cardTitle.copyWith(
                               color: accent,
                               fontSize: 10,
-                              letterSpacing: 1.3,
+                              letterSpacing: 1,
                             ),
                           ),
                         ],
@@ -139,7 +139,7 @@ class SettingsSavedBadge extends StatelessWidget {
                 style: ShellText.cardTitle.copyWith(
                   color: context.shellColors.textSecondary,
                   fontSize: 9,
-                  letterSpacing: 0.8,
+                  letterSpacing: 1,
                 ),
               ),
             ],

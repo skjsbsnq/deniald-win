@@ -136,7 +136,7 @@ class SettingsNavigation extends StatelessWidget {
                   style: ShellText.cardTitle.copyWith(
                     color: context.shellColors.textTertiary,
                     fontSize: 9,
-                    letterSpacing: 1.2,
+                    letterSpacing: 1,
                   ),
                 ),
               ),

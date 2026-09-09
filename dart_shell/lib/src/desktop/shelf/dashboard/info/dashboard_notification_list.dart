@@ -237,7 +237,7 @@ class _NotificationGroupCardState extends State<_NotificationGroupCard>
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
                                     color: colors.textPrimary,
-                                    fontSize: 12.5,
+                                    fontSize: 13,
                                     fontWeight: FontWeight.w700,
                                     decoration: TextDecoration.none,
                                   ),
@@ -262,7 +262,7 @@ class _NotificationGroupCardState extends State<_NotificationGroupCard>
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               color: colors.textSecondary,
-                              fontSize: 11.5,
+                              fontSize: 12,
                               fontWeight: FontWeight.w500,
                               decoration: TextDecoration.none,
                             ),
@@ -373,7 +373,7 @@ class _GroupCountCapsule extends StatelessWidget {
             label,
             style: TextStyle(
               color: colors.textSecondary,
-              fontSize: 10.5,
+              fontSize: 11,
               fontWeight: FontWeight.w600,
               decoration: TextDecoration.none,
             ),
@@ -417,7 +417,7 @@ class _ShowMoreCapsule extends StatelessWidget {
           label,
           style: TextStyle(
             color: colors.textSecondary,
-            fontSize: 10.5,
+            fontSize: 11,
             fontWeight: FontWeight.w600,
             decoration: TextDecoration.none,
           ),
@@ -607,7 +607,7 @@ class _DashboardNotificationEmptyState extends StatelessWidget {
                 l10n.notificationsAllQuiet,
                 style: TextStyle(
                   color: colors.textSecondary,
-                  fontSize: 12.5,
+                  fontSize: 13,
                   fontWeight: FontWeight.w600,
                   decoration: TextDecoration.none,
                 ),

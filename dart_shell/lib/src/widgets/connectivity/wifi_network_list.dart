@@ -214,7 +214,7 @@ class _WifiNetworkRowState extends State<_WifiNetworkRow> {
                                     .accentPalette
                                     .onContainerSecondary
                               : context.shellColors.textTertiary,
-                          fontSize: 10.5,
+                          fontSize: 11,
                           fontWeight: FontWeight.w600,
                         ),
                       ),

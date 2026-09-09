@@ -213,7 +213,7 @@ class _BluetoothDeviceRowState extends State<_BluetoothDeviceRow> {
                                     .accentPalette
                                     .onContainerSecondary
                               : context.shellColors.textTertiary,
-                          fontSize: 10.5,
+                          fontSize: 11,
                           fontWeight: FontWeight.w600,
                         ),
                       ),

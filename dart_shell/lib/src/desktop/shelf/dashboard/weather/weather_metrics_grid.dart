@@ -305,7 +305,7 @@ class _AirQualityPane extends StatelessWidget {
           overflow: TextOverflow.ellipsis,
           style: TextStyle(
             color: colors.textTertiary,
-            fontSize: 10.5,
+            fontSize: 11,
             fontWeight: FontWeight.w600,
             decoration: TextDecoration.none,
           ),
@@ -428,7 +428,7 @@ class _MetricLine extends StatelessWidget {
           value,
           style: TextStyle(
             color: colors.textPrimary,
-            fontSize: 11.5,
+            fontSize: 12,
             fontWeight: FontWeight.w700,
             decoration: TextDecoration.none,
           ),
@@ -459,7 +459,7 @@ class _RatingChip extends StatelessWidget {
           label,
           style: TextStyle(
             color: color,
-            fontSize: 10.5,
+            fontSize: 11,
             fontWeight: FontWeight.w700,
             decoration: TextDecoration.none,
           ),

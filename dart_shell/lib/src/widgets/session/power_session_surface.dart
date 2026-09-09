@@ -398,7 +398,7 @@ class _SessionActionTileState extends State<_SessionActionTile> {
                             color: reason == null
                                 ? context.shellColors.textSecondary
                                 : context.shellColors.textTertiary,
-                            fontSize: 10.5,
+                            fontSize: 11,
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -558,7 +558,7 @@ class _PowerNotice extends StatelessWidget {
                 message,
                 style: ShellText.base.copyWith(
                   color: color,
-                  fontSize: 10.5,
+                  fontSize: 11,
                   fontWeight: FontWeight.w600,
                 ),
               ),

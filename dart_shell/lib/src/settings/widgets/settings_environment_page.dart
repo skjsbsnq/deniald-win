@@ -1213,7 +1213,7 @@ class _VariableRow extends StatelessWidget {
                   color: ShellTheme.of(context).accent,
                   fontFamily: ShellText.systemBarFontFamily,
                   fontSize: 8,
-                  letterSpacing: 0.5,
+                  letterSpacing: 1,
                 ),
               ),
             ),

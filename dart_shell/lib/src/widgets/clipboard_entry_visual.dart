@@ -222,7 +222,7 @@ class _ClipboardFileTile extends ConsumerWidget {
               files.length > 1 ? '$name  +${files.length - 1}' : name,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
-              style: ShellText.base.copyWith(fontSize: 12.5, height: 1.25),
+              style: ShellText.base.copyWith(fontSize: 13, height: 1.25),
             ),
           ),
         ],

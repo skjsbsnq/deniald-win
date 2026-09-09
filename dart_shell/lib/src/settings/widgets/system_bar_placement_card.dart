@@ -140,7 +140,7 @@ class _SettingLabel extends StatelessWidget {
       style: ShellText.cardTitle.copyWith(
         color: context.shellColors.textTertiary,
         fontSize: 10,
-        letterSpacing: 1.2,
+        letterSpacing: 1,
       ),
     );
   }
@@ -613,7 +613,7 @@ class _MainBadge extends StatelessWidget {
           style: ShellText.cardTitle.copyWith(
             color: context.shellColors.textTertiary,
             fontSize: 7,
-            letterSpacing: 0.7,
+            letterSpacing: 1,
           ),
         ),
       ),

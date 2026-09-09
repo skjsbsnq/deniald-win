@@ -113,7 +113,7 @@ class _LockAuthenticationPanel extends StatelessWidget {
                                       : l10n.lockAuthenticationUnavailable,
                                   style: ShellText.base.copyWith(
                                     color: context.shellColors.textTertiary,
-                                    fontSize: 11.5,
+                                    fontSize: 12,
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),
@@ -207,7 +207,9 @@ class _LockAuthenticationPanel extends StatelessWidget {
                                 focusNode: focusNode,
                                 style: context.shellTheme.text.base.copyWith(
                                   fontSize: 16,
-                                  letterSpacing: prompt.obscure ? 2.5 : 0,
+                                  // Integral dot tracking keeps the obscuring
+                                  // glyph phase on the physical pixel grid.
+                                  letterSpacing: prompt.obscure ? 3 : 0,
                                 ),
                                 cursorColor: accent.primary,
                                 backgroundCursorColor:
@@ -345,7 +347,6 @@ class _MobileLockAuthenticationPanel extends StatelessWidget {
                                   fontSize: 23,
                                   height: 1.1,
                                   fontWeight: FontWeight.w600,
-                                  letterSpacing: -0.35,
                                 ),
                               ),
                             ),
@@ -457,7 +458,7 @@ class _MobileLockAuthenticationPanel extends StatelessWidget {
                                               .copyWith(
                                                 fontSize: 17,
                                                 letterSpacing: prompt.obscure
-                                                    ? 2.2
+                                                    ? 2
                                                     : 0,
                                               ),
                                           cursorColor: accent.primary,

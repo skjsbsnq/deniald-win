@@ -240,7 +240,7 @@ class _DrawerCollapsedCapsule extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     color: colors.textPrimary,
-                    fontSize: 12.5,
+                    fontSize: 13,
                     fontWeight: FontWeight.w600,
                     decoration: TextDecoration.none,
                   ),

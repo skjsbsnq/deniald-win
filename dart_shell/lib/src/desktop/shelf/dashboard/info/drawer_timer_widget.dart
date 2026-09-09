@@ -134,7 +134,7 @@ class _TimerToolButton extends StatelessWidget {
                 color: selected
                     ? theme.accentPalette.onContainer
                     : colors.textSecondary,
-                fontSize: 11.5,
+                fontSize: 12,
                 fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
                 decoration: TextDecoration.none,
               ),
@@ -294,7 +294,7 @@ class _PomodoroModeChip extends StatelessWidget {
           color: selected
               ? theme.accentPalette.onContainer
               : colors.textSecondary,
-          fontSize: 11.5,
+          fontSize: 12,
           fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
           decoration: TextDecoration.none,
         ),
@@ -362,7 +362,7 @@ class _StopwatchPane extends StatelessWidget {
                     context.l10n.timerNoLaps,
                     style: TextStyle(
                       color: colors.textTertiary,
-                      fontSize: 11.5,
+                      fontSize: 12,
                       fontWeight: FontWeight.w600,
                       decoration: TextDecoration.none,
                     ),

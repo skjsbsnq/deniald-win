@@ -302,7 +302,7 @@ class _CityResultRow extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: ShellText.base.copyWith(
                         color: colors.textPrimary,
-                        fontSize: 12.5,
+                        fontSize: 13,
                         fontWeight: FontWeight.w600,
                       ),
                     ),

@@ -115,7 +115,7 @@ class _NotificationCenterState extends ConsumerState<NotificationCenter> {
                                       ),
                                       style: ShellText.base.copyWith(
                                         color: context.shellColors.textTertiary,
-                                        fontSize: 10.5,
+                                        fontSize: 11,
                                         fontWeight: FontWeight.w600,
                                       ),
                                     ),
@@ -178,7 +178,7 @@ class _NotificationCenterHeader extends StatelessWidget {
                   l10n.numberValue(unreadCount),
                   style: ShellText.base.copyWith(
                     color: context.shellTheme.accentPalette.onContainer,
-                    fontSize: 10.5,
+                    fontSize: 11,
                     fontWeight: FontWeight.w800,
                   ),
                 ),
@@ -409,7 +409,7 @@ class _PrivacyChoiceState extends State<_PrivacyChoice>
                         overflow: TextOverflow.ellipsis,
                         style: ShellText.base.copyWith(
                           color: textColor,
-                          fontSize: 10.5,
+                          fontSize: 11,
                           fontWeight: FontWeight.w700,
                         ),
                       ),
@@ -494,7 +494,7 @@ class _NotificationEmptyState extends StatelessWidget {
               context.l10n.notificationsEmptyDescription,
               style: ShellText.base.copyWith(
                 color: context.shellColors.textTertiary,
-                fontSize: 11.5,
+                fontSize: 12,
               ),
             ),
           ],

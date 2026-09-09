@@ -115,7 +115,7 @@ class WeatherHourlyStrip extends StatelessWidget {
                                 ),
                                 style: TextStyle(
                                   color: colors.textTertiary,
-                                  fontSize: 10.5,
+                                  fontSize: 11,
                                   fontWeight: FontWeight.w600,
                                   decoration: TextDecoration.none,
                                 ),

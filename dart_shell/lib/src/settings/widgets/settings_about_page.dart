@@ -91,10 +91,7 @@ class _AboutHero extends StatelessWidget {
               child: Text(
                 l10n.settingsAboutBelief,
                 textAlign: TextAlign.center,
-                style: ShellText.cardTitle.copyWith(
-                  color: accent,
-                  letterSpacing: 0.2,
-                ),
+                style: ShellText.cardTitle.copyWith(color: accent),
               ),
             ),
           ),
@@ -155,7 +152,8 @@ class _AboutCredit extends StatelessWidget {
             style: ShellText.cardTitle.copyWith(
               color: context.shellColors.textTertiary,
               fontSize: 10,
-              letterSpacing: 1.2,
+              // Integral tracking keeps glyph phase on the physical pixel grid.
+              letterSpacing: 1,
             ),
           ),
           const SizedBox(height: 6),

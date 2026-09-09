@@ -88,7 +88,7 @@ class _WifiCredentialPanel extends StatelessWidget {
                 message,
                 style: ShellText.base.copyWith(
                   color: context.shellColors.performanceBad,
-                  fontSize: 10.5,
+                  fontSize: 11,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -147,7 +147,7 @@ class _WifiEmptyState extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: ShellText.base.copyWith(
                   color: context.shellColors.textTertiary,
-                  fontSize: 11.5,
+                  fontSize: 12,
                   height: 1.35,
                 ),
               ),
@@ -187,7 +187,7 @@ class _WifiNotice extends StatelessWidget {
                 message,
                 style: ShellText.base.copyWith(
                   color: context.shellTheme.accentPalette.onMutedContainer,
-                  fontSize: 10.5,
+                  fontSize: 11,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -230,7 +230,7 @@ class _WifiErrorNotice extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: ShellText.base.copyWith(
                   color: context.shellColors.performanceBad,
-                  fontSize: 10.5,
+                  fontSize: 11,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -496,7 +496,7 @@ class _WifiTextButtonState extends State<_WifiTextButton> {
                   color: widget.emphasized
                       ? context.shellTheme.accentPalette.onContainer
                       : context.shellColors.textSecondary,
-                  fontSize: 11.5,
+                  fontSize: 12,
                 ),
               ),
             ),

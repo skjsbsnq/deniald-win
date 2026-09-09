@@ -223,7 +223,7 @@ class _Entry extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 color: fg,
-                fontSize: 12.5,
+                fontSize: 13,
                 fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
                 decoration: TextDecoration.none,
               ),

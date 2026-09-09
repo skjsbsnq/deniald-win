@@ -208,7 +208,7 @@ class _ShortcutsHeader extends StatelessWidget {
               style: ShellText.cardTitle.copyWith(
                 color: accent,
                 fontSize: 10,
-                letterSpacing: 1.3,
+                letterSpacing: 1,
               ),
             ),
             const Spacer(),
@@ -390,7 +390,6 @@ class _ShortcutRow extends StatelessWidget {
                         style: ShellText.cardTitle.copyWith(
                           fontFamily: ShellText.systemBarFontFamily,
                           fontSize: 12,
-                          letterSpacing: 0.15,
                         ),
                       ),
                     ),

@@ -177,7 +177,7 @@ class _WifiDetailSurfaceState extends ConsumerState<WifiDetailSurface> {
                                   overflow: TextOverflow.ellipsis,
                                   style: ShellText.base.copyWith(
                                     color: context.shellColors.textTertiary,
-                                    fontSize: 11.5,
+                                    fontSize: 12,
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),

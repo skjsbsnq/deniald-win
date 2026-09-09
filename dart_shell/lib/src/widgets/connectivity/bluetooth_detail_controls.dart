@@ -120,7 +120,7 @@ class _BluetoothPairingPanel extends StatelessWidget {
                 error,
                 style: ShellText.base.copyWith(
                   color: context.shellColors.performanceBad,
-                  fontSize: 10.5,
+                  fontSize: 11,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -186,7 +186,7 @@ class _BluetoothEmptyState extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: ShellText.base.copyWith(
                   color: context.shellColors.textTertiary,
-                  fontSize: 11.5,
+                  fontSize: 12,
                   height: 1.35,
                 ),
               ),
@@ -229,7 +229,7 @@ class _BluetoothErrorNotice extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
                 style: ShellText.base.copyWith(
                   color: context.shellColors.performanceBad,
-                  fontSize: 10.5,
+                  fontSize: 11,
                   fontWeight: FontWeight.w600,
                 ),
               ),
@@ -483,7 +483,7 @@ class _BluetoothTextButtonState extends State<_BluetoothTextButton> {
                   color: widget.emphasized
                       ? context.shellTheme.accentPalette.onContainer
                       : context.shellColors.textSecondary,
-                  fontSize: 11.5,
+                  fontSize: 12,
                 ),
               ),
             ),

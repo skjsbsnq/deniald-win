@@ -310,7 +310,7 @@ class _CalendarDayCell extends StatelessWidget {
               '${cellDate.day}',
               style: TextStyle(
                 color: fg,
-                fontSize: 12.5,
+                fontSize: 13,
                 fontWeight: weight,
                 decoration: TextDecoration.none,
               ),

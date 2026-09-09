@@ -183,7 +183,7 @@ class _ImportedFrameTimePainter extends CustomPainter {
     fontSize: 9,
     height: 1,
     fontWeight: FontWeight.w700,
-    letterSpacing: 0.4,
+    letterSpacing: 0,
     fontFeatures: const <FontFeature>[FontFeature.tabularFigures()],
   );
   TextStyle get _metricStyle => TextStyle(

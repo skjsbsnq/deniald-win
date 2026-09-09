@@ -257,7 +257,7 @@ class _WeatherLoadingPane extends StatelessWidget {
               locating ? l10n.weatherLoadingLocating : l10n.weatherLoadingData,
               style: TextStyle(
                 color: colors.textSecondary,
-                fontSize: 12.5,
+                fontSize: 13,
                 fontWeight: FontWeight.w600,
                 decoration: TextDecoration.none,
               ),
@@ -308,7 +308,7 @@ class _WeatherErrorPane extends StatelessWidget {
                   : l10n.weatherErrorLoadFailed,
               style: TextStyle(
                 color: colors.textSecondary,
-                fontSize: 12.5,
+                fontSize: 13,
                 fontWeight: FontWeight.w600,
                 decoration: TextDecoration.none,
               ),

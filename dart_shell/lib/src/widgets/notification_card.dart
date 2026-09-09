@@ -177,9 +177,10 @@ class _NotificationHeader extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: ShellText.base.copyWith(
               color: context.shellColors.textTertiary,
-              fontSize: 11.5,
+              // Fractional tracking smears glyph phase at fractional DPRs
+              // (tokens.dart systemBarValue note); keep size + spacing integral.
+              fontSize: 12,
               fontWeight: FontWeight.w700,
-              letterSpacing: 0.1,
             ),
           ),
         ),

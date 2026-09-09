@@ -176,7 +176,7 @@ class _TodoTabButton extends StatelessWidget {
             color: selected
                 ? theme.accentPalette.onContainer
                 : colors.textSecondary,
-            fontSize: 11.5,
+            fontSize: 12,
             fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
             decoration: TextDecoration.none,
           ),
@@ -503,7 +503,7 @@ class _ClearCompletedButton extends StatelessWidget {
             context.l10n.todoClearCompleted,
             style: TextStyle(
               color: colors.textSecondary,
-              fontSize: 11.5,
+              fontSize: 12,
               fontWeight: FontWeight.w600,
               decoration: TextDecoration.none,
             ),
