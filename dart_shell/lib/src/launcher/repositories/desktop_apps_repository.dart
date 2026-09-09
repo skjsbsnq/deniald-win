@@ -7,9 +7,28 @@ import '../runtime_paths.dart';
 import '../models/desktop_app.dart';
 
 class DesktopAppsRepository {
-  const DesktopAppsRepository({required this._paths, this.iconThemeName = ''});
+  DesktopAppsRepository({required RuntimePaths paths, this.iconThemeName = ''})
+      // Private field; expose any future reads through a public getter.
+      : _paths = paths;
 
   final RuntimePaths _paths;
+
+  /// Memoized per-theme directory lists. Resolving one icon walks every theme
+  /// under every icon root, and each walk would otherwise re-read and re-parse
+  /// the same index.theme files synchronously.
+  final Map<String, List<String>> _iconThemeDirectoryCache = {};
+
+  /// Reads and parses `index.theme` into the directory list for [theme].
+  ///
+  /// Results are cached for the repository's lifetime. A repository is
+  /// recreated whenever the user icon theme changes, so an edited index.theme
+  /// is picked up on the next repository rebuild.
+  List<String> iconThemeDirectories(String theme) {
+    return _iconThemeDirectoryCache.putIfAbsent(
+      theme,
+      () => _readIconThemeDirectories(theme),
+    );
+  }
 
   /// When non-empty, this theme directory under `<root>/icons/` is searched
   /// before the built-in theme order so a user-selected theme (such as
@@ -280,7 +299,7 @@ class DesktopAppsRepository {
       }
 
       for (final theme in RuntimePaths.uniquePaths(themes)) {
-        for (final directory in _iconThemeDirectories(theme)) {
+        for (final directory in iconThemeDirectories(theme)) {
           for (final extension in extensions) {
             final path = p.join(theme, directory, '$name.$extension');
             if (_isSafeIconFile(path)) {
@@ -514,7 +533,7 @@ const List<String> _preferredIconContexts = <String>[
   'ui',
 ];
 
-List<String> _iconThemeDirectories(String theme) {
+List<String> _readIconThemeDirectories(String theme) {
   final directories = <String>[
     for (final size in _preferredIconSizes)
       for (final context in _preferredIconContexts) p.join(size, context),

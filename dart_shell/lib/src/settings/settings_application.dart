@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:isolate';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -47,7 +48,13 @@ import 'widgets/settings_weather_page.dart';
 
 final _englishSettings = AppLocalizationsEn();
 final settingsDesktopApplicationsProvider = FutureProvider<List<DesktopApp>>(
-  (ref) => ref.watch(desktopAppsRepositoryProvider).loadApplications(),
+  (ref) {
+    final repository = ref.watch(desktopAppsRepositoryProvider);
+    return Isolate.run(
+      repository.loadApplications,
+      debugName: 'denial-settings-desktop',
+    );
+  },
   isAutoDispose: true,
 );
 const denialSettingsApplicationId = 'dev.denial.settings';
