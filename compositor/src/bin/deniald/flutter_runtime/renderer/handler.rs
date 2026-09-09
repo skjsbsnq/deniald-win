@@ -23,6 +23,7 @@ pub(in crate::flutter_runtime) struct FlutterGlHandler {
     pending_output_presentation: Mutex<Option<PendingOutputPresentation>>,
     external_texture_sources: Mutex<HashMap<i64, ExternalTextureSlot>>,
     raster_sampled_buffers: Mutex<Vec<SampledBufferHold>>,
+    raster_sampled_feedback: Mutex<Vec<crate::surface_feedback::SurfaceFeedback>>,
     sampled_buffer_release_fence: Mutex<Option<OwnedFd>>,
     sampled_buffer_batch_pool: Arc<SampledBufferBatchPool>,
     dmabuf_texture_cache: Mutex<PartitionedRecencyCache<i64, Dmabuf, Arc<CachedTextureBinding>>>,
@@ -472,6 +473,7 @@ impl FlutterGlHandler {
             pending_output_presentation: Mutex::new(None),
             external_texture_sources: Mutex::new(HashMap::new()),
             raster_sampled_buffers: Mutex::new(Vec::new()),
+            raster_sampled_feedback: Mutex::new(Vec::new()),
             sampled_buffer_release_fence: Mutex::new(None),
             sampled_buffer_batch_pool: Arc::new(Mutex::new(Vec::with_capacity(
                 MAX_RECYCLED_SAMPLED_BUFFER_BATCHES,
@@ -664,6 +666,15 @@ impl FlutterGlHandler {
             .is_some_and(|source| source.generation() == generation)
         {
             slot.current_sampled = true;
+        }
+    }
+
+    fn record_sampled_feedback(&self, feedback: Option<crate::surface_feedback::SurfaceFeedback>) {
+        if let Some(feedback) = feedback.filter(|token| token.pending()) {
+            let mut sampled = lock(&self.raster_sampled_feedback);
+            if !sampled.iter().any(|token| token.same(&feedback)) {
+                sampled.push(feedback);
+            }
         }
     }
 
@@ -1324,6 +1335,7 @@ impl FlutterGlHandler {
             return false;
         };
         let source_generation = source.generation();
+        let feedback = source.feedback();
         let Some(lease_permit) = self.external_texture_resource_budget.try_acquire() else {
             return false;
         };
@@ -1332,6 +1344,7 @@ impl FlutterGlHandler {
                 dmabuf,
                 buffer_guard,
                 revision,
+                feedback: _,
             } => {
                 let dmabuf_width = dmabuf.width();
                 let dmabuf_height = dmabuf.height();
@@ -1383,6 +1396,7 @@ impl FlutterGlHandler {
         *prepared_slot = Some(PreparedExternalTexture {
             texture_id,
             source_generation,
+            feedback,
             width,
             height,
             name,

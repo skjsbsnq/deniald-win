@@ -45,6 +45,7 @@ impl OpenGlHandler for FlutterGlHandler {
                 lock(audit).record_raster_start(Instant::now());
             }
             debug_assert!(lock(&self.sampled_buffer_release_fence).is_none());
+            lock(&self.raster_sampled_feedback).clear();
             lock(&self.broker).begin_transaction();
         }
         current
@@ -71,6 +72,7 @@ impl OpenGlHandler for FlutterGlHandler {
         // the transaction had no present callback it supplies the missing
         // REQUESTED/RASTERIZING -> IDLE transition.
         let ready = lock(&self.broker).finish_transaction();
+        lock(&self.raster_sampled_feedback).clear();
         let previous = self.finish_producer_frame();
         if !ready.is_empty() {
             let sampled = self.seal_sampled_buffers();
@@ -376,13 +378,15 @@ impl OpenGlHandler for FlutterGlHandler {
             };
             *lock(&self.sampled_buffer_release_fence) = release_fence;
             let rendered_at = self.render_audit.as_ref().map(|_| Instant::now());
-            if !lock(&self.broker).mark_ready(
+            let sampled_feedback = std::mem::take(&mut *lock(&self.raster_sampled_feedback));
+            if !lock(&self.broker).mark_ready_with_feedback(
                 view_id,
                 framebuffer,
                 frame.frame_damage,
                 frame.buffer_damage,
                 fence,
                 rendered_at,
+                sampled_feedback,
             ) {
                 error!(
                     view_id,
@@ -476,6 +480,7 @@ impl OpenGlHandler for FlutterGlHandler {
             if let Some(buffer_guard) = prepared.sampled_buffer {
                 self.record_sampled_buffer(texture_id, prepared.source_generation, buffer_guard);
             }
+            self.record_sampled_feedback(prepared.feedback);
             self.mark_external_texture_sampled(texture_id, prepared.source_generation);
             return true;
         }
@@ -487,6 +492,7 @@ impl OpenGlHandler for FlutterGlHandler {
             return false;
         };
         let source_generation = source.generation();
+        let feedback = source.feedback();
         let Some(lease_permit) = self.external_texture_resource_budget.try_acquire() else {
             warn!(
                 texture_id,
@@ -500,6 +506,7 @@ impl OpenGlHandler for FlutterGlHandler {
                 dmabuf,
                 buffer_guard,
                 revision,
+                feedback: _,
             } => {
                 let dmabuf_width = dmabuf.width();
                 let dmabuf_height = dmabuf.height();
@@ -801,6 +808,7 @@ impl OpenGlHandler for FlutterGlHandler {
         if let Some(buffer_guard) = sampled_buffer {
             self.record_sampled_buffer(texture_id, source_generation, buffer_guard);
         }
+        self.record_sampled_feedback(feedback);
         self.mark_external_texture_sampled(texture_id, source_generation);
         true
     }

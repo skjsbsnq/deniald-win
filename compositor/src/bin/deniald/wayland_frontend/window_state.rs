@@ -544,6 +544,20 @@ impl WaylandFrontend {
     }
 
     pub(super) fn update_window_output_membership(&mut self, window: &Window) {
+        #[cfg(feature = "flutter")]
+        {
+            let location = self
+                .space
+                .element_location(window)
+                .unwrap_or_else(|| self.window_geometry_target(window).loc);
+            super::window_outputs::refresh_window_outputs(
+                window,
+                location,
+                self.outputs
+                    .iter()
+                    .map(|entry| (&entry.output, entry.logical_geometry)),
+            );
+        }
         let output_index = self.output_index_for_geometry(self.window_geometry_target(window));
         let output = output_index.map(|index| self.outputs[index].id);
         let output_scale = output_index
@@ -574,6 +588,16 @@ impl WaylandFrontend {
 
     #[cfg(feature = "flutter")]
     pub(super) fn remove_window_output_membership(&mut self, surface: &WlSurface) {
+        use smithay::desktop::space::SpaceElement;
+        if let Some(window) = self
+            .space
+            .elements()
+            .find(|window| window.wl_surface().as_deref() == Some(surface))
+        {
+            for entry in &self.outputs {
+                window.output_leave(&entry.output);
+            }
+        }
         self.input_root_ids.remove(&surface.id());
         self.output_window_membership.remove(&surface.id());
     }

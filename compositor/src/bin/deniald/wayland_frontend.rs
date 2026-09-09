@@ -178,6 +178,9 @@ mod window_layout_adapter;
 mod window_management;
 #[path = "wayland_frontend/window_state.rs"]
 mod window_state;
+#[cfg(feature = "flutter")]
+#[path = "wayland_frontend/window_outputs.rs"]
+mod window_outputs;
 #[path = "wayland_frontend/xwayland.rs"]
 mod xwayland;
 
@@ -623,10 +626,6 @@ struct WaylandOutput {
     capture_source: Rectangle<i32, Physical>,
     capture_size: Size<i32, Physical>,
     powered: bool,
-    #[cfg(feature = "flutter")]
-    presentation_batch: presentation::OutputPresentationBatch,
-    #[cfg(feature = "flutter")]
-    submitted_this_batch: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

@@ -13,6 +13,7 @@ fn configuration(
         lock_timeout,
         dpms_timeout,
         suspend_timeout,
+        suspend_mode: SuspendMode::SystemDefault,
     }
 }
 
@@ -58,6 +59,26 @@ fn packet_is_versioned_bounded_ordered_and_preserves_optional_actions() {
         decode_configuration(&packet(0x80, 1, 1, 1)),
         Err(IdlePolicyPacketError::InvalidFlags(0x80))
     ));
+    let mut selected_mode = packet(0, 1, 1, 1);
+    selected_mode[2] = SuspendMode::Deep as u8;
+    assert_eq!(
+        decode_configuration(&selected_mode).unwrap().suspend_mode,
+        SuspendMode::Deep
+    );
+    let mut legacy_configuration = selected_mode;
+    legacy_configuration[0] = LEGACY_CONFIGURATION_PACKET_VERSION;
+    legacy_configuration[2] = 0;
+    assert_eq!(
+        decode_configuration(&legacy_configuration)
+            .unwrap()
+            .suspend_mode,
+        SuspendMode::SystemDefault
+    );
+    selected_mode[2] = 99;
+    assert!(matches!(
+        decode_configuration(&selected_mode),
+        Err(IdlePolicyPacketError::InvalidSuspendMode(99))
+    ));
     assert!(matches!(
         decode_configuration(&packet(0, 0, 1, 1)),
         Err(IdlePolicyPacketError::ZeroTimeout("lock"))
@@ -74,6 +95,98 @@ fn packet_is_versioned_bounded_ordered_and_preserves_optional_actions() {
             milliseconds,
         }) if milliseconds == too_large
     ));
+}
+
+#[test]
+fn power_button_toggles_once_per_press_and_consumes_release() {
+    let mut button = PowerButton::default();
+    button.note_key("pmic", true);
+    assert!(button.take_toggle());
+    button.note_key("pmic", true);
+    button.note_key("pmic", false);
+    assert!(!button.take_toggle());
+    button.note_key("pmic", true);
+    assert!(button.take_toggle());
+    button.remove_device("pmic");
+    button.note_key("pmic", true);
+    assert!(button.take_toggle());
+}
+
+#[test]
+fn two_power_presses_in_one_dispatch_leave_power_unchanged() {
+    let mut button = PowerButton::default();
+    for _ in 0..2 {
+        button.note_key("pmic", true);
+        button.note_key("pmic", false);
+    }
+    assert!(!button.take_toggle());
+}
+
+#[test]
+fn power_button_wakes_double_tap_and_external_blank_and_resets_idle() {
+    let now = Instant::now();
+    let mut policy = IdlePolicy::default();
+    policy.blank_now([(output(1), true)]);
+    assert_eq!(
+        policy.toggle_now([(output(1), false)], now).power_requests,
+        [IdlePowerRequest {
+            output: output(1),
+            powered: true,
+        }]
+    );
+    assert!(policy.note_activity(now).is_empty());
+    assert_eq!(
+        policy.toggle_now([(output(1), true)], now).power_requests,
+        [IdlePowerRequest {
+            output: output(1),
+            powered: false,
+        }]
+    );
+    policy.note_external_power_request(output(1), false);
+    assert_eq!(
+        policy.toggle_now([(output(1), false)], now).power_requests,
+        [IdlePowerRequest {
+            output: output(1),
+            powered: true,
+        }]
+    );
+    assert_eq!(policy.last_activity, now);
+}
+
+#[test]
+fn idle_inhibitor_cannot_undo_a_power_button_blank() {
+    let now = Instant::now();
+    let mut policy = IdlePolicy::default();
+    policy.toggle_now([(output(1), true)], now);
+    assert!(
+        policy
+            .evaluate(now, true, [(output(1), false)])
+            .power_requests
+            .is_empty()
+    );
+    assert_eq!(
+        policy.toggle_now([(output(1), false)], now).power_requests,
+        [IdlePowerRequest {
+            output: output(1),
+            powered: true,
+        }]
+    );
+}
+
+#[test]
+fn power_button_locks_when_blanking_but_does_not_relock_on_wake() {
+    let now = Instant::now();
+    let mut policy = IdlePolicy::default();
+    let sleep = policy.toggle_now([(output(1), true)], now);
+    assert!(sleep.lock);
+    assert!(!sleep.suspend);
+    assert!(!sleep.power_requests[0].powered);
+
+    let wake = policy.toggle_now([(output(1), false)], now);
+    assert!(!wake.lock);
+    assert!(!wake.suspend);
+    assert!(wake.power_requests[0].powered);
+    assert!(!policy.toggle_now([], now).lock);
 }
 
 #[test]

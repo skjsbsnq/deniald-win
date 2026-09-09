@@ -112,6 +112,7 @@ pub(in crate::flutter_runtime) enum ExternalTextureLeaseResource {
 struct PreparedExternalTexture {
     texture_id: i64,
     source_generation: u64,
+    feedback: Option<crate::surface_feedback::SurfaceFeedback>,
     width: usize,
     height: usize,
     name: u32,
@@ -389,6 +390,7 @@ pub(crate) struct ShmTextureFrame {
     height: u32,
     revision: u64,
     rgba: Arc<ShmPixelStorage>,
+    feedback: Option<crate::surface_feedback::SurfaceFeedback>,
 }
 
 impl ShmTextureFrame {
@@ -421,6 +423,7 @@ impl ShmTextureFrame {
             width,
             height,
             revision,
+            feedback: None,
             // Keep the snapshot's Vec allocation intact. Converting Vec<u8>
             // into Arc<[u8]> may copy the complete client frame.
             rgba: Arc::new(ShmPixelStorage {
@@ -464,11 +467,19 @@ pub(in crate::flutter_runtime) enum ExternalTextureSource {
         dmabuf: Dmabuf,
         buffer_guard: Option<ExternalBufferGuard>,
         revision: u64,
+        feedback: Option<crate::surface_feedback::SurfaceFeedback>,
     },
     Shm(ShmTextureFrame),
 }
 
 impl ExternalTextureSource {
+    fn feedback(&self) -> Option<crate::surface_feedback::SurfaceFeedback> {
+        match self {
+            Self::Dmabuf { feedback, .. } => feedback.clone(),
+            Self::Shm(frame) => frame.feedback.clone(),
+        }
+    }
+
     pub(in crate::flutter_runtime) fn generation(&self) -> u64 {
         match self {
             Self::Dmabuf { revision, .. } => *revision,
@@ -477,6 +488,12 @@ impl ExternalTextureSource {
     }
 
     pub(in crate::flutter_runtime) fn same_generation(&self, other: &Self) -> bool {
+        match (self.feedback(), other.feedback()) {
+            (Some(a), Some(b)) if a.same(&b) => {}
+            (None, None) => {}
+            _ => return false,
+        }
+
         match (self, other) {
             (
                 Self::Dmabuf {
@@ -763,6 +780,20 @@ pub(crate) struct ExternalTextureFrame {
 }
 
 impl ExternalTextureFrame {
+    pub(crate) fn set_feedback(&mut self, token: Option<crate::surface_feedback::SurfaceFeedback>) {
+        match &mut self.source {
+            ExternalTextureSource::Dmabuf { feedback, .. } => *feedback = token,
+            ExternalTextureSource::Shm(frame) => frame.feedback = token,
+        }
+    }
+    pub(crate) fn with_feedback(
+        mut self,
+        token: Option<crate::surface_feedback::SurfaceFeedback>,
+    ) -> Self {
+        self.set_feedback(token);
+        self
+    }
+
     pub(crate) fn from_dmabuf(
         texture_id: i64,
         dmabuf: Dmabuf,
@@ -778,6 +809,7 @@ impl ExternalTextureFrame {
                     _guard: buffer_guard,
                 }),
                 revision,
+                feedback: None,
             },
             expects_sample,
         }
@@ -790,6 +822,7 @@ impl ExternalTextureFrame {
                 dmabuf,
                 buffer_guard: None,
                 revision,
+                feedback: None,
             },
             expects_sample: false,
         }
@@ -808,6 +841,7 @@ impl ExternalTextureFrame {
                 dmabuf,
                 buffer_guard: Some(ExternalBufferGuard::Native(release)),
                 revision,
+                feedback: None,
             },
             expects_sample,
         }
