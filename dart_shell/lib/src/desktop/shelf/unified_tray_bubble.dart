@@ -150,6 +150,7 @@ class _UnifiedTrayBubbleState extends ConsumerState<UnifiedTrayBubble>
                         child: ShellBackdropBlur(
                           strength: clampedProgress,
                           borderRadius: bubbleRadius,
+                          separateChild: true,
                           child: DecoratedBox(
                             decoration: BoxDecoration(
                               // Frosted surface blending with desktop

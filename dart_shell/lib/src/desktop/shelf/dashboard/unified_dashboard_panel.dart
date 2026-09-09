@@ -185,6 +185,7 @@ class _UnifiedDashboardPanelState extends ConsumerState<UnifiedDashboardPanel>
                         child: ShellBackdropBlur(
                           strength: clampedProgress,
                           borderRadius: panelRadius,
+                          separateChild: true,
                           child: DecoratedBox(
                             decoration: BoxDecoration(
                               color: theme.panelColor(

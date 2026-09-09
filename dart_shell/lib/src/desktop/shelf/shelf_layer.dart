@@ -54,6 +54,7 @@ class ShelfLayer extends ConsumerWidget {
       width: double.infinity,
       child: ShellBackdropBlur(
         borderRadius: BorderRadius.zero,
+        separateChild: true,
         child: DecoratedBox(
           decoration: BoxDecoration(
             color: theme.panelColor(colors.surfaceContainer),
