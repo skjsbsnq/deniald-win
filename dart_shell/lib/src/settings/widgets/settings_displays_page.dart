@@ -1570,8 +1570,16 @@ class _DisplayDropdownState<T> extends State<_DisplayDropdown<T>> {
   @override
   Widget build(BuildContext context) {
     final accent = ShellTheme.of(context).accent;
+    // The current value can be absent from the choices: a flipped transform
+    // from a persisted configuration, or a compositor mode snapshot whose
+    // current_mode does not byte-match an entry in modes. Fall back to a raw
+    // label instead of throwing during build.
     final selected = widget.choices.firstWhere(
       (choice) => choice.value == widget.value,
+      orElse: () => SettingsChoice(
+        widget.value,
+        widget.value.toString(),
+      ),
     );
     return Semantics(
       button: true,
