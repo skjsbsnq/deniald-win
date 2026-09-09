@@ -591,6 +591,7 @@ class _SettingsPageBody extends ConsumerWidget {
           onDpmsTimeoutChanged: controller.setIdleDpmsTimeoutMinutes,
           onSuspendEnabledChanged: controller.setIdleSuspendEnabled,
           onSuspendTimeoutChanged: controller.setIdleSuspendTimeoutMinutes,
+          onSuspendModeChanged: controller.setSuspendMode,
           onReset: controller.resetPower,
         );
       case SettingsPageId.lockScreen:

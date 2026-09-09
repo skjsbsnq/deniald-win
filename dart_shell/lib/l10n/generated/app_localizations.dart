@@ -2447,6 +2447,42 @@ abstract class AppLocalizations {
   /// **'Keep the session in memory and enter low power after extended inactivity.'**
   String get settingsAutomaticSuspendToggleDescription;
 
+  /// Label for choosing the kernel memory sleep mode.
+  ///
+  /// In en, this message translates to:
+  /// **'Suspend mode'**
+  String get settingsSuspendMode;
+
+  /// Explanation for the kernel memory sleep mode selector.
+  ///
+  /// In en, this message translates to:
+  /// **'Choose how Linux keeps memory powered. This applies to every suspend while Denial is active.'**
+  String get settingsSuspendModeDescription;
+
+  /// Friendly label for the Linux s2idle memory sleep mode.
+  ///
+  /// In en, this message translates to:
+  /// **'Suspend to idle (s2idle)'**
+  String get settingsSuspendModeS2idle;
+
+  /// Friendly label for the Linux shallow memory sleep mode.
+  ///
+  /// In en, this message translates to:
+  /// **'Standby (shallow)'**
+  String get settingsSuspendModeShallow;
+
+  /// Friendly label for the Linux deep memory sleep mode.
+  ///
+  /// In en, this message translates to:
+  /// **'Suspend to RAM (deep)'**
+  String get settingsSuspendModeDeep;
+
+  /// Disabled suspend mode selector value when Linux exposes no memory sleep mode.
+  ///
+  /// In en, this message translates to:
+  /// **'Unavailable'**
+  String get settingsSuspendModeUnavailable;
+
   /// English UI text for settingsAvailable.
   ///
   /// In en, this message translates to:

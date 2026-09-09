@@ -1324,6 +1324,25 @@ class AppLocalizationsZh extends AppLocalizations {
       '长时间无活动后在内存中保留会话并进入低功耗状态。';
 
   @override
+  String get settingsSuspendMode => '挂起模式';
+
+  @override
+  String get settingsSuspendModeDescription =>
+      '选择 Linux 在挂起时如何保持内存供电。Denial 活动期间的每次挂起都会使用此设置。';
+
+  @override
+  String get settingsSuspendModeS2idle => '挂起到空闲（s2idle）';
+
+  @override
+  String get settingsSuspendModeShallow => '待机（shallow）';
+
+  @override
+  String get settingsSuspendModeDeep => '挂起到内存（deep）';
+
+  @override
+  String get settingsSuspendModeUnavailable => '不可用';
+
+  @override
   String get settingsAvailable => '可用';
 
   @override

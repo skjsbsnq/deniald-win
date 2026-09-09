@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 
 import '../models/display_layout.dart';
 import '../models/shell_popup_placement.dart';
+import '../models/suspend_mode.dart';
 import '../state/desktop_window_close_effect.dart';
 import '../theme/backdrop_blur_level.dart';
 import '../theme/cursor_themes.dart';
@@ -635,6 +636,7 @@ class ShellPowerSettings {
     this.idleDpmsTimeoutMinutes = 10,
     this.idleSuspendEnabled = false,
     this.idleSuspendTimeoutMinutes = 30,
+    this.suspendMode = SuspendMode.systemDefault,
   });
 
   static const int minimumIdleTimeoutMinutes = 1;
@@ -648,6 +650,7 @@ class ShellPowerSettings {
   final int idleDpmsTimeoutMinutes;
   final bool idleSuspendEnabled;
   final int idleSuspendTimeoutMinutes;
+  final SuspendMode suspendMode;
 
   ShellPowerSettings copyWith({
     bool? idleLockEnabled,
@@ -656,6 +659,7 @@ class ShellPowerSettings {
     int? idleDpmsTimeoutMinutes,
     bool? idleSuspendEnabled,
     int? idleSuspendTimeoutMinutes,
+    SuspendMode? suspendMode,
   }) {
     return ShellPowerSettings(
       idleLockEnabled: idleLockEnabled ?? this.idleLockEnabled,
@@ -667,6 +671,7 @@ class ShellPowerSettings {
       idleSuspendEnabled: idleSuspendEnabled ?? this.idleSuspendEnabled,
       idleSuspendTimeoutMinutes:
           idleSuspendTimeoutMinutes ?? this.idleSuspendTimeoutMinutes,
+      suspendMode: suspendMode ?? this.suspendMode,
     );
   }
 
@@ -678,7 +683,8 @@ class ShellPowerSettings {
         other.idleDpmsEnabled == idleDpmsEnabled &&
         other.idleDpmsTimeoutMinutes == idleDpmsTimeoutMinutes &&
         other.idleSuspendEnabled == idleSuspendEnabled &&
-        other.idleSuspendTimeoutMinutes == idleSuspendTimeoutMinutes;
+        other.idleSuspendTimeoutMinutes == idleSuspendTimeoutMinutes &&
+        other.suspendMode == suspendMode;
   }
 
   @override
@@ -689,6 +695,7 @@ class ShellPowerSettings {
     idleDpmsTimeoutMinutes,
     idleSuspendEnabled,
     idleSuspendTimeoutMinutes,
+    suspendMode,
   );
 }
 
@@ -1193,6 +1200,9 @@ class ShellSettings {
       if (power.idleSuspendTimeoutMinutes != before.idleSuspendTimeoutMinutes) {
         section['idleSuspendTimeoutMinutes'] = power.idleSuspendTimeoutMinutes;
       }
+      if (power.suspendMode != before.suspendMode) {
+        section['suspendMode'] = power.suspendMode.name;
+      }
       patch['power'] = section;
     }
 
@@ -1288,6 +1298,7 @@ class ShellSettings {
         'idleDpmsTimeoutMinutes': power.idleDpmsTimeoutMinutes,
         'idleSuspendEnabled': power.idleSuspendEnabled,
         'idleSuspendTimeoutMinutes': power.idleSuspendTimeoutMinutes,
+        'suspendMode': power.suspendMode.name,
       },
       'weather': weather.toJson(),
       'applicationEnvironment': applicationEnvironment.toJson(),
@@ -1598,6 +1609,11 @@ class ShellSettings {
             ? powerJson['idleSuspendEnabled'] as bool
             : defaults.power.idleSuspendEnabled,
         idleSuspendTimeoutMinutes: idleSuspendTimeoutMinutes,
+        suspendMode: _enumValue(
+          SuspendMode.values,
+          powerJson['suspendMode'],
+          defaults.power.suspendMode,
+        ),
       ),
       weather: ShellWeatherSettings.fromJson(json['weather']),
       applicationEnvironment: ShellApplicationEnvironmentSettings.fromJson(

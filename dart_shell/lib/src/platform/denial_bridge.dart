@@ -14,6 +14,7 @@ import '../models/input_device_capabilities.dart';
 import '../models/keyboard_configuration.dart';
 import '../models/output_configuration.dart';
 import '../models/shortcut_configuration.dart';
+import '../models/suspend_mode.dart';
 import '../models/system_tray_item.dart';
 import '../models/denial_window.dart';
 import '../models/denial_window_event.dart';
@@ -1606,6 +1607,7 @@ class DenialBridge {
     required Duration dpmsTimeout,
     required bool suspendEnabled,
     required Duration suspendTimeout,
+    required SuspendMode suspendMode,
   }) {
     final lockMilliseconds = lockTimeout.inMilliseconds;
     final dpmsMilliseconds = dpmsTimeout.inMilliseconds;
@@ -1622,8 +1624,9 @@ class DenialBridge {
         (dpmsEnabled ? 2 : 0) |
         (suspendEnabled ? 4 : 0);
     final data = ByteData(32)
-      ..setUint8(0, 1)
+      ..setUint8(0, 2)
       ..setUint8(1, flags)
+      ..setUint8(2, suspendMode.wireValue)
       ..setUint64(8, lockMilliseconds, Endian.little)
       ..setUint64(16, dpmsMilliseconds, Endian.little)
       ..setUint64(24, suspendMilliseconds, Endian.little);

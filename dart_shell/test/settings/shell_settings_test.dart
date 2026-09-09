@@ -1,5 +1,6 @@
 import 'package:denial_dart_shell/src/models/display_layout.dart';
 import 'package:denial_dart_shell/src/models/shell_popup_placement.dart';
+import 'package:denial_dart_shell/src/models/suspend_mode.dart';
 import 'package:denial_dart_shell/src/settings/shell_settings.dart';
 import 'package:denial_dart_shell/src/theme/backdrop_blur_level.dart';
 import 'package:denial_dart_shell/src/theme/cursor_themes.dart';
@@ -19,6 +20,7 @@ void main() {
       expect(power.idleDpmsTimeoutMinutes, 10);
       expect(power.idleSuspendEnabled, isFalse);
       expect(power.idleSuspendTimeoutMinutes, 30);
+      expect(power.suspendMode, SuspendMode.systemDefault);
     },
   );
 
@@ -80,6 +82,7 @@ void main() {
         idleDpmsTimeoutMinutes: 47,
         idleSuspendEnabled: true,
         idleSuspendTimeoutMinutes: 72,
+        suspendMode: SuspendMode.deep,
       ),
       weather: ShellWeatherSettings(
         locationMode: ShellWeatherLocationMode.manual,
@@ -105,6 +108,21 @@ void main() {
 
     expect(ShellSettings.fromJson(settings.toJson()), settings);
     expect(settings.toJson()['version'], ShellSettings.schemaVersion);
+  });
+
+  test('suspend mode persists and produces a typed patch', () {
+    const previous = ShellSettings();
+    final next = previous.copyWith(
+      power: previous.power.copyWith(suspendMode: SuspendMode.s2idle),
+    );
+
+    expect(
+      ShellSettings.fromJson(next.toJson()).power.suspendMode,
+      SuspendMode.s2idle,
+    );
+    expect(next.differenceFrom(previous), <String, Object?>{
+      'power': <String, Object?>{'suspendMode': 's2idle'},
+    });
   });
 
   test('window layout persists and produces a typed patch', () {

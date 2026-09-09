@@ -1368,6 +1368,25 @@ class AppLocalizationsEn extends AppLocalizations {
       'Keep the session in memory and enter low power after extended inactivity.';
 
   @override
+  String get settingsSuspendMode => 'Suspend mode';
+
+  @override
+  String get settingsSuspendModeDescription =>
+      'Choose how Linux keeps memory powered. This applies to every suspend while Denial is active.';
+
+  @override
+  String get settingsSuspendModeS2idle => 'Suspend to idle (s2idle)';
+
+  @override
+  String get settingsSuspendModeShallow => 'Standby (shallow)';
+
+  @override
+  String get settingsSuspendModeDeep => 'Suspend to RAM (deep)';
+
+  @override
+  String get settingsSuspendModeUnavailable => 'Unavailable';
+
+  @override
   String get settingsAvailable => 'Available';
 
   @override
