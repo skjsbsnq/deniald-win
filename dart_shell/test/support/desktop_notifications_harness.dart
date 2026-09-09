@@ -63,6 +63,13 @@ class TestNotificationBridge extends DenialBridge {
   @override
   Future<DisplayLayout?> getDisplayLayout() async => null;
 
+  @override
+  Stream<DenialSettingsDocument> get settingsDocuments => const Stream.empty();
+
+  @override
+  Future<DenialSettingsDocument> readSettingsDocument() async =>
+      const DenialSettingsDocument(revision: 1, json: '{}');
+
   final StreamController<DesktopNotificationEvent> _events =
       StreamController<DesktopNotificationEvent>.broadcast(sync: true);
 

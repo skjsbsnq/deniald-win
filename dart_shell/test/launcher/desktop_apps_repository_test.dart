@@ -359,6 +359,7 @@ void main() {
       repository.resolveNotificationIcon(
         appIcon: '',
         desktopEntry: 'org.example.Chat',
+        appName: '',
       ),
       appIcon.path,
     );
@@ -366,6 +367,7 @@ void main() {
       repository.resolveNotificationIcon(
         appIcon: '',
         desktopEntry: 'org.example.Chat.desktop',
+        appName: '',
       ),
       appIcon.path,
     );
@@ -385,6 +387,7 @@ void main() {
       repository.resolveNotificationIcon(
         appIcon: '',
         desktopEntry: '../applications/org.example.Chat',
+        appName: '',
       ),
       isNull,
     );
@@ -392,15 +395,24 @@ void main() {
       repository.resolveNotificationIcon(
         appIcon: '',
         desktopEntry: 'sub/dir/org.example.Chat',
+        appName: '',
       ),
       isNull,
     );
     expect(
-      repository.resolveNotificationIcon(appIcon: '', desktopEntry: '.'),
+      repository.resolveNotificationIcon(
+        appIcon: '',
+        desktopEntry: '.',
+        appName: '',
+      ),
       isNull,
     );
     expect(
-      repository.resolveNotificationIcon(appIcon: '', desktopEntry: ''),
+      repository.resolveNotificationIcon(
+        appIcon: '',
+        desktopEntry: '',
+        appName: '',
+      ),
       isNull,
     );
   });
@@ -429,8 +441,127 @@ void main() {
       repository.resolveNotificationIcon(
         appIcon: directIcon.path,
         desktopEntry: 'org.example.Chat',
+        appName: '',
       ),
       directIcon.path,
+    );
+  });
+
+  test('resolves file URIs and declared symbolic icon directories', () {
+    final directIcon = _writeFile(
+      temporaryDirectory,
+      'direct/icon.svg',
+      '<svg/>',
+    );
+    expect(
+      repository.resolveIconPath(directIcon.uri.toString()),
+      directIcon.path,
+    );
+
+    final theme = Directory(p.join(dataDirectory.path, 'icons', 'Fixture'))
+      ..createSync(recursive: true);
+    _writeFile(
+      theme,
+      'index.theme',
+      '[Icon Theme]\n'
+          'Name=Fixture\n'
+          'Directories=symbolic/status\n',
+    );
+    final batteryIcon = _writeFile(
+      theme,
+      'symbolic/status/battery-caution-symbolic.svg',
+      '<svg/>',
+    );
+
+    expect(
+      repository.resolveIconPath('battery-caution-symbolic'),
+      batteryIcon.path,
+    );
+  });
+
+  test('uses the desktop entry icon when the app icon is omitted', () {
+    final appIcon = _writeFile(
+      dataDirectory,
+      'icons/hicolor/128x128/apps/org.example.Chat.svg',
+      '<svg/>',
+    );
+    _writeDesktopEntry(
+      dataDirectory,
+      'org.example.Chat.desktop',
+      '[Desktop Entry]\n'
+          'Type=Application\n'
+          'Name=Example Chat\n'
+          'Icon=org.example.Chat\n',
+    );
+
+    expect(
+      repository.resolveNotificationIcon(
+        appIcon: '',
+        desktopEntry: 'org.example.Chat',
+        appName: '',
+      ),
+      appIcon.path,
+    );
+  });
+
+  test('falls back to matching app metadata when clients omit icon hints', () {
+    final appIcon = _writeFile(
+      dataDirectory,
+      'icons/hicolor/128x128/apps/org.example.Chat.svg',
+      '<svg/>',
+    );
+    _writeDesktopEntry(
+      dataDirectory,
+      'org.example.Chat.desktop',
+      '[Desktop Entry]\n'
+          'Type=Application\n'
+          'Name=Example Chat\n'
+          'StartupWMClass=ExampleChat\n'
+          'Icon=org.example.Chat\n',
+    );
+
+    expect(
+      repository.resolveNotificationIcon(
+        appIcon: '',
+        desktopEntry: '',
+        appName: 'Example Chat',
+      ),
+      appIcon.path,
+    );
+  });
+
+  test('preserves user custom iconThemeName and resolves index.theme directories', () {
+    final customTheme = Directory(
+      p.join(dataDirectory.path, 'icons', 'CustomPapirus'),
+    )..createSync(recursive: true);
+    _writeFile(
+      customTheme,
+      'index.theme',
+      '[Icon Theme]\n'
+          'Name=CustomPapirus\n'
+          'Directories=32x32/apps,scalable/apps\n'
+          'ScaledDirectories=32x32@2x/apps\n',
+    );
+    final customAppIcon = _writeFile(
+      customTheme,
+      'scalable/apps/custom-app.svg',
+      '<svg/>',
+    );
+
+    final customRepo = DesktopAppsRepository(
+      paths: RuntimePaths(
+        environment: <String, String>{
+          'HOME': p.join(temporaryDirectory.path, 'home'),
+          'XDG_DATA_HOME': dataDirectory.path,
+          'XDG_DATA_DIRS': '',
+        },
+      ),
+      iconThemeName: 'CustomPapirus',
+    );
+
+    expect(
+      customRepo.resolveIconPath('custom-app'),
+      customAppIcon.path,
     );
   });
 }
