@@ -39,6 +39,24 @@ void main() {
     });
   });
 
+  testWidgets('every destination card is a single-line row', (tester) async {
+    await pumpSettingsApp(tester);
+
+    for (final page in SettingsPageId.values) {
+      final item = _destination(page);
+      expect(
+        tester.getSize(item).height,
+        settingsNavItemHeight,
+        reason: '${page.name} card height is not the 64dp row',
+      );
+      expect(
+        find.descendant(of: item, matching: find.byType(Text)),
+        findsOneWidget,
+        reason: '${page.name} must not carry a supporting line',
+      );
+    }
+  });
+
   testWidgets('Tab focuses a destination and Enter activates it', (
     tester,
   ) async {

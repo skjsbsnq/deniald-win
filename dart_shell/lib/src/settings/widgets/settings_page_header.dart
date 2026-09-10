@@ -445,14 +445,26 @@ class _FadeThroughPageState extends State<_FadeThroughPage> {
     // An outgoing page only fades: it must not slide back out.
     final exiting =
         status == AnimationStatus.reverse || status == AnimationStatus.dismissed;
-    final progress = widget.animation.value.clamp(0.0, 1.0);
-    final slide = exiting ? 0.0 : (1 - progress);
     final direction = widget.reverse ? -1.0 : 1.0;
     return FadeTransition(
       opacity: widget.animation,
-      child: Transform.translate(
-        offset: Offset(0, direction * SettingsPageTransition.enterOffset * slide),
+      // The travel has to be re-evaluated on every tick. Reading the animation
+      // once per build held the page the full 8dp low for the whole fade and
+      // then snapped it up on completion, which read as a vertical jolt.
+      child: AnimatedBuilder(
+        animation: widget.animation,
         child: widget.child,
+        builder: (context, child) {
+          final progress = widget.animation.value.clamp(0.0, 1.0);
+          final slide = exiting ? 0.0 : (1 - progress);
+          return Transform.translate(
+            offset: Offset(
+              0,
+              direction * SettingsPageTransition.enterOffset * slide,
+            ),
+            child: child,
+          );
+        },
       ),
     );
   }

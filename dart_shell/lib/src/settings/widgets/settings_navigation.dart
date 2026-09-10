@@ -133,32 +133,6 @@ extension SettingsPageIdPresentation on SettingsPageId {
     SettingsPageId.developer => context.l10n.settingsNavigationDeveloper,
   };
 
-  /// Supporting line of the navigation card.
-  ///
-  /// The card reuses the page's existing description copy where one exists
-  /// (§3.7); pages without a page-level description keep a single-line card
-  /// instead of growing invented copy.
-  String? support(BuildContext context) => switch (this) {
-    SettingsPageId.appearance => context.l10n.settingsAppearanceDescription,
-    SettingsPageId.animations => context.l10n.settingsAnimationsDescription,
-    SettingsPageId.audio => context.l10n.settingsAudioDescription,
-    SettingsPageId.bluetooth => context.l10n.settingsBluetoothDescription,
-    SettingsPageId.developer => context.l10n.settingsDeveloperDescription,
-    SettingsPageId.displays => context.l10n.settingsDisplaysDescription,
-    SettingsPageId.language => context.l10n.settingsLanguageDescription,
-    SettingsPageId.layout => context.l10n.settingsLayoutDescription,
-    SettingsPageId.lockScreen => context.l10n.settingsLockScreenDescription,
-    SettingsPageId.network => context.l10n.settingsNetworkDescription,
-    SettingsPageId.overlays => context.l10n.settingsOverlaysDescription,
-    SettingsPageId.power => context.l10n.settingsPowerDescription,
-    SettingsPageId.weather => context.l10n.settingsWeatherDescription,
-    SettingsPageId.about => context.l10n.settingsAboutDescription,
-    SettingsPageId.environment ||
-    SettingsPageId.keyboard ||
-    SettingsPageId.shortcuts ||
-    SettingsPageId.touchpad => null,
-  };
-
   IconData get icon => switch (this) {
     SettingsPageId.about => Icons.info_outline_rounded,
     SettingsPageId.appearance => Icons.palette_outlined,
@@ -365,12 +339,15 @@ class _GroupHeader extends StatelessWidget {
 }
 
 /// One card-style navigation destination (§3.4).
+///
+/// The card carries the destination label alone: a single-line 64dp row whose
+/// title is centred, so every rail entry and search result reads alike.
 class SettingsNavItem extends StatefulWidget {
   const SettingsNavItem({
     required this.page,
     required this.selected,
     required this.onPressed,
-    this.support,
+    this.semanticsSupport,
     super.key,
   });
 
@@ -378,11 +355,11 @@ class SettingsNavItem extends StatefulWidget {
   final bool selected;
   final VoidCallback onPressed;
 
-  /// Supporting line override (§3.2).
+  /// Second line of the accessibility label; never painted (§3.3).
   ///
-  /// Search results reuse this card with the destination's group name as the
-  /// supporting line; `null` keeps the page's own description (or none).
-  final String? support;
+  /// Search results announce the destination's owning group this way without
+  /// giving the card a visible supporting line.
+  final String? semanticsSupport;
 
   @override
   State<SettingsNavItem> createState() => _SettingsNavItemState();
@@ -448,7 +425,9 @@ class _SettingsNavItemState extends State<SettingsNavItem>
     final colors = context.shellColors;
     final selected = widget.selected;
     final pageLabel = widget.page.label(context);
-    final support = widget.support ?? widget.page.support(context);
+    final semanticsLabel = widget.semanticsSupport == null
+        ? pageLabel
+        : '$pageLabel\n${widget.semanticsSupport}';
     final radius = theme.borderRadius(settingsNavItemRadius);
     final hoverDuration = MediaQuery.disableAnimationsOf(context)
         ? Duration.zero
@@ -456,7 +435,7 @@ class _SettingsNavItemState extends State<SettingsNavItem>
     return Semantics(
       button: true,
       selected: selected,
-      label: pageLabel,
+      label: semanticsLabel,
       child: FocusableActionDetector(
         mouseCursor: ShellMouseCursors.link,
         onShowHoverHighlight: (value) => setState(() => _hovered = value),
@@ -533,37 +512,22 @@ class _SettingsNavItemState extends State<SettingsNavItem>
                           ),
                           const SizedBox(width: settingsNavIconSpacing),
                           Expanded(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: <Widget>[
-                                Text(
-                                  pageLabel,
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: ShellText.settingsNavLabel.copyWith(
-                                    color: Color.lerp(
-                                      colors.textPrimary,
-                                      palette.onContainer,
-                                      selection,
-                                    ),
+                            // The painted label is the parent Semantics label,
+                            // so it is excluded here rather than announced a
+                            // second time.
+                            child: ExcludeSemantics(
+                              child: Text(
+                                pageLabel,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: ShellText.settingsNavLabel.copyWith(
+                                  color: Color.lerp(
+                                    colors.textPrimary,
+                                    palette.onContainer,
+                                    selection,
                                   ),
                                 ),
-                                if (support != null)
-                                  Text(
-                                    support,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: ShellText.settingsNavSupport
-                                        .copyWith(
-                                          color: Color.lerp(
-                                            colors.textSecondary,
-                                            palette.onContainer,
-                                            selection,
-                                          ),
-                                        ),
-                                  ),
-                              ],
+                              ),
                             ),
                           ),
                           const SizedBox(width: settingsNavItemInset),

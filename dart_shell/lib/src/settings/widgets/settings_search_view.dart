@@ -17,10 +17,12 @@ const settingsSearchEmptyKey = ValueKey<String>('settings-search-empty');
 /// search is active (§3.2).
 ///
 /// Result rows reuse [SettingsNavItem] so the search matches the navigation
-/// exactly — same 64dp card, 40dp hue circle, and selected accent fill — with
-/// the group name carried as the supporting line. [highlighted] drives both the
-/// visual highlight and the `selected` semantics; the highlighted row scrolls
-/// itself into view when it changes.
+/// exactly — same 64dp single-line card, 40dp hue circle, and selected accent
+/// fill. The owning group is the section heading above the row and is also
+/// announced through the card's accessibility label, so the card paints no
+/// secondary line. [highlighted] drives both the visual highlight and the
+/// `selected` semantics; the highlighted row scrolls itself into view when it
+/// changes.
 class SettingsSearchResults extends StatelessWidget {
   const SettingsSearchResults({
     required this.groups,
@@ -80,7 +82,7 @@ class SettingsSearchResults extends StatelessWidget {
           _SearchResultItem(
             key: ValueKey<SettingsPageId>(page),
             page: page,
-            support: groups[groupIndex].group.label(context),
+            semanticsSupport: groups[groupIndex].group.label(context),
             selected: page == highlighted,
             onPressed: () => onSelected(page),
           ),
@@ -117,14 +119,14 @@ class _SearchGroupHeader extends StatelessWidget {
 class _SearchResultItem extends StatefulWidget {
   const _SearchResultItem({
     required this.page,
-    required this.support,
+    required this.semanticsSupport,
     required this.selected,
     required this.onPressed,
     super.key,
   });
 
   final SettingsPageId page;
-  final String support;
+  final String semanticsSupport;
   final bool selected;
   final VoidCallback onPressed;
 
@@ -155,8 +157,8 @@ class _SearchResultItemState extends State<_SearchResultItem> {
   Widget build(BuildContext context) {
     return SettingsNavItem(
       page: widget.page,
+      semanticsSupport: widget.semanticsSupport,
       selected: widget.selected,
-      support: widget.support,
       onPressed: widget.onPressed,
     );
   }

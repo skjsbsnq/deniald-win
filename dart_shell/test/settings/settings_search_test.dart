@@ -158,7 +158,8 @@ void main() {
       expect(_result(SettingsPageId.animations), findsOneWidget);
       expect(_result(SettingsPageId.audio), findsNothing);
       expect(find.byKey(settingsSearchEmptyKey), findsNothing);
-      // The group name appears as a section header and as the supporting line.
+      // The group name appears once, as the section heading: the result card is
+      // a single-line 64dp row and carries no supporting line (§3.4).
       expect(
         _sectionHeader('Personalization'),
         findsOneWidget,
@@ -169,7 +170,11 @@ void main() {
           of: _result(SettingsPageId.animations),
           matching: find.text('Personalization'),
         ),
-        findsOneWidget,
+        findsNothing,
+      );
+      expect(
+        tester.getSize(_result(SettingsPageId.animations)).height,
+        settingsNavItemHeight,
       );
     });
 
@@ -317,12 +322,18 @@ void main() {
           contains('Personalization'),
           reason: 'a result must announce its destination and its group (§3.3)',
         );
+        // The group is announced through the label alone: the card keeps the
+        // single-line 64dp row and paints no supporting line (§3.4).
         expect(
           find.descendant(
             of: _result(SettingsPageId.layout),
             matching: find.text('Personalization'),
           ),
-          findsOneWidget,
+          findsNothing,
+        );
+        expect(
+          tester.getSize(_result(SettingsPageId.layout)).height,
+          settingsNavItemHeight,
         );
         expect(
           tester.getSemantics(_result(SettingsPageId.layout)),
@@ -440,8 +451,7 @@ Finder _result(SettingsPageId page) => find.descendant(
   matching: find.byKey(ValueKey<SettingsPageId>(page)),
 );
 
-/// Finds the section heading carrying [label], ignoring the identically named
-/// supporting line of a result card.
+/// Finds the section heading carrying [label].
 Finder _sectionHeader(String label) => find.ancestor(
   of: find.descendant(
     of: find.byKey(settingsSearchResultsKey),

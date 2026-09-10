@@ -51,6 +51,43 @@ void main() {
     expect(settledDy - startDy, closeTo(SettingsPageTransition.enterOffset, 0.01));
   });
 
+  testWidgets('the 8dp rise is interpolated every frame, never snapped', (
+    tester,
+  ) async {
+    final page = ValueNotifier<String>('a');
+    addTearDown(page.dispose);
+    await tester.pumpWidget(_host(page));
+    await tester.pump();
+
+    page.value = 'b';
+    await tester.pump();
+
+    final samples = <double>[];
+    for (var frame = 0; frame < 20; frame += 1) {
+      samples.add(tester.getTopLeft(find.text('b')).dy);
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+
+    expect(
+      samples.last - samples.first,
+      closeTo(-SettingsPageTransition.enterOffset, 0.01),
+    );
+    // A page that reads the animation once per build holds the travel for the
+    // whole fade and then jumps when the status flips; the travel must instead
+    // shrink monotonically, never moving more than the total offset in a frame.
+    var previous = samples.first;
+    for (final sample in samples.skip(1)) {
+      expect(sample, lessThanOrEqualTo(previous + 0.001));
+      expect(previous - sample, lessThan(SettingsPageTransition.enterOffset));
+      previous = sample;
+    }
+    expect(
+      samples.toSet().length,
+      greaterThan(5),
+      reason: 'the travel must produce interpolated positions',
+    );
+  });
+
   testWidgets('the outgoing page fades out in 120ms, before the 300ms enter', (
     tester,
   ) async {
