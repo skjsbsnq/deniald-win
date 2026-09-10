@@ -7113,6 +7113,42 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Four-finger swipe right'**
   String get settingsShortcutGestureFourFingerSwipeRight;
+
+  /// Placeholder shown inside the Settings search capsule.
+  ///
+  /// In en, this message translates to:
+  /// **'Search settings'**
+  String get settingsSearchHint;
+
+  /// Accessible label for the single-column Settings back button.
+  ///
+  /// In en, this message translates to:
+  /// **'Back'**
+  String get settingsBackAction;
+
+  /// Navigation group heading for network, Bluetooth, displays, and audio.
+  ///
+  /// In en, this message translates to:
+  /// **'Connectivity & devices'**
+  String get settingsNavGroupConnectivity;
+
+  /// Navigation group heading for appearance and shell customization pages.
+  ///
+  /// In en, this message translates to:
+  /// **'Personalization'**
+  String get settingsNavGroupPersonalization;
+
+  /// Navigation group heading for keyboard, touchpad, and shortcut pages.
+  ///
+  /// In en, this message translates to:
+  /// **'Input'**
+  String get settingsNavGroupInput;
+
+  /// Navigation group heading for power, language, environment, developer, and about pages.
+  ///
+  /// In en, this message translates to:
+  /// **'System'**
+  String get settingsNavGroupSystem;
 }
 
 class _AppLocalizationsDelegate

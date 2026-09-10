@@ -3829,4 +3829,22 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsShortcutGestureFourFingerSwipeRight => '四指右滑';
+
+  @override
+  String get settingsSearchHint => '搜索设置';
+
+  @override
+  String get settingsBackAction => '返回';
+
+  @override
+  String get settingsNavGroupConnectivity => '连接与设备';
+
+  @override
+  String get settingsNavGroupPersonalization => '个性化';
+
+  @override
+  String get settingsNavGroupInput => '输入';
+
+  @override
+  String get settingsNavGroupSystem => '系统';
 }

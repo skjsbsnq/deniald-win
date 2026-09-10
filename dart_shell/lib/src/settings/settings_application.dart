@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:isolate';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../l10n/generated/app_localizations_en.dart';
@@ -25,7 +26,7 @@ import '../theme/tokens.dart';
 import '../wallpaper/state/wallpaper_accent.dart';
 import '../wallpaper/state/wallpaper_controller.dart';
 import '../wallpaper/wallpaper.dart';
-import '../widgets/denial_wordmark.dart';
+import '../widgets/shell_cursor.dart';
 import 'settings_controller.dart';
 import 'widgets/focused_border_color_picker.dart';
 import 'widgets/settings_about_page.dart';
@@ -58,6 +59,19 @@ final settingsDesktopApplicationsProvider = FutureProvider<List<DesktopApp>>(
   isAutoDispose: true,
 );
 const denialSettingsApplicationId = 'dev.denial.settings';
+
+/// Available width at which Settings switches to the two-column layout
+/// (`02-VISUAL-SPEC.md` §2.1). Below it the surface drills down in one column.
+const double settingsWideLayoutBreakpoint = 840;
+
+/// Maximum width of a single Settings content column (§2.2).
+const double settingsContentMaxWidth = 720;
+
+/// Identifies the single-column back button for tests.
+const settingsBackButtonKey = ValueKey<String>('settings-back-button');
+
+/// Identifies the centred content column for layout asserts.
+const settingsContentColumnKey = ValueKey<String>('settings-content-column');
 
 bool isDenialSettingsApplicationId(String appId) =>
     appId.trim().toLowerCase() == denialSettingsApplicationId;
@@ -100,8 +114,8 @@ class SettingsPageOpenRequestController
 final denialSettingsApplication = LocalFlutterApplication(
   id: denialSettingsApplicationId,
   title: _englishSettings.settingsApplicationTitle,
-  defaultSize: const Size(900, 620),
-  minimumSize: const Size(520, 400),
+  defaultSize: const Size(1080, 720),
+  minimumSize: const Size(420, 400),
   translucent: true,
   icon: Icons.settings_rounded,
   categories: <String>[
@@ -222,6 +236,7 @@ class DenialSettingsApplication extends ConsumerStatefulWidget {
 class _DenialSettingsApplicationState
     extends ConsumerState<DenialSettingsApplication> {
   late SettingsPageId _page;
+  var _detailOpen = false;
   var _colorPickerOpen = false;
   int? _scheduledPageRequestId;
 
@@ -248,11 +263,36 @@ class _DenialSettingsApplicationState
     _selectPage(SettingsPageId.displays);
   }
 
-  void _selectPage(SettingsPageId page) {
+  void _selectPage(SettingsPageId page, {bool openDetail = true}) {
     if (_page == page) {
+      if (openDetail && !_detailOpen) {
+        setState(() => _detailOpen = true);
+      }
       return;
     }
-    setState(() => _page = page);
+    setState(() {
+      _page = page;
+      if (openDetail) {
+        _detailOpen = true;
+      }
+    });
+  }
+
+  void _closeDetail() {
+    if (!_detailOpen) {
+      return;
+    }
+    // A pending display confirmation owns the foreground until it is resolved;
+    // leaving the detail would unmount its dialog, so the back affordance and
+    // Escape stand down while it is open (§3.5).
+    if (ref
+            .read(outputConfigurationProvider)
+            .configuration
+            ?.pendingConfirmation !=
+        null) {
+      return;
+    }
+    setState(() => _detailOpen = false);
   }
 
   @override
@@ -270,66 +310,12 @@ class _DenialSettingsApplicationState
           ),
           child: LayoutBuilder(
             builder: (context, constraints) {
-              final compactNavigation = constraints.maxWidth < 700;
-              final content = Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  const _SettingsHeader(),
-                  Divider(height: 1, color: context.shellColors.hairlineSoft),
-                  if (compactNavigation) ...[
-                    SettingsNavigation(
-                      selected: _page,
-                      compact: true,
-                      showTouchpad: true,
-                      onSelected: _selectPage,
-                    ),
-                    Divider(height: 1, color: context.shellColors.hairlineSoft),
-                  ],
-                  Expanded(
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        if (!compactNavigation)
-                          SettingsNavigation(
-                            selected: _page,
-                            compact: false,
-                            showTouchpad: true,
-                            onSelected: _selectPage,
-                          ),
-                        Expanded(
-                          child: AnimatedSwitcher(
-                            duration: Motion.cardSettle,
-                            switchInCurve: Motion.md3EmphasizedDecelerate,
-                            switchOutCurve: Motion.md3EmphasizedAccelerate,
-                            layoutBuilder: (currentChild, previousChildren) {
-                              return Stack(
-                                alignment: Alignment.topCenter,
-                                fit: StackFit.expand,
-                                children: [...previousChildren, ?currentChild],
-                              );
-                            },
-                            child: KeyedSubtree(
-                              key: ValueKey<SettingsPageId>(_page),
-                              child: _SettingsPageBody(
-                                page: _page,
-                                onOpenAccentPicker: () =>
-                                    setState(() => _colorPickerOpen = true),
-                                onOpenWallpaperSelector: () =>
-                                    unawaited(_openWallpaperSelector()),
-                                onPickCursorZip: widget.onPickCursorZip,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              );
+              final wide =
+                  constraints.maxWidth >= settingsWideLayoutBreakpoint;
               return Stack(
                 fit: StackFit.expand,
                 children: [
-                  content,
+                  wide ? _buildWideLayout(context) : _buildNarrowLayout(),
                   Positioned.fill(
                     child: AnimatedSwitcher(
                       duration: Motion.cardSettle,
@@ -341,6 +327,71 @@ class _DenialSettingsApplicationState
               );
             },
           ),
+        ),
+      ),
+    );
+  }
+
+  /// Two-column list-detail layout used at [settingsWideLayoutBreakpoint] and
+  /// above: a fixed navigation rail beside the centred content column.
+  Widget _buildWideLayout(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        SettingsNavigation(
+          selected: _page,
+          form: SettingsNavigationForm.sidebar,
+          onSelected: (page) => _selectPage(page, openDetail: false),
+        ),
+        Expanded(
+          child: _SettingsContentColumn(child: _buildPageSwitcher()),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildNarrowLayout() {
+    if (_detailOpen) {
+      return _SettingsContentColumn(
+        child: _SettingsDetailScaffold(
+          onBack: _closeDetail,
+          child: _buildPageSwitcher(),
+        ),
+      );
+    }
+    return Align(
+      alignment: Alignment.topCenter,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: settingsContentMaxWidth),
+        child: SettingsNavigation(
+          selected: _page,
+          form: SettingsNavigationForm.home,
+          onSelected: _selectPage,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPageSwitcher() {
+    return AnimatedSwitcher(
+      duration: Motion.cardSettle,
+      switchInCurve: Motion.md3EmphasizedDecelerate,
+      switchOutCurve: Motion.md3EmphasizedAccelerate,
+      layoutBuilder: (currentChild, previousChildren) {
+        return Stack(
+          alignment: Alignment.topCenter,
+          fit: StackFit.expand,
+          children: [...previousChildren, ?currentChild],
+        );
+      },
+      child: KeyedSubtree(
+        key: ValueKey<SettingsPageId>(_page),
+        child: _SettingsPageBody(
+          page: _page,
+          onOpenAccentPicker: () => setState(() => _colorPickerOpen = true),
+          onOpenWallpaperSelector: () =>
+              unawaited(_openWallpaperSelector()),
+          onPickCursorZip: widget.onPickCursorZip,
         ),
       ),
     );
@@ -688,42 +739,163 @@ WallpaperResource _wallpaperFor(
   return outputName == null ? assignment.all : assignment.forOutput(outputName);
 }
 
-class _SettingsHeader extends StatelessWidget {
-  const _SettingsHeader();
+/// Centres a page in a content column capped at [settingsContentMaxWidth].
+///
+/// The horizontal inset follows §2.2: 24 when the column is at least 600 wide,
+/// otherwise 16.
+class _SettingsContentColumn extends StatelessWidget {
+  const _SettingsContentColumn({required this.child});
+
+  final Widget child;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
-      child: Row(
-        children: [
-          Expanded(
-            child: Align(
-              alignment: Alignment.centerLeft,
-              child: SizedBox(
-                width: 96,
-                height: 32,
-                child: DenialWordmark(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final inset = constraints.maxWidth >= 600 ? 24.0 : 16.0;
+        return Padding(
+          padding: EdgeInsets.symmetric(horizontal: inset),
+          child: Align(
+            alignment: Alignment.topCenter,
+            child: ConstrainedBox(
+              key: settingsContentColumnKey,
+              constraints: const BoxConstraints(
+                maxWidth: settingsContentMaxWidth,
+              ),
+              child: child,
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Single-column detail stage: a back affordance above the page content plus an
+/// Escape shortcut that exists only while the detail is open (§3.5).
+///
+/// The shortcut is registered above the page content, so any inner Escape
+/// binding (display dropdown, shortcut editor) resolves first and keeps working.
+class _SettingsDetailScaffold extends StatelessWidget {
+  const _SettingsDetailScaffold({required this.onBack, required this.child});
+
+  final VoidCallback onBack;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return Shortcuts(
+      shortcuts: const <ShortcutActivator, Intent>{
+        SingleActivator(LogicalKeyboardKey.escape):
+            _DismissSettingsDetailIntent(),
+      },
+      child: Actions(
+        actions: <Type, Action<Intent>>{
+          _DismissSettingsDetailIntent:
+              CallbackAction<_DismissSettingsDetailIntent>(
+                onInvoke: (_) {
+                  onBack();
+                  return null;
+                },
+              ),
+        },
+        child: Focus(
+          // The detail stage takes focus on open so Escape is dispatchable even
+          // before the user tabs to a control. Page-level overlays that
+          // autofocus (color picker, shortcut editor, display menu) become
+          // deeper focus nodes and keep their own Escape handling.
+          autofocus: true,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: <Widget>[
+              Padding(
+                padding: const EdgeInsets.only(top: 16, bottom: 8),
+                child: Align(
                   alignment: Alignment.centerLeft,
-                  semanticsLabel: context.l10n.settingsHeaderLogoSemanticsLabel,
+                  child: _SettingsBackButton(onPressed: onBack),
                 ),
               ),
-            ),
+              Expanded(child: child),
+            ],
           ),
-          Flexible(
-            child: Text(
-              context.l10n.settingsHeaderContext,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              textAlign: TextAlign.end,
-              style: ShellText.cardTitle.copyWith(
-                color: context.shellColors.textTertiary,
-                fontSize: 9,
-                letterSpacing: 1,
+        ),
+      ),
+    );
+  }
+}
+
+class _DismissSettingsDetailIntent extends Intent {
+  const _DismissSettingsDetailIntent();
+}
+
+/// 40dp circular back affordance (§2.3).
+class _SettingsBackButton extends StatefulWidget {
+  const _SettingsBackButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  State<_SettingsBackButton> createState() => _SettingsBackButtonState();
+}
+
+class _SettingsBackButtonState extends State<_SettingsBackButton> {
+  var _hovered = false;
+  var _focused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = ShellTheme.of(context);
+    final palette = theme.accentPalette;
+    final highlighted = _hovered || _focused;
+    final motionDuration = MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : Motion.tile;
+    return Semantics(
+      button: true,
+      label: context.l10n.settingsBackAction,
+      child: FocusableActionDetector(
+        mouseCursor: ShellMouseCursors.link,
+        onShowHoverHighlight: (value) => setState(() => _hovered = value),
+        onShowFocusHighlight: (value) => setState(() => _focused = value),
+        shortcuts: const <ShortcutActivator, Intent>{
+          SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+          SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
+        },
+        actions: <Type, Action<Intent>>{
+          ActivateIntent: CallbackAction<ActivateIntent>(
+            onInvoke: (_) {
+              widget.onPressed();
+              return null;
+            },
+          ),
+        },
+        child: GestureDetector(
+          key: settingsBackButtonKey,
+          behavior: HitTestBehavior.opaque,
+          onTap: widget.onPressed,
+          child: AnimatedContainer(
+            duration: motionDuration,
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: highlighted
+                  ? context.shellColors.surfaceContainerHighest
+                  : context.shellColors.surfaceContainerHigh,
+              borderRadius: theme.borderRadius(ShellShapeScale.full),
+              border: Border.all(
+                color: _focused
+                    ? palette.primary
+                    : context.shellColors.hairline,
+                width: _focused ? 2 : 1,
               ),
             ),
+            child: Icon(
+              Icons.arrow_back,
+              size: 20,
+              color: palette.primary,
+            ),
           ),
-        ],
+        ),
       ),
     );
   }

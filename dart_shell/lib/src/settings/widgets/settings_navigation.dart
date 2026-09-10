@@ -5,9 +5,45 @@ import '../../localization/denial_localizations.dart';
 import '../../theme/motion.dart';
 import '../../theme/shell_theme.dart';
 import '../../theme/tokens.dart';
+import '../../widgets/denial_wordmark.dart';
 import '../../widgets/shell_cursor.dart';
+import '../settings_category_colors.dart';
+import 'settings_search_bar.dart';
 
 const settingsNavigationListKey = ValueKey<String>('settings-navigation-list');
+
+// Layout geometry (02-VISUAL-SPEC.md §2.2 / §3.2).
+const double settingsSidebarWidth = 288;
+const double settingsSidebarPadding = 16;
+const double settingsNavItemHeight = 64;
+const double settingsNavItemRadius = ShellShapeScale.large;
+const double settingsNavItemInset = 12;
+const double settingsNavIconDiameter = 40;
+const double settingsNavIconGlyphSize = 20;
+const double settingsNavIconSpacing = 16;
+const double settingsNavIndicatorSize = 12;
+const double settingsNavGroupSpacing = 16;
+const double settingsNavGroupHeaderGap = 8;
+const double settingsNavGroupHeaderInset = 12;
+
+/// Vertical gap between navigation cards.
+///
+/// §2.2 fixes the group spacing (16) and the header gap (8) but not the item
+/// gap; 4 keeps the cards distinct without turning the rail into a loose list
+/// (confirmed with the user 2026-09-10).
+const double settingsNavItemGap = 4;
+
+/// Alpha applied to the sidebar backing surface (§3.1 allows 0.45–0.65).
+const double settingsSidebarSurfaceAlpha = 0.55;
+
+/// The two presentations of the navigation list (§2.1).
+enum SettingsNavigationForm {
+  /// Fixed-width rail pinned to the left edge of the two-column layout.
+  sidebar,
+
+  /// Full-width navigation home shown when the window is narrower than 840.
+  home,
+}
 
 enum SettingsPageId {
   appearance,
@@ -28,6 +64,51 @@ enum SettingsPageId {
   power,
   developer,
   about,
+}
+
+/// Navigation groups in render order (§3.3). The order and membership are the
+/// single source of truth and must not be changed outside a task card that
+/// updates the specification first.
+const Map<SettingsNavGroup, List<SettingsPageId>> settingsNavigationGroups =
+    <SettingsNavGroup, List<SettingsPageId>>{
+      SettingsNavGroup.connectivity: <SettingsPageId>[
+        SettingsPageId.network,
+        SettingsPageId.bluetooth,
+        SettingsPageId.displays,
+        SettingsPageId.audio,
+      ],
+      SettingsNavGroup.personalization: <SettingsPageId>[
+        SettingsPageId.appearance,
+        SettingsPageId.animations,
+        SettingsPageId.layout,
+        SettingsPageId.overlays,
+        SettingsPageId.lockScreen,
+        SettingsPageId.weather,
+      ],
+      SettingsNavGroup.input: <SettingsPageId>[
+        SettingsPageId.keyboard,
+        SettingsPageId.touchpad,
+        SettingsPageId.shortcuts,
+      ],
+      SettingsNavGroup.system: <SettingsPageId>[
+        SettingsPageId.power,
+        SettingsPageId.language,
+        SettingsPageId.environment,
+        SettingsPageId.developer,
+        SettingsPageId.about,
+      ],
+    };
+
+enum SettingsNavGroup { connectivity, personalization, input, system }
+
+extension SettingsNavGroupPresentation on SettingsNavGroup {
+  String label(BuildContext context) => switch (this) {
+    SettingsNavGroup.connectivity => context.l10n.settingsNavGroupConnectivity,
+    SettingsNavGroup.personalization =>
+      context.l10n.settingsNavGroupPersonalization,
+    SettingsNavGroup.input => context.l10n.settingsNavGroupInput,
+    SettingsNavGroup.system => context.l10n.settingsNavGroupSystem,
+  };
 }
 
 extension SettingsPageIdPresentation on SettingsPageId {
@@ -52,6 +133,32 @@ extension SettingsPageIdPresentation on SettingsPageId {
     SettingsPageId.developer => context.l10n.settingsNavigationDeveloper,
   };
 
+  /// Supporting line of the navigation card.
+  ///
+  /// The card reuses the page's existing description copy where one exists
+  /// (§3.7); pages without a page-level description keep a single-line card
+  /// instead of growing invented copy.
+  String? support(BuildContext context) => switch (this) {
+    SettingsPageId.appearance => context.l10n.settingsAppearanceDescription,
+    SettingsPageId.animations => context.l10n.settingsAnimationsDescription,
+    SettingsPageId.audio => context.l10n.settingsAudioDescription,
+    SettingsPageId.bluetooth => context.l10n.settingsBluetoothDescription,
+    SettingsPageId.developer => context.l10n.settingsDeveloperDescription,
+    SettingsPageId.displays => context.l10n.settingsDisplaysDescription,
+    SettingsPageId.language => context.l10n.settingsLanguageDescription,
+    SettingsPageId.layout => context.l10n.settingsLayoutDescription,
+    SettingsPageId.lockScreen => context.l10n.settingsLockScreenDescription,
+    SettingsPageId.network => context.l10n.settingsNetworkDescription,
+    SettingsPageId.overlays => context.l10n.settingsOverlaysDescription,
+    SettingsPageId.power => context.l10n.settingsPowerDescription,
+    SettingsPageId.weather => context.l10n.settingsWeatherDescription,
+    SettingsPageId.about => context.l10n.settingsAboutDescription,
+    SettingsPageId.environment ||
+    SettingsPageId.keyboard ||
+    SettingsPageId.shortcuts ||
+    SettingsPageId.touchpad => null,
+  };
+
   IconData get icon => switch (this) {
     SettingsPageId.about => Icons.info_outline_rounded,
     SettingsPageId.appearance => Icons.palette_outlined,
@@ -74,138 +181,193 @@ extension SettingsPageIdPresentation on SettingsPageId {
   };
 }
 
+/// Grouped, card-style Settings navigation (§3.3/§3.4).
+///
+/// [SettingsNavigationForm.sidebar] renders the fixed 288 rail used by the
+/// two-column layout; [SettingsNavigationForm.home] renders the drill-down home
+/// list. Both share the same search capsule, grouped ordering, and cards.
 class SettingsNavigation extends StatelessWidget {
   const SettingsNavigation({
     required this.selected,
     required this.onSelected,
-    required this.compact,
-    this.showTouchpad = false,
+    required this.form,
+    this.showTouchpad = true,
     super.key,
   });
 
   final SettingsPageId selected;
   final ValueChanged<SettingsPageId> onSelected;
-  final bool compact;
+  final SettingsNavigationForm form;
   final bool showTouchpad;
 
   @override
   Widget build(BuildContext context) {
-    if (compact) {
-      return SizedBox(
-        height: 54,
-        child: ListView(
-          key: settingsNavigationListKey,
-          scrollDirection: Axis.horizontal,
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-          children: [
-            for (final page in _visiblePages)
-              Padding(
-                padding: const EdgeInsets.only(right: 5),
-                child: _NavigationDestination(
-                  key: ValueKey<SettingsPageId>(page),
-                  page: page,
-                  selected: page == selected,
-                  compact: true,
-                  onPressed: () => onSelected(page),
-                ),
-              ),
-          ],
-        ),
-      );
-    }
-    return SizedBox(
-      width: 184,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: context.shellColors.surfaceContainerLow.withValues(
-            alpha: 0.68,
-          ),
-          border: Border(
-            right: BorderSide(color: context.shellColors.hairlineSoft),
-          ),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(9, 13, 9, 12),
+    final list = _SettingsNavigationList(
+      selected: selected,
+      onSelected: onSelected,
+      showTouchpad: showTouchpad,
+    );
+    switch (form) {
+      case SettingsNavigationForm.home:
+        return Padding(
+          padding: const EdgeInsets.all(settingsSidebarPadding),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-                child: Text(
-                  context.l10n.settingsNavigationSection,
-                  style: ShellText.cardTitle.copyWith(
-                    color: context.shellColors.textTertiary,
-                    fontSize: 9,
-                    letterSpacing: 1,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              Expanded(
-                child: ListView(
-                  key: settingsNavigationListKey,
-                  padding: EdgeInsets.zero,
-                  children: [
-                    for (final page in _visiblePages) ...[
-                      _NavigationDestination(
-                        key: ValueKey<SettingsPageId>(page),
-                        page: page,
-                        selected: page == selected,
-                        compact: false,
-                        onPressed: () => onSelected(page),
-                      ),
-                      const SizedBox(height: 3),
-                    ],
-                  ],
-                ),
-              ),
-              const SizedBox(height: 8),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-                child: Text(
-                  context.l10n.settingsStorageLocation,
-                  style: ShellText.base.copyWith(
-                    color: context.shellColors.textTertiary,
-                    fontSize: 9,
-                    height: 1.45,
-                  ),
-                ),
-              ),
+            children: <Widget>[
+              const SettingsSearchBar(),
+              const SizedBox(height: settingsNavGroupSpacing),
+              Expanded(child: list),
             ],
+          ),
+        );
+      case SettingsNavigationForm.sidebar:
+        return SizedBox(
+          width: settingsSidebarWidth,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: context.shellColors.surfaceContainerLow.withValues(
+                alpha: settingsSidebarSurfaceAlpha,
+              ),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(settingsSidebarPadding),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: <Widget>[
+                  const SettingsSearchBar(),
+                  const SizedBox(height: settingsNavGroupSpacing),
+                  Expanded(child: list),
+                  const SizedBox(height: settingsNavGroupHeaderGap),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: SizedBox(
+                      width: 72,
+                      height: 20,
+                      child: ColorFiltered(
+                        colorFilter: ColorFilter.mode(
+                          context.shellColors.textTertiary,
+                          BlendMode.srcIn,
+                        ),
+                        child: DenialWordmark(
+                          alignment: Alignment.centerLeft,
+                          semanticsLabel:
+                              context.l10n.settingsHeaderLogoSemanticsLabel,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: settingsNavGroupHeaderGap),
+                  Text(
+                    context.l10n.settingsStorageLocation,
+                    style: ShellText.base.copyWith(
+                      color: context.shellColors.textTertiary,
+                      fontSize: 9,
+                      height: 1.45,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+    }
+  }
+}
+
+class _SettingsNavigationList extends StatelessWidget {
+  const _SettingsNavigationList({
+    required this.selected,
+    required this.onSelected,
+    required this.showTouchpad,
+  });
+
+  final SettingsPageId selected;
+  final ValueChanged<SettingsPageId> onSelected;
+  final bool showTouchpad;
+
+  @override
+  Widget build(BuildContext context) {
+    final children = <Widget>[];
+    final groups = settingsNavigationGroups.entries.toList(growable: false);
+    for (var groupIndex = 0; groupIndex < groups.length; groupIndex += 1) {
+      if (groupIndex > 0) {
+        children.add(const SizedBox(height: settingsNavGroupSpacing));
+      }
+      children.add(_GroupHeader(group: groups[groupIndex].key));
+      children.add(const SizedBox(height: settingsNavGroupHeaderGap));
+      final pages = groups[groupIndex].value
+          .where(
+            (page) => page != SettingsPageId.touchpad || showTouchpad,
+          )
+          .toList(growable: false);
+      for (var index = 0; index < pages.length; index += 1) {
+        if (index > 0) {
+          children.add(const SizedBox(height: settingsNavItemGap));
+        }
+        final page = pages[index];
+        children.add(
+          SettingsNavItem(
+            key: ValueKey<SettingsPageId>(page),
+            page: page,
+            selected: page == selected,
+            onPressed: () => onSelected(page),
+          ),
+        );
+      }
+    }
+    return ListView(
+      key: settingsNavigationListKey,
+      padding: EdgeInsets.zero,
+      children: children,
+    );
+  }
+}
+
+class _GroupHeader extends StatelessWidget {
+  const _GroupHeader({required this.group});
+
+  final SettingsNavGroup group;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(left: settingsNavGroupHeaderInset),
+      child: Semantics(
+        header: true,
+        child: Text(
+          group.label(context),
+          style: ShellText.settingsSectionHeader.copyWith(
+            color: context.shellColors.textSecondary,
           ),
         ),
       ),
     );
   }
-
-  Iterable<SettingsPageId> get _visiblePages => SettingsPageId.values.where(
-    (page) => page != SettingsPageId.touchpad || showTouchpad,
-  );
 }
 
-class _NavigationDestination extends StatefulWidget {
-  const _NavigationDestination({
+/// One card-style navigation destination (§3.4).
+class SettingsNavItem extends StatefulWidget {
+  const SettingsNavItem({
     required this.page,
     required this.selected,
-    required this.compact,
     required this.onPressed,
     super.key,
   });
 
   final SettingsPageId page;
   final bool selected;
-  final bool compact;
   final VoidCallback onPressed;
 
   @override
-  State<_NavigationDestination> createState() => _NavigationDestinationState();
+  State<SettingsNavItem> createState() => _SettingsNavItemState();
 }
 
-class _NavigationDestinationState extends State<_NavigationDestination>
-    with SingleTickerProviderStateMixin {
+class _SettingsNavItemState extends State<SettingsNavItem>
+    with TickerProviderStateMixin {
   var _hovered = false;
   var _focused = false;
   late final AnimationController _selectionController;
+  late final AnimationController _indicatorController;
 
   @override
   void initState() {
@@ -214,51 +376,57 @@ class _NavigationDestinationState extends State<_NavigationDestination>
       vsync: this,
       value: widget.selected ? 1.0 : 0.0,
     );
+    _indicatorController = AnimationController(
+      vsync: this,
+      value: widget.selected ? 1.0 : 0.0,
+    );
   }
 
   @override
-  void didUpdateWidget(covariant _NavigationDestination oldWidget) {
+  void didUpdateWidget(covariant SettingsNavItem oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.selected != widget.selected) {
-      if (MediaQuery.disableAnimationsOf(context)) {
-        _selectionController.value = widget.selected ? 1.0 : 0.0;
-      } else {
-        springTo(
-          _selectionController,
-          widget.selected ? 1.0 : 0.0,
-          spring: Motion.expressiveEffectsDefault,
-          telemetryLabel: 'settings_navigation_effects',
-        );
-      }
+    if (oldWidget.selected == widget.selected) {
+      return;
     }
+    final target = widget.selected ? 1.0 : 0.0;
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _selectionController.value = target;
+      _indicatorController.value = target;
+      return;
+    }
+    springTo(
+      _selectionController,
+      target,
+      spring: Motion.expressiveEffectsDefault,
+      telemetryLabel: 'settings_navigation_effects',
+    );
+    springTo(
+      _indicatorController,
+      target,
+      spring: Motion.expressiveSpatialFast,
+      telemetryLabel: 'settings_navigation_indicator',
+    );
   }
 
   @override
   void dispose() {
     _selectionController.dispose();
+    _indicatorController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final palette = ShellTheme.of(context).accentPalette;
+    final theme = ShellTheme.of(context);
+    final palette = theme.accentPalette;
+    final colors = context.shellColors;
     final selected = widget.selected;
     final pageLabel = widget.page.label(context);
-    final motionDuration = MediaQuery.disableAnimationsOf(context)
+    final support = widget.page.support(context);
+    final radius = theme.borderRadius(settingsNavItemRadius);
+    final hoverDuration = MediaQuery.disableAnimationsOf(context)
         ? Duration.zero
-        : Motion.tile;
-    final label = Text(
-      pageLabel,
-      maxLines: 1,
-      overflow: TextOverflow.ellipsis,
-      style: ShellText.cardTitle.copyWith(
-        color: Color.lerp(
-          context.shellColors.textSecondary,
-          palette.onContainer,
-          _selectionController.value.clamp(0.0, 1.0),
-        ),
-      ),
-    );
+        : Motion.pill;
     return Semantics(
       button: true,
       selected: selected,
@@ -283,77 +451,163 @@ class _NavigationDestinationState extends State<_NavigationDestination>
           behavior: HitTestBehavior.opaque,
           onTap: widget.onPressed,
           child: AnimatedBuilder(
-            animation: _selectionController,
+            animation: Listenable.merge(<Listenable>[
+              _selectionController,
+              _indicatorController,
+            ]),
             builder: (context, _) {
-              final t = _selectionController.value.clamp(0.0, 1.0);
-              return DecoratedBox(
-                decoration: BoxDecoration(
-                  color: Color.lerp(
-                    ShellMediaColors.transparentDark,
-                    palette.container,
-                    t,
-                  ),
-                  borderRadius: context.shellTheme.borderRadius(
-                    ShellShapeScale.full,
-                  ),
-                  border: Border.all(
-                    color: Color.lerp(
-                      ShellMediaColors.transparentDark,
-                      palette.outline,
-                      t,
-                    )!,
-                  ),
-                ),
+              final selection = _selectionController.value.clamp(0.0, 1.0);
+              final indicator = _indicatorController.value.clamp(0.0, 1.0);
+              return SizedBox(
+                height: settingsNavItemHeight,
                 child: Stack(
-                  children: [
+                  children: <Widget>[
+                    Positioned.fill(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          color: Color.lerp(
+                            theme.cardColor(colors.surfaceContainerLow),
+                            palette.container,
+                            selection,
+                          ),
+                          borderRadius: radius,
+                        ),
+                      ),
+                    ),
                     Positioned.fill(
                       child: IgnorePointer(
                         child: AnimatedOpacity(
-                          duration: motionDuration,
-                          curve: Motion.standard,
-                          opacity: _hovered || _focused ? 1 : 0,
+                          duration: hoverDuration,
+                          opacity: _hovered ? 1 : 0,
                           child: DecoratedBox(
                             decoration: BoxDecoration(
                               color: selected
-                                  ? palette.container.withAlpha(20)
-                                  : context.shellColors.surfaceContainerHigh,
-                              borderRadius: context.shellTheme.borderRadius(
-                                ShellShapeScale.full,
-                              ),
-                              border: _focused
-                                  ? Border.all(color: palette.primary)
-                                  : null,
+                                  ? palette.primary.withValues(alpha: 0.12)
+                                  : theme.cardColor(
+                                      colors.surfaceContainerHigh,
+                                    ),
+                              borderRadius: radius,
                             ),
                           ),
                         ),
                       ),
                     ),
                     Padding(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: widget.compact ? 11 : 10,
-                        vertical: widget.compact ? 8 : 9,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: settingsNavItemInset,
                       ),
                       child: Row(
-                        mainAxisSize: widget.compact
-                            ? MainAxisSize.min
-                            : MainAxisSize.max,
-                        children: [
-                          Icon(
-                            widget.page.icon,
-                            size: 17,
-                            color: selected
-                                ? palette.primary
-                                : context.shellColors.textTertiary,
+                        children: <Widget>[
+                          SettingsNavIconDot(
+                            hue: SettingsCategoryColors.of(
+                              context,
+                              widget.page,
+                            ),
+                            icon: widget.page.icon,
                           ),
-                          const SizedBox(width: 8),
-                          if (widget.compact) label else Expanded(child: label),
+                          const SizedBox(width: settingsNavIconSpacing),
+                          Expanded(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: <Widget>[
+                                Text(
+                                  pageLabel,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: ShellText.settingsNavLabel.copyWith(
+                                    color: Color.lerp(
+                                      colors.textPrimary,
+                                      palette.onContainer,
+                                      selection,
+                                    ),
+                                  ),
+                                ),
+                                if (support != null)
+                                  Text(
+                                    support,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: ShellText.settingsNavSupport
+                                        .copyWith(
+                                          color: Color.lerp(
+                                            colors.textSecondary,
+                                            palette.onContainer,
+                                            selection,
+                                          ),
+                                        ),
+                                  ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: settingsNavItemInset),
+                          SizedBox(
+                            width: settingsNavIndicatorSize,
+                            height: settingsNavIndicatorSize,
+                            child: Opacity(
+                              opacity: indicator,
+                              child: Transform.scale(
+                                scale: 0.6 + 0.4 * indicator,
+                                child: Icon(
+                                  Icons.play_arrow_rounded,
+                                  size: settingsNavIndicatorSize,
+                                  color: palette.primary,
+                                ),
+                              ),
+                            ),
+                          ),
                         ],
                       ),
                     ),
+                    if (_focused)
+                      Positioned.fill(
+                        child: IgnorePointer(
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              borderRadius: radius,
+                              border: Border.all(
+                                color: palette.primary,
+                                width: 2,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               );
             },
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 40dp category-hue circle holding a 20dp page glyph (§3.4).
+class SettingsNavIconDot extends StatelessWidget {
+  const SettingsNavIconDot({required this.hue, required this.icon, super.key});
+
+  final SettingsCategoryHue hue;
+  final IconData icon;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: settingsNavIconDiameter,
+      height: settingsNavIconDiameter,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: hue.container,
+          borderRadius: ShellTheme.of(
+            context,
+          ).borderRadius(ShellShapeScale.full),
+        ),
+        child: Center(
+          child: Icon(
+            icon,
+            size: settingsNavIconGlyphSize,
+            color: hue.onContainer,
           ),
         ),
       ),

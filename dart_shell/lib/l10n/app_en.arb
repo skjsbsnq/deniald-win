@@ -5426,5 +5426,17 @@
   "settingsShortcutGestureFourFingerSwipeLeft": "Four-finger swipe left",
   "@settingsShortcutGestureFourFingerSwipeLeft": {"description": "Display name for the four-finger horizontal touchpad gesture."},
   "settingsShortcutGestureFourFingerSwipeRight": "Four-finger swipe right",
-  "@settingsShortcutGestureFourFingerSwipeRight": {"description": "Display name for the four-finger horizontal touchpad gesture."}
+  "@settingsShortcutGestureFourFingerSwipeRight": {"description": "Display name for the four-finger horizontal touchpad gesture."},
+  "settingsSearchHint": "Search settings",
+  "@settingsSearchHint": {"description": "Placeholder shown inside the Settings search capsule."},
+  "settingsBackAction": "Back",
+  "@settingsBackAction": {"description": "Accessible label for the single-column Settings back button."},
+  "settingsNavGroupConnectivity": "Connectivity & devices",
+  "@settingsNavGroupConnectivity": {"description": "Navigation group heading for network, Bluetooth, displays, and audio."},
+  "settingsNavGroupPersonalization": "Personalization",
+  "@settingsNavGroupPersonalization": {"description": "Navigation group heading for appearance and shell customization pages."},
+  "settingsNavGroupInput": "Input",
+  "@settingsNavGroupInput": {"description": "Navigation group heading for keyboard, touchpad, and shortcut pages."},
+  "settingsNavGroupSystem": "System",
+  "@settingsNavGroupSystem": {"description": "Navigation group heading for power, language, environment, developer, and about pages."}
 }

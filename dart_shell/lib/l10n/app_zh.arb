@@ -1174,5 +1174,11 @@
   "settingsShortcutActionPreviousWorkspace": "上一个工作区",
   "settingsShortcutActionSwitchWorkspace": "切换到工作区",
   "settingsShortcutGestureFourFingerSwipeLeft": "四指左滑",
-  "settingsShortcutGestureFourFingerSwipeRight": "四指右滑"
+  "settingsShortcutGestureFourFingerSwipeRight": "四指右滑",
+  "settingsSearchHint": "搜索设置",
+  "settingsBackAction": "返回",
+  "settingsNavGroupConnectivity": "连接与设备",
+  "settingsNavGroupPersonalization": "个性化",
+  "settingsNavGroupInput": "输入",
+  "settingsNavGroupSystem": "系统"
 }

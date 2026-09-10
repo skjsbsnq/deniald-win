@@ -82,8 +82,8 @@ static void settings_application_activate(GApplication* application) {
   g_object_add_weak_pointer(G_OBJECT(window),
                             reinterpret_cast<gpointer*>(&self->window));
   gtk_window_set_title(window, "Denial Settings");
-  gtk_window_set_default_size(window, 900, 620);
-  gtk_widget_set_size_request(GTK_WIDGET(window), 520, 400);
+  gtk_window_set_default_size(window, 1080, 720);
+  gtk_widget_set_size_request(GTK_WIDGET(window), 420, 400);
   gtk_window_set_decorated(window, FALSE);
   gtk_widget_set_app_paintable(GTK_WIDGET(window), TRUE);
   g_signal_connect(window, "style-updated",

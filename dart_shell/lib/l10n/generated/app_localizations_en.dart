@@ -3994,4 +3994,22 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get settingsShortcutGestureFourFingerSwipeRight =>
       'Four-finger swipe right';
+
+  @override
+  String get settingsSearchHint => 'Search settings';
+
+  @override
+  String get settingsBackAction => 'Back';
+
+  @override
+  String get settingsNavGroupConnectivity => 'Connectivity & devices';
+
+  @override
+  String get settingsNavGroupPersonalization => 'Personalization';
+
+  @override
+  String get settingsNavGroupInput => 'Input';
+
+  @override
+  String get settingsNavGroupSystem => 'System';
 }

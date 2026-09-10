@@ -18,10 +18,11 @@ import 'package:flutter_test/flutter_test.dart';
 
 /// Logical window size used by the Settings harness.
 ///
-/// Tall enough that the desktop navigation list renders all eighteen
-/// destinations without scrolling, so navigation tests can assert that every
-/// destination is present rather than only the visible subset.
-const Size settingsHarnessWindowSize = Size(1280, 1024);
+/// Tall enough that the navigation list mounts all eighteen destinations
+/// without scrolling, so navigation tests can assert that every destination is
+/// present rather than only the visible subset. The list is lazy, so this must
+/// clear the 64dp cards plus group headers and gaps.
+const Size settingsHarnessWindowSize = Size(1280, 1800);
 
 /// Pumps the real [DenialSettingsApplication] inside a deterministic test
 /// environment.
@@ -37,15 +38,19 @@ const Size settingsHarnessWindowSize = Size(1280, 1024);
 ///   [SettingsTestSettingsController], which bypasses `settingsStoreProvider`
 ///   and therefore also skips `SystemThemePropagation`.
 ///
+/// [windowSize] defaults to [settingsHarnessWindowSize]; pass a width below the
+/// 840 breakpoint to exercise the single-column drill-down.
+///
 /// Any provider a specific test needs can be layered on top through
 /// [overrides]. The returned container lets a test drive providers (for
 /// example the one-shot [settingsPageOpenRequestProvider]).
 Future<ProviderContainer> pumpSettingsApp(
   WidgetTester tester, {
   SettingsPageId initialPage = SettingsPageId.about,
+  Size windowSize = settingsHarnessWindowSize,
   List<Override> overrides = const <Override>[],
 }) async {
-  tester.view.physicalSize = settingsHarnessWindowSize;
+  tester.view.physicalSize = windowSize;
   tester.view.devicePixelRatio = 1.0;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
