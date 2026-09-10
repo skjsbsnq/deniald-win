@@ -49,11 +49,28 @@ void main() {
         settingsNavItemHeight,
         reason: '${page.name} card height is not the 64dp row',
       );
+      final label = find.descendant(of: item, matching: find.byType(Text));
       expect(
-        find.descendant(of: item, matching: find.byType(Text)),
+        label,
         findsOneWidget,
         reason: '${page.name} must not carry a supporting line',
       );
+      // Dropping the supporting line must not leave the icon or the label
+      // pinned to the top edge: the row centres both in the 64dp card.
+      final center = tester.getRect(item).center.dy;
+      for (final part in <String, Finder>{
+        'icon': find.descendant(
+          of: item,
+          matching: find.byType(SettingsNavIconDot),
+        ),
+        'label': label,
+      }.entries) {
+        expect(
+          tester.getRect(part.value).center.dy,
+          closeTo(center, 0.01),
+          reason: '${page.name} ${part.key} is not vertically centred',
+        );
+      }
     }
   });
 

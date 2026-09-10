@@ -466,6 +466,11 @@ class _SettingsNavItemState extends State<SettingsNavItem>
               return SizedBox(
                 height: settingsNavItemHeight,
                 child: Stack(
+                  // The content row is the only non-positioned child, so the
+                  // fit decides its height: expanding it to the full 64dp card
+                  // lets the row centre the 40dp icon and the label instead of
+                  // pinning them to the top edge (§3.4).
+                  fit: StackFit.expand,
                   children: <Widget>[
                     Positioned.fill(
                       child: DecoratedBox(
