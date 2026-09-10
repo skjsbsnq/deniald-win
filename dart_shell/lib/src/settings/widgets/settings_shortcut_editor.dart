@@ -711,7 +711,7 @@ class _EditorSurface extends StatelessWidget {
                     title,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: ShellText.cardTitle.copyWith(fontSize: 16),
+                    style: ShellText.settingsRowTitle,
                   ),
                 ),
                 IconButton(
@@ -766,10 +766,8 @@ class _ShortcutTextField extends StatelessWidget {
         hintText: context.l10n.settingsShortcutEditorShortcutHint,
         helperText: context.l10n.settingsShortcutEditorShortcutExample,
         helperMaxLines: 2,
-        helperStyle: ShellText.base.copyWith(
-          color: context.shellColors.textTertiary,
-          fontSize: 11,
-          height: 1.3,
+        helperStyle: ShellText.settingsRowSupport.copyWith(
+          color: context.shellColors.textSecondary,
         ),
         filled: true,
         fillColor: context.shellColors.surfaceContainerHighest,
@@ -938,10 +936,9 @@ class _ApplicationSelectionField extends StatelessWidget {
                     identity,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: ShellText.base.copyWith(
-                      color: context.shellColors.textTertiary,
+                    style: ShellText.settingsBadgeLabel.copyWith(
+                      color: context.shellColors.textSecondary,
                       fontFamily: ShellText.systemBarFontFamily,
-                      fontSize: 10,
                     ),
                   ),
                 ],
@@ -983,10 +980,8 @@ class _DirectCommandEditor extends StatelessWidget {
       children: [
         Text(
           context.l10n.settingsShortcutEditorProgramDescription,
-          style: ShellText.base.copyWith(
-            color: context.shellColors.textTertiary,
-            fontSize: 12,
-            height: 1.35,
+          style: ShellText.settingsRowSupport.copyWith(
+            color: context.shellColors.textSecondary,
           ),
         ),
         const SizedBox(height: 10),
@@ -1016,9 +1011,8 @@ class _DirectCommandEditor extends StatelessWidget {
             padding: const EdgeInsets.only(top: 6),
             child: Text(
               context.l10n.settingsShortcutEditorNoArguments,
-              style: ShellText.base.copyWith(
-                color: context.shellColors.textTertiary,
-                fontSize: 12,
+              style: ShellText.settingsRowSupport.copyWith(
+                color: context.shellColors.textSecondary,
               ),
             ),
           )
@@ -1075,10 +1069,8 @@ class _ShellCommandEditor extends StatelessWidget {
       children: [
         Text(
           context.l10n.settingsShortcutEditorShellDescription,
-          style: ShellText.base.copyWith(
-            color: context.shellColors.textTertiary,
-            fontSize: 12,
-            height: 1.35,
+          style: ShellText.settingsRowSupport.copyWith(
+            color: context.shellColors.textSecondary,
           ),
         ),
         const SizedBox(height: 10),
@@ -1288,11 +1280,7 @@ class _ValidationLine extends StatelessWidget {
           Expanded(
             child: Text(
               message,
-              style: ShellText.base.copyWith(
-                color: color,
-                fontSize: 12,
-                height: 1.35,
-              ),
+              style: ShellText.settingsRowSupport.copyWith(color: color),
             ),
           ),
         ],
@@ -1320,10 +1308,8 @@ class _EditorErrorMessage extends StatelessWidget {
         padding: const EdgeInsets.all(11),
         child: Text(
           error,
-          style: ShellText.base.copyWith(
+          style: ShellText.settingsRowSupport.copyWith(
             color: context.shellColors.textSecondary,
-            fontSize: 12,
-            height: 1.35,
           ),
         ),
       ),
@@ -1427,7 +1413,7 @@ class _EditorButton extends StatelessWidget {
             : context.shellColors.surfaceContainerHighest.withAlpha(120),
         disabledForegroundColor: foreground.withAlpha(92),
         shape: RoundedRectangleBorder(
-          borderRadius: context.shellTheme.borderRadius(ShellRadii.chip),
+          borderRadius: context.shellTheme.borderRadius(ShellShapeScale.full),
           side: BorderSide(
             color: primary ? palette.outline : context.shellColors.hairline,
           ),
@@ -1497,7 +1483,7 @@ class _CatalogLayout extends StatelessWidget {
               Expanded(
                 child: Text(
                   title,
-                  style: ShellText.cardTitle.copyWith(fontSize: 15),
+                  style: ShellText.settingsRowTitle,
                 ),
               ),
             ],
@@ -1678,12 +1664,11 @@ class _ApplicationCatalogRow extends StatelessWidget {
         application.id,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: ShellText.base.copyWith(
+        style: ShellText.settingsBadgeLabel.copyWith(
           color: selected
               ? foreground.withAlpha(170)
-              : context.shellColors.textTertiary,
+              : context.shellColors.textSecondary,
           fontFamily: ShellText.systemBarFontFamily,
-          fontSize: 10,
         ),
       ),
       trailing: selected
@@ -1730,16 +1715,14 @@ class _InputCatalogRow extends StatelessWidget {
               aliases,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: ShellText.base.copyWith(
-                color: context.shellColors.textTertiary,
-                fontSize: 11,
+              style: ShellText.settingsRowSupport.copyWith(
+                color: context.shellColors.textSecondary,
               ),
             ),
       trailing: Text(
         settingsShortcutInputCategoryLabel(context, input.category),
-        style: ShellText.base.copyWith(
-          color: context.shellColors.textTertiary,
-          fontSize: 10,
+        style: ShellText.settingsBadgeLabel.copyWith(
+          color: context.shellColors.textSecondary,
         ),
       ),
       onTap: onPressed,

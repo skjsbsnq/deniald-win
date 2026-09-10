@@ -4876,6 +4876,12 @@ abstract class AppLocalizations {
   /// **'Overrides the all-applications rule'**
   String get settingsEnvironmentOverridesDefault;
 
+  /// Badge on an application rule that replaces an all-applications rule with the same variable name.
+  ///
+  /// In en, this message translates to:
+  /// **'Default → app'**
+  String get settingsEnvironmentOverridesDefaultBadge;
+
   /// Tab label for setting an application environment variable.
   ///
   /// In en, this message translates to:

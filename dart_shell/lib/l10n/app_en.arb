@@ -3712,6 +3712,10 @@
   "@settingsEnvironmentOverridesDefault": {
     "description": "Tooltip for an application rule that replaces an all-applications rule with the same variable name."
   },
+  "settingsEnvironmentOverridesDefaultBadge": "Default → app",
+  "@settingsEnvironmentOverridesDefaultBadge": {
+    "description": "Badge on an application rule that replaces an all-applications rule with the same variable name."
+  },
   "settingsEnvironmentModeAdd": "Add Variable",
   "@settingsEnvironmentModeAdd": {
     "description": "Tab label for setting an application environment variable."

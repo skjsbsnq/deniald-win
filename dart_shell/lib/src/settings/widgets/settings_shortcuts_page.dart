@@ -9,7 +9,9 @@ import '../../models/shortcut_configuration.dart';
 import '../../state/shortcut_configuration.dart';
 import '../../theme/shell_theme.dart';
 import '../../theme/tokens.dart';
+import 'settings_buttons.dart';
 import 'settings_controls.dart';
+import 'settings_loading_indicator.dart';
 import 'settings_shortcut_editor.dart';
 import 'settings_shortcut_presentation.dart';
 
@@ -51,18 +53,44 @@ class _SettingsShortcutsPageState extends ConsumerState<SettingsShortcutsPage> {
     final state = ref.watch(shortcutConfigurationProvider);
     final controller = ref.read(shortcutConfigurationProvider.notifier);
     final configuration = state.configuration;
+    final l10n = context.l10n;
     return Stack(
       fit: StackFit.expand,
       children: [
-        _ShortcutsPageLayout(
-          state: state,
-          onRetry: () => unawaited(controller.refresh()),
-          onAdd: configuration == null || state.busy
-              ? null
-              : () => _openEditor(null),
-          onEdit: state.busy ? null : _openEditor,
-          onDelete: (shortcut) =>
-              unawaited(controller.removeShortcut(shortcut)),
+        SettingsPageLayout(
+          icon: Icons.keyboard_command_key_rounded,
+          eyebrow: l10n.settingsShortcutsSection,
+          title: l10n.settingsShortcutsTitle,
+          children: [
+            if (state.error case final error?)
+              _ShortcutErrorBanner(
+                error: error,
+                canRetry: !state.busy,
+                onRetry: () => unawaited(controller.refresh()),
+              ),
+            _ShortcutList(
+              state: state,
+              onRetry: () => unawaited(controller.refresh()),
+              onEdit: state.busy ? null : _openEditor,
+              onDelete: (shortcut) =>
+                  unawaited(controller.removeShortcut(shortcut)),
+            ),
+            Row(
+              children: [
+                if (configuration case final configuration?)
+                  _ShortcutCountBadge(count: configuration.shortcuts.length),
+                const Spacer(),
+                SettingsButton(
+                  label: l10n.settingsShortcutsAdd,
+                  variant: SettingsButtonVariant.filledTonal,
+                  icon: Icons.add_rounded,
+                  onPressed: configuration == null || state.busy
+                      ? null
+                      : () => _openEditor(null),
+                ),
+              ],
+            ),
+          ],
         ),
         if (_editorOpen && configuration != null)
           SettingsShortcutEditor(
@@ -110,128 +138,6 @@ class _SettingsShortcutsPageState extends ConsumerState<SettingsShortcutsPage> {
   }
 }
 
-class _ShortcutsPageLayout extends StatelessWidget {
-  const _ShortcutsPageLayout({
-    required this.state,
-    required this.onRetry,
-    required this.onAdd,
-    required this.onEdit,
-    required this.onDelete,
-  });
-
-  final ShortcutConfigurationState state;
-  final VoidCallback onRetry;
-  final VoidCallback? onAdd;
-  final ValueChanged<DenialShortcutBinding>? onEdit;
-  final ValueChanged<String> onDelete;
-
-  @override
-  Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final horizontalPadding = constraints.maxWidth < 560 ? 14.0 : 20.0;
-        return Padding(
-          padding: EdgeInsets.fromLTRB(
-            horizontalPadding,
-            16,
-            horizontalPadding,
-            16,
-          ),
-          child: Align(
-            alignment: Alignment.topCenter,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 960),
-              child: SizedBox.expand(
-                child: Stack(
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        _ShortcutsHeader(state: state),
-                        const SizedBox(height: 14),
-                        if (state.error case final error?) ...[
-                          _ShortcutErrorBanner(
-                            error: error,
-                            canRetry: !state.busy,
-                            onRetry: onRetry,
-                          ),
-                          const SizedBox(height: 12),
-                        ],
-                        Expanded(
-                          child: _ShortcutList(
-                            state: state,
-                            onRetry: onRetry,
-                            onEdit: onEdit,
-                            onDelete: onDelete,
-                          ),
-                        ),
-                      ],
-                    ),
-                    Positioned(
-                      right: 12,
-                      bottom: 12,
-                      child: _AddShortcutButton(
-                        label: context.l10n.settingsShortcutsAdd,
-                        onPressed: onAdd,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-}
-
-class _ShortcutsHeader extends StatelessWidget {
-  const _ShortcutsHeader({required this.state});
-
-  final ShortcutConfigurationState state;
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = ShellTheme.of(context).accentPalette;
-    final accent = palette.primary;
-    final count = state.configuration?.shortcuts.length;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(Icons.keyboard_command_key_rounded, size: 15, color: accent),
-            const SizedBox(width: 7),
-            Text(
-              context.l10n.settingsShortcutsSection.toUpperCase(),
-              style: ShellText.cardTitle.copyWith(
-                color: accent,
-                fontSize: 10,
-                letterSpacing: 1,
-              ),
-            ),
-            const Spacer(),
-            if (count != null) ...[
-              _ShortcutCountBadge(count: count),
-              const SizedBox(width: 8),
-            ],
-            const SettingsSavedBadge(),
-          ],
-        ),
-        const SizedBox(height: 10),
-        Text(
-          context.l10n.settingsShortcutsTitle,
-          style: ShellText.base.copyWith(
-            color: context.shellColors.textPrimary,
-            height: 1.35,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 class _ShortcutCountBadge extends StatelessWidget {
   const _ShortcutCountBadge({required this.count});
 
@@ -242,16 +148,14 @@ class _ShortcutCountBadge extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: context.shellColors.surfaceContainerHigh,
-        borderRadius: context.shellTheme.borderRadius(ShellRadii.chip),
-        border: Border.all(color: context.shellColors.hairlineSoft),
+        borderRadius: context.shellTheme.borderRadius(ShellShapeScale.full),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         child: Text(
           context.l10n.settingsShortcutsConfigured(count),
-          style: ShellText.cardTitle.copyWith(
+          style: ShellText.settingsBadgeLabel.copyWith(
             color: context.shellColors.textSecondary,
-            fontSize: 9,
           ),
         ),
       ),
@@ -278,7 +182,7 @@ class _ShortcutList extends StatelessWidget {
     if (configuration == null) {
       if (state.loading) {
         return _ShortcutStatus(
-          icon: Icons.sync_rounded,
+          icon: Icons.keyboard_command_key_rounded,
           message: context.l10n.settingsShortcutsLoading,
           loading: true,
         );
@@ -296,39 +200,19 @@ class _ShortcutList extends StatelessWidget {
         message: context.l10n.settingsShortcutsEmpty,
       );
     }
-    final theme = ShellTheme.of(context);
-    final radius = BorderRadius.circular(theme.panelRadius);
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: theme.cardColor(context.shellColors.surfaceContainerLow),
-        borderRadius: radius,
-        border: Border.all(color: context.shellColors.hairline),
-      ),
-      child: ClipRRect(
-        borderRadius: radius,
-        child: FocusTraversalGroup(
-          child: ListView.separated(
-            padding: const EdgeInsets.only(bottom: 82),
-            itemCount: configuration.shortcuts.length,
-            separatorBuilder: (_, _) => Divider(
-              height: 1,
-              indent: 16,
-              endIndent: 16,
-              color: context.shellColors.hairlineSoft,
+    return FocusTraversalGroup(
+      child: SettingsCardGroup(
+        children: [
+          for (final binding in configuration.shortcuts)
+            _ShortcutRow(
+              key: ValueKey<String>(binding.shortcut),
+              binding: binding,
+              deleteBusy: state.deletingShortcut == binding.shortcut,
+              deleteEnabled: !state.busy,
+              onEdit: onEdit == null ? null : () => onEdit!(binding),
+              onDelete: () => onDelete(binding.shortcut),
             ),
-            itemBuilder: (context, index) {
-              final binding = configuration.shortcuts[index];
-              return _ShortcutRow(
-                key: ValueKey<String>(binding.shortcut),
-                binding: binding,
-                deleteBusy: state.deletingShortcut == binding.shortcut,
-                deleteEnabled: !state.busy,
-                onEdit: onEdit == null ? null : () => onEdit!(binding),
-                onDelete: () => onDelete(binding.shortcut),
-              );
-            },
-          ),
-        ),
+        ],
       ),
     );
   }
@@ -361,7 +245,7 @@ class _ShortcutRow extends StatelessWidget {
         actionLabel,
       ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 10, 12, 10),
+        padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
         child: Row(
           children: [
             Expanded(
@@ -374,9 +258,8 @@ class _ShortcutRow extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: context.shellColors.surfaceContainerHigh,
                       borderRadius: context.shellTheme.borderRadius(
-                        ShellShapeScale.medium,
+                        ShellShapeScale.small,
                       ),
-                      border: Border.all(color: context.shellColors.hairline),
                     ),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
@@ -387,9 +270,9 @@ class _ShortcutRow extends StatelessWidget {
                         displayShortcut,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: ShellText.cardTitle.copyWith(
+                        style: ShellText.settingsSectionHeader.copyWith(
+                          color: context.shellColors.textPrimary,
                           fontFamily: ShellText.systemBarFontFamily,
-                          fontSize: 12,
                         ),
                       ),
                     ),
@@ -398,11 +281,11 @@ class _ShortcutRow extends StatelessWidget {
               ),
             ),
             Padding(
-              padding: EdgeInsets.symmetric(horizontal: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 12),
               child: Icon(
                 Icons.arrow_forward_rounded,
                 size: 15,
-                color: context.shellColors.textTertiary,
+                color: context.shellColors.textSecondary,
               ),
             ),
             Expanded(
@@ -416,7 +299,9 @@ class _ShortcutRow extends StatelessWidget {
                       actionLabel,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: ShellText.cardTitle.copyWith(height: 1.25),
+                      style: ShellText.settingsRowTitle.copyWith(
+                        color: context.shellColors.textPrimary,
+                      ),
                     ),
                   ),
                 ],
@@ -500,7 +385,7 @@ class _ShortcutIconButton extends StatelessWidget {
       padding: EdgeInsets.zero,
       style: IconButton.styleFrom(
         foregroundColor: foreground,
-        disabledForegroundColor: context.shellColors.textTertiary.withAlpha(86),
+        disabledForegroundColor: context.shellColors.textSecondary.withAlpha(86),
         backgroundColor: context.shellColors.surfaceContainerHigh,
         disabledBackgroundColor: context.shellColors.surfaceContainerHigh
             .withAlpha(120),
@@ -562,10 +447,8 @@ class _ShortcutErrorBanner extends StatelessWidget {
                   error,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: ShellText.base.copyWith(
+                  style: ShellText.settingsRowSupport.copyWith(
                     color: context.shellColors.textSecondary,
-                    fontSize: 12,
-                    height: 1.3,
                   ),
                 ),
               ),
@@ -599,74 +482,32 @@ class _ShortcutStatus extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final accent = ShellTheme.of(context).accent;
     return Center(
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 360),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (loading)
-              SizedBox.square(
-                dimension: 28,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2.4,
-                  color: accent,
-                ),
-              )
-            else
-              Icon(icon, size: 34, color: context.shellColors.textTertiary),
-            const SizedBox(height: 14),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: ShellText.base.copyWith(
-                color: context.shellColors.textSecondary,
-                height: 1.4,
-              ),
-            ),
-            if (actionLabel != null && onAction != null) ...[
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (loading)
+                SettingsLoadingIndicator(semanticsLabel: message)
+              else
+                Icon(icon, size: 34, color: context.shellColors.textSecondary),
               const SizedBox(height: 14),
-              SettingsTextButton(label: actionLabel!, onPressed: onAction),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: ShellText.settingsRowSupport.copyWith(
+                  color: context.shellColors.textSecondary,
+                ),
+              ),
+              if (actionLabel != null && onAction != null) ...[
+                const SizedBox(height: 14),
+                SettingsTextButton(label: actionLabel!, onPressed: onAction),
+              ],
             ],
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _AddShortcutButton extends StatelessWidget {
-  const _AddShortcutButton({required this.label, required this.onPressed});
-
-  final String label;
-  final VoidCallback? onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = ShellTheme.of(context).accentPalette;
-    return FilledButton.icon(
-      onPressed: onPressed,
-      style: FilledButton.styleFrom(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
-        backgroundColor: palette.container,
-        foregroundColor: palette.onContainer,
-        disabledBackgroundColor: palette.container.withAlpha(96),
-        disabledForegroundColor: palette.onContainer.withAlpha(92),
-        elevation: 8,
-        shadowColor: context.shellColors.shadowSoft,
-        shape: RoundedRectangleBorder(
-          borderRadius: context.shellTheme.borderRadius(ShellRadii.chip),
-          side: BorderSide(color: palette.outline),
-        ),
-      ),
-      icon: Icon(Icons.add_rounded, size: 19),
-      label: Text(
-        label,
-        style: ShellText.cardTitle.copyWith(
-          color: onPressed == null
-              ? palette.onContainer.withAlpha(92)
-              : palette.onContainer,
+          ),
         ),
       ),
     );

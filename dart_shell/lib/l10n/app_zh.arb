@@ -788,6 +788,7 @@
   "settingsEnvironmentNameLabel": "变量名",
   "settingsEnvironmentNameRequired": "请输入变量名。",
   "settingsEnvironmentOverridesDefault": "覆盖所有应用规则",
+  "settingsEnvironmentOverridesDefaultBadge": "默认 → 应用",
   "settingsEnvironmentModeAdd": "添加变量",
   "settingsEnvironmentModeHide": "隐藏变量",
   "settingsEnvironmentRemoveDescription": "Denial 会在启动应用前移除继承的这个变量。",

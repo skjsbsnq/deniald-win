@@ -2615,6 +2615,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsEnvironmentOverridesDefault => '覆盖所有应用规则';
 
   @override
+  String get settingsEnvironmentOverridesDefaultBadge => '默认 → 应用';
+
+  @override
   String get settingsEnvironmentModeAdd => '添加变量';
 
   @override

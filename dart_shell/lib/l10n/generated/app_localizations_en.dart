@@ -2738,6 +2738,9 @@ class AppLocalizationsEn extends AppLocalizations {
       'Overrides the all-applications rule';
 
   @override
+  String get settingsEnvironmentOverridesDefaultBadge => 'Default → app';
+
+  @override
   String get settingsEnvironmentModeAdd => 'Add Variable';
 
   @override

@@ -75,9 +75,8 @@ class SettingsWeatherPage extends ConsumerWidget {
                     if (settings.manualLocation case final current?) ...[
                       Text(
                         l10n.settingsWeatherCurrentCity(current.city),
-                        style: ShellText.base.copyWith(
+                        style: ShellText.settingsRowSupport.copyWith(
                           color: context.shellColors.textSecondary,
-                          fontSize: 12,
                         ),
                       ),
                       const SizedBox(height: 18),
@@ -158,27 +157,29 @@ class _CitySearchFieldState extends ConsumerState<_CitySearchField> {
             unawaited(_search(value));
           },
           onChanged: _scheduleSearch,
-          style: ShellText.base.copyWith(
+          style: ShellText.settingsRowSupport.copyWith(
             color: context.shellColors.textPrimary,
-            fontSize: 13,
           ),
           decoration: InputDecoration(
             isDense: true,
             hintText: l10n.settingsWeatherSearchPlaceholder,
-            hintStyle: ShellText.base.copyWith(
+            hintStyle: ShellText.settingsRowSupport.copyWith(
               color: context.shellColors.textTertiary,
-              fontSize: 13,
             ),
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 12,
               vertical: 10,
             ),
             enabledBorder: OutlineInputBorder(
-              borderRadius: context.shellTheme.borderRadius(ShellRadii.chip),
+              borderRadius: context.shellTheme.borderRadius(
+                ShellShapeScale.full,
+              ),
               borderSide: BorderSide(color: context.shellColors.hairlineSoft),
             ),
             focusedBorder: OutlineInputBorder(
-              borderRadius: context.shellTheme.borderRadius(ShellRadii.chip),
+              borderRadius: context.shellTheme.borderRadius(
+                ShellShapeScale.full,
+              ),
               borderSide: BorderSide(
                 color: ShellTheme.of(context).accent.withAlpha(160),
               ),
@@ -189,18 +190,16 @@ class _CitySearchFieldState extends ConsumerState<_CitySearchField> {
           const SizedBox(height: 10),
           Text(
             l10n.settingsWeatherSearching,
-            style: ShellText.base.copyWith(
-              color: context.shellColors.textTertiary,
-              fontSize: 12,
+            style: ShellText.settingsRowSupport.copyWith(
+              color: context.shellColors.textSecondary,
             ),
           ),
         ] else if (_results.isEmpty) ...[
           const SizedBox(height: 10),
           Text(
             l10n.settingsWeatherSearchNoResults,
-            style: ShellText.base.copyWith(
-              color: context.shellColors.textTertiary,
-              fontSize: 12,
+            style: ShellText.settingsRowSupport.copyWith(
+              color: context.shellColors.textSecondary,
             ),
           ),
         ] else ...[
@@ -282,7 +281,9 @@ class _CityResultRow extends StatelessWidget {
           child: DecoratedBox(
             decoration: BoxDecoration(
               color: colors.surfaceContainerHigh,
-              borderRadius: context.shellTheme.borderRadius(ShellRadii.chip),
+              borderRadius: context.shellTheme.borderRadius(
+                ShellShapeScale.full,
+              ),
               border: Border.all(color: colors.hairlineSoft),
             ),
             child: Padding(
@@ -300,19 +301,17 @@ class _CityResultRow extends StatelessWidget {
                       result.city,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: ShellText.base.copyWith(
+                      style: ShellText.settingsRowTitle.copyWith(
                         color: colors.textPrimary,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
                   Text(
                     '${result.latitude.toStringAsFixed(2)}, '
                     '${result.longitude.toStringAsFixed(2)}',
-                    style: ShellText.base.copyWith(
-                      color: colors.textTertiary,
-                      fontSize: 11,
+                    style: ShellText.settingsBadgeLabel.copyWith(
+                      color: colors.textSecondary,
+                      fontFamily: ShellText.systemBarFontFamily,
                     ),
                   ),
                 ],

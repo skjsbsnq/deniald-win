@@ -1,5 +1,4 @@
 import 'dart:convert' show utf8;
-import 'dart:ui' show SemanticsRole;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -13,6 +12,7 @@ import '../../widgets/app_icon.dart';
 import '../../widgets/shell_cursor.dart';
 import '../shell_settings.dart';
 import 'settings_controls.dart';
+import 'settings_loading_indicator.dart';
 
 const settingsEnvironmentNameFieldKey = ValueKey<String>(
   'settings-environment-name-field',
@@ -22,12 +22,6 @@ const settingsEnvironmentValueFieldKey = ValueKey<String>(
 );
 const settingsEnvironmentModeControlKey = ValueKey<String>(
   'settings-environment-mode-control',
-);
-const settingsEnvironmentAddModeKey = ValueKey<String>(
-  'settings-environment-add-mode',
-);
-const settingsEnvironmentHideModeKey = ValueKey<String>(
-  'settings-environment-hide-mode',
 );
 const settingsEnvironmentSaveButtonKey = ValueKey<String>(
   'settings-environment-save-button',
@@ -237,7 +231,25 @@ class _SettingsEnvironmentPageState extends State<SettingsEnvironmentPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _EnvironmentModeTabs(value: _mode, onChanged: _setMode),
+                  Semantics(
+                    key: settingsEnvironmentModeControlKey,
+                    container: true,
+                    explicitChildNodes: true,
+                    child: SettingsSegmentedControl<_EnvironmentOverrideMode>(
+                      value: _mode,
+                      choices: [
+                        SettingsChoice(
+                          _EnvironmentOverrideMode.add,
+                          l10n.settingsEnvironmentModeAdd,
+                        ),
+                        SettingsChoice(
+                          _EnvironmentOverrideMode.hide,
+                          l10n.settingsEnvironmentModeHide,
+                        ),
+                      ],
+                      onChanged: _setMode,
+                    ),
+                  ),
                   const SizedBox(height: 12),
                   AnimatedSwitcher(
                     duration: Motion.tile,
@@ -246,10 +258,8 @@ class _SettingsEnvironmentPageState extends State<SettingsEnvironmentPage> {
                       _mode == _EnvironmentOverrideMode.add
                           ? l10n.settingsEnvironmentAddModeDescription
                           : l10n.settingsEnvironmentHideModeDescription,
-                      style: ShellText.base.copyWith(
+                      style: ShellText.settingsRowSupport.copyWith(
                         color: context.shellColors.textSecondary,
-                        fontSize: 11,
-                        height: 1.4,
                       ),
                     ),
                   ),
@@ -523,9 +533,8 @@ class _EnvironmentApplicationScopeList extends StatelessWidget {
                   prefixIcon: const Icon(Icons.search_rounded, size: 17),
                   hintText:
                       context.l10n.settingsEnvironmentApplicationSearchHint,
-                  hintStyle: ShellText.base.copyWith(
+                  hintStyle: ShellText.settingsRowSupport.copyWith(
                     color: context.shellColors.textTertiary,
-                    fontSize: 11,
                   ),
                   filled: true,
                   fillColor: context.shellColors.surfaceContainerHigh,
@@ -535,7 +544,7 @@ class _EnvironmentApplicationScopeList extends StatelessWidget {
                   ),
                   border: OutlineInputBorder(
                     borderRadius: context.shellTheme.borderRadius(
-                      ShellRadii.chip,
+                      ShellShapeScale.full,
                     ),
                     borderSide: BorderSide(color: context.shellColors.hairline),
                   ),
@@ -575,17 +584,9 @@ class _EnvironmentApplicationScopeList extends StatelessWidget {
                       );
                     }
                     if (loading) {
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 18),
-                        child: Center(
-                          child: SizedBox.square(
-                            dimension: 18,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: ShellTheme.of(context).accent,
-                            ),
-                          ),
-                        ),
+                      return const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 18),
+                        child: Center(child: SettingsLoadingIndicator()),
                       );
                     }
                     if (unavailable) {
@@ -596,9 +597,8 @@ class _EnvironmentApplicationScopeList extends StatelessWidget {
                               .l10n
                               .settingsEnvironmentApplicationsUnavailable,
                           textAlign: TextAlign.center,
-                          style: ShellText.base.copyWith(
-                            color: context.shellColors.textTertiary,
-                            fontSize: 11,
+                          style: ShellText.settingsRowSupport.copyWith(
+                            color: context.shellColors.textSecondary,
                           ),
                         ),
                       );
@@ -671,15 +671,16 @@ class _EnvironmentScopeTile extends StatelessWidget {
             selected: selected,
             selectedTileColor: accent.withValues(alpha: 0.12),
             shape: RoundedRectangleBorder(
-              borderRadius: context.shellTheme.borderRadius(ShellRadii.chip),
+              borderRadius: context.shellTheme.borderRadius(
+                ShellShapeScale.large,
+              ),
               side: BorderSide(
                 color: selected
                     ? accent.withValues(alpha: 0.72)
                     : ShellMediaColors.transparentDark,
               ),
             ),
-            minTileHeight: 48,
-            dense: true,
+            minTileHeight: 56,
             contentPadding: const EdgeInsets.symmetric(horizontal: 9),
             mouseCursor: ShellMouseCursors.link,
             onTap: onPressed,
@@ -699,21 +700,19 @@ class _EnvironmentScopeTile extends StatelessWidget {
               label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: ShellText.cardTitle.copyWith(
+              style: ShellText.settingsRowSupport.copyWith(
                 color: selected
                     ? context.shellColors.textPrimary
                     : context.shellColors.textSecondary,
-                fontSize: 11,
               ),
             ),
             subtitle: Text(
               desktopFileId,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: ShellText.base.copyWith(
-                color: context.shellColors.textTertiary,
+              style: ShellText.settingsBadgeLabel.copyWith(
+                color: context.shellColors.textSecondary,
                 fontFamily: ShellText.systemBarFontFamily,
-                fontSize: 9,
               ),
             ),
             trailing: overrideCount == 0
@@ -736,7 +735,7 @@ class _EnvironmentCountBadge extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: ShellTheme.of(context).accent.withValues(alpha: 0.12),
-        borderRadius: context.shellTheme.borderRadius(ShellRadii.chip),
+        borderRadius: context.shellTheme.borderRadius(ShellShapeScale.full),
         border: Border.all(
           color: ShellTheme.of(context).accent.withValues(alpha: 0.45),
         ),
@@ -745,10 +744,9 @@ class _EnvironmentCountBadge extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
         child: Text(
           '$count',
-          style: ShellText.cardTitle.copyWith(
+          style: ShellText.settingsBadgeLabel.copyWith(
             color: ShellTheme.of(context).accent,
             fontFamily: ShellText.systemBarFontFamily,
-            fontSize: 9,
           ),
         ),
       ),
@@ -827,7 +825,7 @@ class _EnvironmentScopeHeader extends StatelessWidget {
                       title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: ShellText.cardTitle.copyWith(
+                      style: ShellText.settingsRowTitle.copyWith(
                         color: context.shellColors.textPrimary,
                       ),
                     ),
@@ -836,10 +834,9 @@ class _EnvironmentScopeHeader extends StatelessWidget {
                       identity,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: ShellText.base.copyWith(
-                        color: context.shellColors.textTertiary,
+                      style: ShellText.settingsBadgeLabel.copyWith(
+                        color: context.shellColors.textSecondary,
                         fontFamily: ShellText.systemBarFontFamily,
-                        fontSize: 10,
                       ),
                     ),
                     if (!allApplications) ...[
@@ -848,9 +845,8 @@ class _EnvironmentScopeHeader extends StatelessWidget {
                         context.l10n.settingsEnvironmentApplicationInherited(
                           inheritedCount,
                         ),
-                        style: ShellText.base.copyWith(
+                        style: ShellText.settingsRowSupport.copyWith(
                           color: context.shellColors.textSecondary,
-                          fontSize: 10,
                         ),
                       ),
                     ],
@@ -872,163 +868,6 @@ class _EnvironmentScopeHeader extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-class _EnvironmentModeTabs extends StatelessWidget {
-  const _EnvironmentModeTabs({required this.value, required this.onChanged});
-
-  final _EnvironmentOverrideMode value;
-  final ValueChanged<_EnvironmentOverrideMode> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Semantics(
-      key: settingsEnvironmentModeControlKey,
-      role: SemanticsRole.radioGroup,
-      explicitChildNodes: true,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: context.shellColors.surfaceContainerLow,
-          borderRadius: context.shellTheme.borderRadius(ShellRadii.chip),
-          border: Border.all(color: context.shellColors.hairline),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(3),
-          child: Row(
-            children: [
-              Expanded(
-                child: _EnvironmentModeTab(
-                  key: settingsEnvironmentAddModeKey,
-                  marker: '+',
-                  label: context.l10n.settingsEnvironmentModeAdd,
-                  color: context.shellColors.performanceGood,
-                  selected: value == _EnvironmentOverrideMode.add,
-                  onPressed: () => onChanged(_EnvironmentOverrideMode.add),
-                ),
-              ),
-              const SizedBox(width: 3),
-              Expanded(
-                child: _EnvironmentModeTab(
-                  key: settingsEnvironmentHideModeKey,
-                  marker: '−',
-                  label: context.l10n.settingsEnvironmentModeHide,
-                  color: context.shellColors.performanceBad,
-                  selected: value == _EnvironmentOverrideMode.hide,
-                  onPressed: () => onChanged(_EnvironmentOverrideMode.hide),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _EnvironmentModeTab extends StatefulWidget {
-  const _EnvironmentModeTab({
-    required this.marker,
-    required this.label,
-    required this.color,
-    required this.selected,
-    required this.onPressed,
-    super.key,
-  });
-
-  final String marker;
-  final String label;
-  final Color color;
-  final bool selected;
-  final VoidCallback onPressed;
-
-  @override
-  State<_EnvironmentModeTab> createState() => _EnvironmentModeTabState();
-}
-
-class _EnvironmentModeTabState extends State<_EnvironmentModeTab> {
-  var _hovered = false;
-  var _focused = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final duration = MediaQuery.disableAnimationsOf(context)
-        ? Duration.zero
-        : Motion.tile;
-    return Semantics(
-      checked: widget.selected,
-      inMutuallyExclusiveGroup: true,
-      label: widget.label,
-      child: FocusableActionDetector(
-        mouseCursor: ShellMouseCursors.link,
-        onShowHoverHighlight: (value) => setState(() => _hovered = value),
-        onShowFocusHighlight: (value) => setState(() => _focused = value),
-        shortcuts: const <ShortcutActivator, Intent>{
-          SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
-          SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
-        },
-        actions: <Type, Action<Intent>>{
-          ActivateIntent: CallbackAction<ActivateIntent>(
-            onInvoke: (_) {
-              widget.onPressed();
-              return null;
-            },
-          ),
-        },
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: widget.onPressed,
-          child: AnimatedContainer(
-            duration: duration,
-            curve: Motion.standard,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-            decoration: BoxDecoration(
-              color: widget.selected
-                  ? widget.color.withValues(alpha: 0.13)
-                  : (_hovered || _focused)
-                  ? context.shellColors.surfaceContainerHighest
-                  : null,
-              borderRadius: context.shellTheme.borderRadius(
-                ShellRadii.chip - 3,
-              ),
-              border: Border.all(
-                color: widget.selected || _focused
-                    ? widget.color.withValues(alpha: 0.8)
-                    : context.shellColors.hairlineSoft,
-              ),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  widget.marker,
-                  style: ShellText.cardTitle.copyWith(
-                    color: widget.color,
-                    fontFamily: ShellText.systemBarFontFamily,
-                    fontSize: 15,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Flexible(
-                  child: Text(
-                    widget.label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: ShellText.cardTitle.copyWith(
-                      color: widget.selected
-                          ? context.shellColors.textPrimary
-                          : context.shellColors.textSecondary,
-                      fontFamily: ShellText.systemBarFontFamily,
-                      fontSize: 11,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
     );
   }
 }
@@ -1087,25 +926,19 @@ class _VariablesCard extends StatelessWidget {
           status: context.l10n.settingsEnvironmentVariablesStatus(names.length),
           child: names.isEmpty
               ? const _EmptyVariables()
-              : ListView.separated(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: names.length,
-                  separatorBuilder: (_, _) => Divider(
-                    height: 1,
-                    color: context.shellColors.hairlineSoft,
-                  ),
-                  itemBuilder: (context, index) {
-                    final name = names[index];
-                    return _VariableRow(
-                      name: name,
-                      value: variables[name],
-                      overridesDefault:
-                          perApplication && defaultVariables.containsKey(name),
-                      onEdit: () => onEdit(name),
-                      onDelete: () => onDelete(name),
-                    );
-                  },
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (final name in names)
+                      _VariableRow(
+                        name: name,
+                        value: variables[name],
+                        overridesDefault:
+                            perApplication && defaultVariables.containsKey(name),
+                        onEdit: () => onEdit(name),
+                        onDelete: () => onDelete(name),
+                      ),
+                  ],
                 ),
         ),
       ],
@@ -1130,18 +963,16 @@ class _EmptyVariables extends StatelessWidget {
           const SizedBox(height: 9),
           Text(
             context.l10n.settingsEnvironmentEmptyTitle,
-            style: ShellText.cardTitle.copyWith(
-              color: context.shellColors.textSecondary,
+            style: ShellText.settingsRowTitle.copyWith(
+              color: context.shellColors.textPrimary,
             ),
           ),
           const SizedBox(height: 4),
           Text(
             context.l10n.settingsEnvironmentEmptyDescription,
             textAlign: TextAlign.center,
-            style: ShellText.base.copyWith(
-              color: context.shellColors.textTertiary,
-              fontSize: 11,
-              height: 1.4,
+            style: ShellText.settingsRowSupport.copyWith(
+              color: context.shellColors.textSecondary,
             ),
           ),
         ],
@@ -1183,7 +1014,7 @@ class _VariableRow extends StatelessWidget {
                 children: [
                   TextSpan(
                     text: name,
-                    style: ShellText.cardTitle.copyWith(
+                    style: ShellText.settingsSectionHeader.copyWith(
                       color: context.shellColors.textPrimary,
                       fontFamily: ShellText.systemBarFontFamily,
                     ),
@@ -1191,10 +1022,9 @@ class _VariableRow extends StatelessWidget {
                   if (!removed)
                     TextSpan(
                       text: '  $value',
-                      style: ShellText.base.copyWith(
-                        color: context.shellColors.textTertiary,
+                      style: ShellText.settingsBadgeLabel.copyWith(
+                        color: context.shellColors.textSecondary,
                         fontFamily: ShellText.systemBarFontFamily,
-                        fontSize: 11,
                       ),
                     ),
                 ],
@@ -1208,12 +1038,10 @@ class _VariableRow extends StatelessWidget {
             Tooltip(
               message: context.l10n.settingsEnvironmentOverridesDefault,
               child: Text(
-                'DEFAULT → APP',
-                style: ShellText.cardTitle.copyWith(
+                context.l10n.settingsEnvironmentOverridesDefaultBadge,
+                style: ShellText.settingsBadgeLabel.copyWith(
                   color: ShellTheme.of(context).accent,
                   fontFamily: ShellText.systemBarFontFamily,
-                  fontSize: 8,
-                  letterSpacing: 1,
                 ),
               ),
             ),
@@ -1268,10 +1096,9 @@ class _EnvironmentStatusMarker extends StatelessWidget {
           child: Center(
             child: Text(
               removed ? '−' : '+',
-              style: ShellText.cardTitle.copyWith(
+              style: ShellText.settingsRowTitle.copyWith(
                 color: color,
                 fontFamily: ShellText.systemBarFontFamily,
-                fontSize: 15,
               ),
             ),
           ),
@@ -1326,10 +1153,9 @@ class _EnvironmentTextField extends StatelessWidget {
           labelText: label,
           hintText: hint,
           floatingLabelBehavior: FloatingLabelBehavior.always,
-          hintStyle: ShellText.base.copyWith(
+          hintStyle: ShellText.settingsRowSupport.copyWith(
             color: context.shellColors.textTertiary.withValues(alpha: 0.58),
             fontFamily: ShellText.systemBarFontFamily,
-            fontSize: 11,
             fontStyle: FontStyle.italic,
           ),
           filled: true,
@@ -1339,14 +1165,20 @@ class _EnvironmentTextField extends StatelessWidget {
             vertical: 12,
           ),
           border: OutlineInputBorder(
-            borderRadius: context.shellTheme.borderRadius(ShellRadii.chip),
+            borderRadius: context.shellTheme.borderRadius(
+              ShellShapeScale.medium,
+            ),
           ),
           enabledBorder: OutlineInputBorder(
-            borderRadius: context.shellTheme.borderRadius(ShellRadii.chip),
+            borderRadius: context.shellTheme.borderRadius(
+              ShellShapeScale.medium,
+            ),
             borderSide: BorderSide(color: context.shellColors.hairline),
           ),
           focusedBorder: OutlineInputBorder(
-            borderRadius: context.shellTheme.borderRadius(ShellRadii.chip),
+            borderRadius: context.shellTheme.borderRadius(
+              ShellShapeScale.medium,
+            ),
             borderSide: BorderSide(color: accent),
           ),
         ),
