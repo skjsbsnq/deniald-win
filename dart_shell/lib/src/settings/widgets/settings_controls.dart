@@ -13,7 +13,21 @@ import '../../widgets/shell_cursor.dart';
 import '../color_format.dart';
 import 'settings_buttons.dart';
 import 'settings_menu.dart';
+import 'settings_page_header.dart';
 
+/// Identifies the page's single scroll view, so tests can drive the header
+/// collapse.
+const settingsPageScrollKey = ValueKey<String>('settings-page-scroll');
+
+/// Gap between the page header and the first group container (§3.1).
+const double settingsPageContentGap = 16;
+
+/// Page skeleton: a pinned large page header above the scrolling content
+/// column (§3.1/§3.8).
+///
+/// The public API is unchanged — [eyebrow] is retained for accessibility and
+/// logging call sites but is no longer painted as an all-caps eyebrow; the
+/// page's colour now comes from the header's category hue circle (§3.2).
 class SettingsPageLayout extends StatelessWidget {
   const SettingsPageLayout({
     required this.icon,
@@ -32,79 +46,52 @@ class SettingsPageLayout extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = ShellTheme.of(context);
-    final accent = theme.accent;
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final horizontalPadding = constraints.maxWidth < 560 ? 14.0 : 20.0;
-        return SingleChildScrollView(
-          padding: EdgeInsets.fromLTRB(
-            horizontalPadding,
-            16,
-            horizontalPadding,
-            24,
-          ),
-          child: Align(
-            alignment: Alignment.topCenter,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 960),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Wrap(
-                    alignment: WrapAlignment.spaceBetween,
-                    crossAxisAlignment: WrapCrossAlignment.center,
-                    spacing: 12,
-                    runSpacing: 8,
-                    children: [
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(icon, size: 15, color: accent),
-                          const SizedBox(width: 7),
-                          Text(
-                            eyebrow.toUpperCase(),
-                            style: ShellText.cardTitle.copyWith(
-                              color: accent,
-                              fontSize: 10,
-                              letterSpacing: 1,
-                            ),
-                          ),
-                        ],
-                      ),
-                      if (onReset != null)
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const SettingsSavedBadge(),
-                            const SizedBox(width: 8),
-                            SettingsTextButton(
-                              label: context.l10n.settingsResetPage,
-                              onPressed: onReset,
-                            ),
-                          ],
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    title,
-                    style: ShellText.base.copyWith(
-                      color: context.shellColors.textPrimary,
-                      height: 1.35,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  for (var index = 0; index < children.length; index++) ...[
-                    if (index > 0) const SizedBox(height: 12),
-                    children[index],
-                  ],
-                ],
+    final trailing = onReset == null
+        ? null
+        : Row(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              const SettingsSavedBadge(),
+              const SizedBox(width: 8),
+              SettingsTextButton(
+                label: context.l10n.settingsResetPage,
+                onPressed: onReset,
               ),
+            ],
+          );
+    return CustomScrollView(
+      key: settingsPageScrollKey,
+      slivers: <Widget>[
+        SliverPersistentHeader(
+          pinned: true,
+          delegate: SettingsPageHeaderDelegate(
+            icon: icon,
+            title: title,
+            trailing: trailing,
+          ),
+        ),
+        SliverPadding(
+          padding: const EdgeInsets.only(
+            top: settingsPageContentGap,
+            bottom: 24,
+          ),
+          // The children stay eagerly built (as the previous single-child
+          // scroll view did) so in-page state is never recycled while
+          // scrolling.
+          sliver: SliverToBoxAdapter(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                for (var index = 0; index < children.length; index++) ...[
+                  if (index > 0)
+                    const SizedBox(height: settingsPageContentGap),
+                  children[index],
+                ],
+              ],
             ),
           ),
-        );
-      },
+        ),
+      ],
     );
   }
 }
@@ -112,41 +99,40 @@ class SettingsPageLayout extends StatelessWidget {
 class SettingsSavedBadge extends StatelessWidget {
   const SettingsSavedBadge({super.key});
 
+  /// Badge height (§3.4).
+  static const double height = 24;
+
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
     return Semantics(
       label: l10n.settingsLiveChangesSemanticsLabel,
-      child: DecoratedBox(
+      child: Container(
+        height: height,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
         decoration: BoxDecoration(
           color: context.shellColors.surfaceContainerHigh,
           borderRadius: context.shellTheme.borderRadius(ShellShapeScale.full),
-          border: Border.all(color: context.shellColors.hairlineSoft),
         ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 6,
-                height: 6,
-                decoration: BoxDecoration(
-                  color: context.shellColors.gestureArmed,
-                  shape: BoxShape.circle,
-                ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 6,
+              height: 6,
+              decoration: BoxDecoration(
+                color: context.shellColors.gestureArmed,
+                shape: BoxShape.circle,
               ),
-              const SizedBox(width: 7),
-              Text(
-                l10n.settingsLiveBadge,
-                style: ShellText.cardTitle.copyWith(
-                  color: context.shellColors.textSecondary,
-                  fontSize: 9,
-                  letterSpacing: 1,
-                ),
+            ),
+            const SizedBox(width: 7),
+            Text(
+              l10n.settingsLiveBadge,
+              style: ShellText.settingsBadgeLabel.copyWith(
+                color: context.shellColors.textSecondary,
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -161,12 +147,11 @@ class SettingsCardGroup extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = ShellTheme.of(context);
-    final radius = theme.borderRadius(ShellShapeScale.large);
+    final radius = theme.borderRadius(ShellShapeScale.extraLarge);
     return DecoratedBox(
       decoration: BoxDecoration(
         color: theme.cardColor(context.shellColors.surfaceContainerLow),
         borderRadius: radius,
-        border: Border.all(color: context.shellColors.hairline),
       ),
       child: ClipRRect(
         borderRadius: radius,
@@ -197,6 +182,13 @@ class SettingsSection extends StatelessWidget {
 
   final String title;
   final Widget child;
+
+  /// Optional section guide mark.
+  ///
+  /// Existing pages hand in functional marks (battery glyphs, status dots,
+  /// thumbnails). Those keep their own rendering — the §4.3 hue circle only
+  /// applies to decorative page glyphs and is therefore owned by the page
+  /// header (§3.2), not re-derived here where the page hue is unknown.
   final Widget? leading;
   final String? status;
   final Widget? trailing;
@@ -220,9 +212,8 @@ class SettingsSection extends StatelessWidget {
                   title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: ShellText.base.copyWith(
+                  style: ShellText.settingsSectionHeader.copyWith(
                     color: context.shellColors.textPrimary,
-                    height: 1.32,
                   ),
                 ),
               ),
@@ -235,9 +226,8 @@ class SettingsSection extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     textAlign: TextAlign.right,
-                    style: ShellText.base.copyWith(
-                      color: context.shellColors.textTertiary,
-                      fontSize: 11,
+                    style: ShellText.settingsRowSupport.copyWith(
+                      color: context.shellColors.textSecondary,
                     ),
                   ),
                 ),

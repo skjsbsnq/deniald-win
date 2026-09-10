@@ -26,7 +26,6 @@ import '../theme/tokens.dart';
 import '../wallpaper/state/wallpaper_accent.dart';
 import '../wallpaper/state/wallpaper_controller.dart';
 import '../wallpaper/wallpaper.dart';
-import '../widgets/shell_cursor.dart';
 import 'settings_controller.dart';
 import 'widgets/focused_border_color_picker.dart';
 import 'widgets/settings_about_page.dart';
@@ -41,11 +40,16 @@ import 'widgets/settings_language_page.dart';
 import 'widgets/settings_lock_screen_page.dart';
 import 'widgets/settings_navigation.dart';
 import 'widgets/settings_overlays_page.dart';
+import 'widgets/settings_page_header.dart';
 import 'widgets/settings_power_page.dart';
 import 'widgets/settings_shortcuts_page.dart';
 import 'widgets/settings_system_pages.dart';
 import 'widgets/settings_touchpad_page.dart';
 import 'widgets/settings_weather_page.dart';
+
+// The drill-down back affordance now lives in the page header; re-export its
+// key so existing Settings tests keep a single import surface.
+export 'widgets/settings_page_header.dart' show settingsBackButtonKey;
 
 final _englishSettings = AppLocalizationsEn();
 final settingsDesktopApplicationsProvider = FutureProvider<List<DesktopApp>>(
@@ -66,9 +70,6 @@ const double settingsWideLayoutBreakpoint = 840;
 
 /// Maximum width of a single Settings content column (§2.2).
 const double settingsContentMaxWidth = 720;
-
-/// Identifies the single-column back button for tests.
-const settingsBackButtonKey = ValueKey<String>('settings-back-button');
 
 /// Identifies the centred content column for layout asserts.
 const settingsContentColumnKey = ValueKey<String>('settings-content-column');
@@ -351,39 +352,38 @@ class _DenialSettingsApplicationState
   }
 
   Widget _buildNarrowLayout() {
-    if (_detailOpen) {
-      return _SettingsContentColumn(
-        child: _SettingsDetailScaffold(
-          onBack: _closeDetail,
-          child: _buildPageSwitcher(),
-        ),
-      );
-    }
-    return Align(
-      alignment: Alignment.topCenter,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: settingsContentMaxWidth),
-        child: SettingsNavigation(
-          selected: _page,
-          form: SettingsNavigationForm.home,
-          onSelected: _selectPage,
-        ),
-      ),
+    final child = _detailOpen
+        ? _SettingsContentColumn(
+            child: _SettingsDetailScaffold(
+              onBack: _closeDetail,
+              child: _buildPageSwitcher(),
+            ),
+          )
+        : Align(
+            alignment: Alignment.topCenter,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(
+                maxWidth: settingsContentMaxWidth,
+              ),
+              child: SettingsNavigation(
+                selected: _page,
+                form: SettingsNavigationForm.home,
+                onSelected: _selectPage,
+              ),
+            ),
+          );
+    // Drill-down in and out share one fade-through; the return enters from
+    // above (§7).
+    return SettingsPageTransition(
+      durationScale: _animationDurationScale(),
+      reverse: !_detailOpen,
+      child: KeyedSubtree(key: ValueKey<bool>(_detailOpen), child: child),
     );
   }
 
   Widget _buildPageSwitcher() {
-    return AnimatedSwitcher(
-      duration: Motion.cardSettle,
-      switchInCurve: Motion.md3EmphasizedDecelerate,
-      switchOutCurve: Motion.md3EmphasizedAccelerate,
-      layoutBuilder: (currentChild, previousChildren) {
-        return Stack(
-          alignment: Alignment.topCenter,
-          fit: StackFit.expand,
-          children: [...previousChildren, ?currentChild],
-        );
-      },
+    return SettingsPageTransition(
+      durationScale: _animationDurationScale(),
       child: KeyedSubtree(
         key: ValueKey<SettingsPageId>(_page),
         child: _SettingsPageBody(
@@ -396,6 +396,11 @@ class _DenialSettingsApplicationState
       ),
     );
   }
+
+  /// User-selected animation speed multiplier (§D4).
+  double _animationDurationScale() => ref.watch(
+    shellSettingsProvider.select((settings) => settings.animations.durationScale),
+  );
 
   void _scheduleRequestedPage(SettingsPageOpenRequest? request) {
     if (request == null || request.id == _scheduledPageRequestId) {
@@ -771,8 +776,9 @@ class _SettingsContentColumn extends StatelessWidget {
   }
 }
 
-/// Single-column detail stage: a back affordance above the page content plus an
-/// Escape shortcut that exists only while the detail is open (§3.5).
+/// Single-column detail stage: publishes the back affordance to the page
+/// header plus an Escape shortcut that exists only while the detail is open
+/// (§2.3/§3.5).
 ///
 /// The shortcut is registered above the page content, so any inner Escape
 /// binding (display dropdown, shortcut editor) resolves first and keeps working.
@@ -805,19 +811,7 @@ class _SettingsDetailScaffold extends StatelessWidget {
           // autofocus (color picker, shortcut editor, display menu) become
           // deeper focus nodes and keep their own Escape handling.
           autofocus: true,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: <Widget>[
-              Padding(
-                padding: const EdgeInsets.only(top: 16, bottom: 8),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: _SettingsBackButton(onPressed: onBack),
-                ),
-              ),
-              Expanded(child: child),
-            ],
-          ),
+          child: SettingsPageBackScope(onBack: onBack, child: child),
         ),
       ),
     );
@@ -826,77 +820,4 @@ class _SettingsDetailScaffold extends StatelessWidget {
 
 class _DismissSettingsDetailIntent extends Intent {
   const _DismissSettingsDetailIntent();
-}
-
-/// 40dp circular back affordance (§2.3).
-class _SettingsBackButton extends StatefulWidget {
-  const _SettingsBackButton({required this.onPressed});
-
-  final VoidCallback onPressed;
-
-  @override
-  State<_SettingsBackButton> createState() => _SettingsBackButtonState();
-}
-
-class _SettingsBackButtonState extends State<_SettingsBackButton> {
-  var _hovered = false;
-  var _focused = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = ShellTheme.of(context);
-    final palette = theme.accentPalette;
-    final highlighted = _hovered || _focused;
-    final motionDuration = MediaQuery.disableAnimationsOf(context)
-        ? Duration.zero
-        : Motion.tile;
-    return Semantics(
-      button: true,
-      label: context.l10n.settingsBackAction,
-      child: FocusableActionDetector(
-        mouseCursor: ShellMouseCursors.link,
-        onShowHoverHighlight: (value) => setState(() => _hovered = value),
-        onShowFocusHighlight: (value) => setState(() => _focused = value),
-        shortcuts: const <ShortcutActivator, Intent>{
-          SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
-          SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
-        },
-        actions: <Type, Action<Intent>>{
-          ActivateIntent: CallbackAction<ActivateIntent>(
-            onInvoke: (_) {
-              widget.onPressed();
-              return null;
-            },
-          ),
-        },
-        child: GestureDetector(
-          key: settingsBackButtonKey,
-          behavior: HitTestBehavior.opaque,
-          onTap: widget.onPressed,
-          child: AnimatedContainer(
-            duration: motionDuration,
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: highlighted
-                  ? context.shellColors.surfaceContainerHighest
-                  : context.shellColors.surfaceContainerHigh,
-              borderRadius: theme.borderRadius(ShellShapeScale.full),
-              border: Border.all(
-                color: _focused
-                    ? palette.primary
-                    : context.shellColors.hairline,
-                width: _focused ? 2 : 1,
-              ),
-            ),
-            child: Icon(
-              Icons.arrow_back,
-              size: 20,
-              color: palette.primary,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }
