@@ -104,6 +104,18 @@ class _SurfaceMutexTestBridge extends DenialBridge {
     ),
   );
 
+  /// Replays a compositor-originated monitor-local workspace change.
+  void emitWorkspace({required int monitorId, required int workspaceId}) =>
+      _actions.add(
+        DenialShellActionEvent(
+          action: DenialShellAction.workspaceChanged,
+          monitorId: monitorId,
+          requestId: 0,
+          textureId: null,
+          workspaceId: workspaceId,
+        ),
+      );
+
   Future<void> close() async {
     await _actions.close();
     dispose();
@@ -228,6 +240,31 @@ void main() {
       expect(container.read(desktopWorkspaceProvider).launcherOpen, isTrue);
     },
   );
+
+  testWidgets('a monitor workspace change closes an open tray bubble', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1200, 800);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final bridge = _SurfaceMutexTestBridge();
+    addTearDown(bridge.close);
+    final container = await pumpShell(tester, bridge);
+
+    container
+        .read(desktopShelfBubblesProvider.notifier)
+        .toggleTray(anchorMonitorId: 0);
+    await tester.pumpAndSettle();
+    expect(container.read(desktopShelfBubblesProvider).trayExpanded, isTrue);
+
+    bridge.emitWorkspace(monitorId: 0, workspaceId: 2);
+    await tester.pumpAndSettle();
+
+    // The bubble belongs to the workspace the user just left, so a native
+    // workspace change collapses it (A03 mutual exclusion).
+    expect(container.read(desktopShelfBubblesProvider).trayExpanded, isFalse);
+  });
 
   testWidgets(
     'clipboard hotkey closes an open tray bubble and opens the tray',

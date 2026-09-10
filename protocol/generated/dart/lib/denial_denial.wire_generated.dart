@@ -362,7 +362,8 @@ enum ShellActionKind {
   Wallpaper(9),
   WindowSwitcherPrevious(10),
   OpenSettings(11),
-  Dashboard(12);
+  Dashboard(12),
+  WorkspaceChanged(13);
 
   final int value;
   const ShellActionKind(this.value);
@@ -395,6 +396,8 @@ enum ShellActionKind {
         return ShellActionKind.OpenSettings;
       case 12:
         return ShellActionKind.Dashboard;
+      case 13:
+        return ShellActionKind.WorkspaceChanged;
       default:
         throw StateError('Invalid value $value for bit flag enum');
     }
@@ -404,7 +407,7 @@ enum ShellActionKind {
       value == null ? null : ShellActionKind.fromValue(value);
 
   static const int minValue = 0;
-  static const int maxValue = 12;
+  static const int maxValue = 13;
   static const fb.Reader<ShellActionKind> reader = _ShellActionKindReader();
 }
 
@@ -606,7 +609,29 @@ enum ShortcutActionKind {
   SwapLeft(27),
   SwapRight(28),
   SwapUp(29),
-  SwapDown(30);
+  SwapDown(30),
+  PreviousWorkspace(31),
+  NextWorkspace(32),
+  MoveToPreviousWorkspace(33),
+  MoveToNextWorkspace(34),
+  SwitchWorkspace1(35),
+  SwitchWorkspace2(36),
+  SwitchWorkspace3(37),
+  SwitchWorkspace4(38),
+  SwitchWorkspace5(39),
+  SwitchWorkspace6(40),
+  SwitchWorkspace7(41),
+  SwitchWorkspace8(42),
+  SwitchWorkspace9(43),
+  MoveToWorkspace1(44),
+  MoveToWorkspace2(45),
+  MoveToWorkspace3(46),
+  MoveToWorkspace4(47),
+  MoveToWorkspace5(48),
+  MoveToWorkspace6(49),
+  MoveToWorkspace7(50),
+  MoveToWorkspace8(51),
+  MoveToWorkspace9(52);
 
   final int value;
   const ShortcutActionKind(this.value);
@@ -675,6 +700,50 @@ enum ShortcutActionKind {
         return ShortcutActionKind.SwapUp;
       case 30:
         return ShortcutActionKind.SwapDown;
+      case 31:
+        return ShortcutActionKind.PreviousWorkspace;
+      case 32:
+        return ShortcutActionKind.NextWorkspace;
+      case 33:
+        return ShortcutActionKind.MoveToPreviousWorkspace;
+      case 34:
+        return ShortcutActionKind.MoveToNextWorkspace;
+      case 35:
+        return ShortcutActionKind.SwitchWorkspace1;
+      case 36:
+        return ShortcutActionKind.SwitchWorkspace2;
+      case 37:
+        return ShortcutActionKind.SwitchWorkspace3;
+      case 38:
+        return ShortcutActionKind.SwitchWorkspace4;
+      case 39:
+        return ShortcutActionKind.SwitchWorkspace5;
+      case 40:
+        return ShortcutActionKind.SwitchWorkspace6;
+      case 41:
+        return ShortcutActionKind.SwitchWorkspace7;
+      case 42:
+        return ShortcutActionKind.SwitchWorkspace8;
+      case 43:
+        return ShortcutActionKind.SwitchWorkspace9;
+      case 44:
+        return ShortcutActionKind.MoveToWorkspace1;
+      case 45:
+        return ShortcutActionKind.MoveToWorkspace2;
+      case 46:
+        return ShortcutActionKind.MoveToWorkspace3;
+      case 47:
+        return ShortcutActionKind.MoveToWorkspace4;
+      case 48:
+        return ShortcutActionKind.MoveToWorkspace5;
+      case 49:
+        return ShortcutActionKind.MoveToWorkspace6;
+      case 50:
+        return ShortcutActionKind.MoveToWorkspace7;
+      case 51:
+        return ShortcutActionKind.MoveToWorkspace8;
+      case 52:
+        return ShortcutActionKind.MoveToWorkspace9;
       default:
         throw StateError('Invalid value $value for bit flag enum');
     }
@@ -684,7 +753,7 @@ enum ShortcutActionKind {
       value == null ? null : ShortcutActionKind.fromValue(value);
 
   static const int minValue = 0;
-  static const int maxValue = 30;
+  static const int maxValue = 52;
   static const fb.Reader<ShortcutActionKind> reader =
       _ShortcutActionKindReader();
 }
@@ -3362,10 +3431,11 @@ class ShellAction {
   bool get hasMonitorId =>
       const fb.BoolReader().vTableGet(_bc, _bcOffset, 8, false);
   int get textureId => const fb.Int64Reader().vTableGet(_bc, _bcOffset, 10, 0);
+  int get workspaceId => const fb.Uint32Reader().vTableGet(_bc, _bcOffset, 12, 1);
 
   @override
   String toString() {
-    return 'ShellAction{action: ${action}, monitorId: ${monitorId}, hasMonitorId: ${hasMonitorId}, textureId: ${textureId}}';
+    return 'ShellAction{action: ${action}, monitorId: ${monitorId}, hasMonitorId: ${hasMonitorId}, textureId: ${textureId}, workspaceId: ${workspaceId}}';
   }
 }
 
@@ -3383,7 +3453,7 @@ class ShellActionBuilder {
   final fb.Builder fbBuilder;
 
   void begin() {
-    fbBuilder.startTable(4);
+    fbBuilder.startTable(5);
   }
 
   int addAction(ShellActionKind? action) {
@@ -3406,6 +3476,11 @@ class ShellActionBuilder {
     return fbBuilder.offset;
   }
 
+  int addWorkspaceId(int? workspaceId) {
+    fbBuilder.addUint32(4, workspaceId);
+    return fbBuilder.offset;
+  }
+
   int finish() {
     return fbBuilder.endTable();
   }
@@ -3416,25 +3491,29 @@ class ShellActionObjectBuilder extends fb.ObjectBuilder {
   final int? _monitorId;
   final bool? _hasMonitorId;
   final int? _textureId;
+  final int? _workspaceId;
 
   ShellActionObjectBuilder({
     ShellActionKind? action,
     int? monitorId,
     bool? hasMonitorId,
     int? textureId,
+    int? workspaceId,
   })  : _action = action,
         _monitorId = monitorId,
         _hasMonitorId = hasMonitorId,
-        _textureId = textureId;
+        _textureId = textureId,
+        _workspaceId = workspaceId;
 
   /// Finish building, and store into the [fbBuilder].
   @override
   int finish(fb.Builder fbBuilder) {
-    fbBuilder.startTable(4);
+    fbBuilder.startTable(5);
     fbBuilder.addUint8(0, _action?.value);
     fbBuilder.addInt64(1, _monitorId);
     fbBuilder.addBool(2, _hasMonitorId);
     fbBuilder.addInt64(3, _textureId);
+    fbBuilder.addUint32(4, _workspaceId);
     return fbBuilder.endTable();
   }
 

@@ -8,7 +8,9 @@ import '../input/input_layout.dart';
 import '../input/input_layout_debug.dart';
 import '../input/shell_interaction_registry.dart';
 import '../models/denial_window.dart';
+import '../settings/settings_controller.dart';
 import '../state/desktop_window_switcher.dart';
+import '../state/display_layout.dart';
 import '../state/shell_controller.dart';
 import 'desktop_workspace.dart';
 
@@ -43,6 +45,13 @@ class _DesktopInputLayoutPublisherState
       desktopWorkspaceProvider.select((state) => state.inputLayoutRevision),
     );
     ref.watch(desktopWindowSwitcherProvider);
+    ref.watch(
+      shellSettingsProvider.select(
+        (settings) =>
+            (settings.layout.workspacesEnabled, settings.layout.workspaceCount),
+      ),
+    );
+    ref.watch(displayLayoutProvider);
     ref.watch(shellInteractionRegistryProvider);
     _debugInputRegions = inputRegionDebugEnabled(
       ref.watch(startupEnvironmentProvider),
@@ -67,6 +76,21 @@ class _DesktopInputLayoutPublisherState
 
       final shell = ref.read(shellControllerProvider);
       final windows = shell.windows;
+      // Mirror the native workspace policy before reconciling placements so a
+      // window's workspace membership is evaluated against the live set.
+      final layoutSettings = ref.read(shellSettingsProvider).layout;
+      final displayLayout = ref.read(displayLayoutProvider);
+      ref
+          .read(desktopWorkspaceProvider.notifier)
+          .syncWorkspaceConfiguration(
+            enabled: layoutSettings.workspacesEnabled,
+            count: layoutSettings.workspaceCount,
+            monitorIds:
+                displayLayout?.outputs.map((output) => output.monitorId) ??
+                windows
+                    .where((window) => window.monitorId >= 0)
+                    .map((window) => window.monitorId),
+          );
       ref
           .read(desktopWorkspaceProvider.notifier)
           .syncWindows(
@@ -121,6 +145,8 @@ class _DesktopInputLayoutPublisherState
                   (!placement.minimized ||
                       desktop.isInOverview(placement.objectId) ||
                       sampledSwitcherIds.contains(placement.objectId)) &&
+                  (desktop.isPlacementOnActiveWorkspace(placement) ||
+                      desktop.isInOverview(placement.objectId)) &&
                   windowsById.containsKey(placement.objectId),
             )
             .toList(growable: false)

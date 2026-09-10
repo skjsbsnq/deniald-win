@@ -697,7 +697,10 @@ impl WaylandFrontend {
         let input_method_editor_rectangle = self.input_method_editor_rectangle_global();
         let input_method_popups = self.input_method.visible_popups();
         let mut window_count = 0;
-        for window in self.space.elements() {
+        // Workspace reconciliation mutates the frontend's ownership maps below,
+        // so the scene list cannot hold a live borrow of `self.space`.
+        let scene_windows = self.space.elements().cloned().collect::<Vec<_>>();
+        for window in &scene_windows {
             let Some(surface) = self.window_root_surface(window) else {
                 continue;
             };
@@ -872,6 +875,24 @@ impl WaylandFrontend {
                 .output_for_geometry(geometry)
                 .and_then(|entry| i64::try_from(entry.id.0).ok())
                 .unwrap_or(-1);
+            // Monitor-local workspace ownership. A transient window without an
+            // assignment of its own inherits its parent's membership so dialogs
+            // never vanish with the workspace of a different monitor.
+            let minimized = self.minimized_windows.contains(&surface.id());
+            if !minimized
+                && self.workspace_location(stable_id).is_none()
+                && let Some(parent_id) = self.transient_parent_stable_id(window)
+                && let Some(parent_location) = self.workspace_location(parent_id)
+            {
+                self.window_workspaces.insert(stable_id, parent_location);
+            }
+            let workspace_id = self
+                .output_for_geometry(geometry)
+                .map(|entry| entry.id)
+                .and_then(|output| {
+                    self.reconcile_workspace_assignment(stable_id, output, minimized)
+                })
+                .map_or(-1, |location| i64::from(location.workspace));
             let (suppress_animations, server_side_decorated, window_opacity) = x11
                 .as_ref()
                 .map(|x11| {
@@ -923,6 +944,8 @@ impl WaylandFrontend {
                 geometry_width: f64::from(geometry.size.w),
                 geometry_height: f64::from(geometry.size.h),
                 monitor_id,
+                workspace_id,
+                minimized,
                 transform,
                 scale_120,
                 content_x: f64::from(content.loc.x),
@@ -943,7 +966,10 @@ impl WaylandFrontend {
             }
             window_count += 1;
         }
-        for local_window in self.local_windows.iter() {
+        // Local windows reconcile workspace ownership below, so iterate a
+        // snapshot instead of holding a borrow of `self.local_windows`.
+        let local_scene_windows = self.local_windows.iter().cloned().collect::<Vec<_>>();
+        for local_window in &local_scene_windows {
             let width = local_window
                 .geometry
                 .width
@@ -976,6 +1002,14 @@ impl WaylandFrontend {
                 .output_for_geometry(global_geometry)
                 .and_then(|entry| i64::try_from(entry.id.0).ok())
                 .unwrap_or(-1);
+            let minimized = self.minimized_local_windows.contains(&local_window.id);
+            let workspace_id = self
+                .output_for_geometry(global_geometry)
+                .map(|entry| entry.id)
+                .and_then(|output| {
+                    self.reconcile_workspace_assignment(local_window.id, output, minimized)
+                })
+                .map_or(-1, |location| i64::from(location.workspace));
             let (mut title, mut app_id, mut surfaces) = windows
                 .get_mut(window_count)
                 .map(|previous| {
@@ -1013,6 +1047,8 @@ impl WaylandFrontend {
                 geometry_width: local_window.geometry.width,
                 geometry_height: local_window.geometry.height,
                 monitor_id,
+                workspace_id,
+                minimized,
                 transform: 0,
                 scale_120: 120,
                 content_x: 0.0,
@@ -1154,6 +1190,10 @@ impl WaylandFrontend {
                     geometry_width: f64::from(geometry.size.w),
                     geometry_height: f64::from(geometry.size.h),
                     monitor_id,
+                    // Software-keyboard surfaces are compositor chrome, not
+                    // workspace members.
+                    workspace_id: 1,
+                    minimized: false,
                     transform,
                     scale_120,
                     content_x: min_x,

@@ -3787,4 +3787,46 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get weatherMetricUv => '紫外线';
+
+  @override
+  String get desktopWorkspaceDesk => '桌面';
+
+  @override
+  String get desktopWorkspaceSwitch => '切换工作区';
+
+  @override
+  String get settingsWorkspaceCount => '工作区数量';
+
+  @override
+  String get settingsWorkspacesDescription => '为每台显示器提供各自独立的可切换工作区，并支持滑动切换。';
+
+  @override
+  String get settingsWorkspacesEnable => '启用工作区';
+
+  @override
+  String get settingsWorkspacesTitle => '工作区';
+
+  @override
+  String get settingsShortcutActionMoveToNextWorkspace => '窗口移至下一个工作区';
+
+  @override
+  String get settingsShortcutActionMoveToPreviousWorkspace => '窗口移至上一个工作区';
+
+  @override
+  String get settingsShortcutActionMoveToWorkspace => '窗口移至工作区';
+
+  @override
+  String get settingsShortcutActionNextWorkspace => '下一个工作区';
+
+  @override
+  String get settingsShortcutActionPreviousWorkspace => '上一个工作区';
+
+  @override
+  String get settingsShortcutActionSwitchWorkspace => '切换到工作区';
+
+  @override
+  String get settingsShortcutGestureFourFingerSwipeLeft => '四指左滑';
+
+  @override
+  String get settingsShortcutGestureFourFingerSwipeRight => '四指右滑';
 }

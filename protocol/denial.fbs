@@ -90,7 +90,10 @@ enum ShellActionKind : ubyte {
   Wallpaper = 9,
   WindowSwitcherPrevious = 10,
   OpenSettings = 11,
-  Dashboard = 12
+  Dashboard = 12,
+  // Appended for wire compatibility. Emitted after a monitor-local workspace
+  // switch so the embedded shell can animate its window transition.
+  WorkspaceChanged = 13
 }
 
 enum KeyboardCommandKind : ubyte {
@@ -153,7 +156,31 @@ enum ShortcutActionKind : ubyte {
   SwapLeft = 27,
   SwapRight = 28,
   SwapUp = 29,
-  SwapDown = 30
+  SwapDown = 30,
+  // Monitor-local workspace actions (upstream fdb986e). Append-only so every
+  // previously published value keeps its wire encoding.
+  PreviousWorkspace = 31,
+  NextWorkspace = 32,
+  MoveToPreviousWorkspace = 33,
+  MoveToNextWorkspace = 34,
+  SwitchWorkspace1 = 35,
+  SwitchWorkspace2 = 36,
+  SwitchWorkspace3 = 37,
+  SwitchWorkspace4 = 38,
+  SwitchWorkspace5 = 39,
+  SwitchWorkspace6 = 40,
+  SwitchWorkspace7 = 41,
+  SwitchWorkspace8 = 42,
+  SwitchWorkspace9 = 43,
+  MoveToWorkspace1 = 44,
+  MoveToWorkspace2 = 45,
+  MoveToWorkspace3 = 46,
+  MoveToWorkspace4 = 47,
+  MoveToWorkspace5 = 48,
+  MoveToWorkspace6 = 49,
+  MoveToWorkspace7 = 50,
+  MoveToWorkspace8 = 51,
+  MoveToWorkspace9 = 52
 }
 
 enum ShortcutInputKind : ubyte {
@@ -463,6 +490,10 @@ table ShellAction {
   monitor_id:long = -1;
   has_monitor_id:bool;
   texture_id:long;
+  // WorkspaceChanged only. One-based and scoped by monitor_id.
+  // Appended for wire compatibility: older senders/receivers default to the
+  // first workspace.
+  workspace_id:uint = 1;
 }
 
 // Rust-authoritative software cursor state. Flutter cursor intents and

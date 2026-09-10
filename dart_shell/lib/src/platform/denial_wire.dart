@@ -202,6 +202,8 @@ class DenialWireCodec {
     generated.SystemBarSide? systemBarSide,
     List<int>? systemBarMonitorIds,
     int flags = 0,
+    int? monitorId,
+    int? workspaceId,
   }) {
     return _encodeEnvelope(
       generated.PayloadTypeId.WindowRequest,
@@ -214,6 +216,8 @@ class DenialWireCodec {
         systemBarSide: systemBarSide,
         systemBarMonitorIds: systemBarMonitorIds,
         flags: flags,
+        monitorId: monitorId,
+        workspaceId: workspaceId,
       ),
       requestId: requestId,
     );
@@ -1382,6 +1386,8 @@ class DenialWireCodec {
           geometryWidth: window.geometryWidth,
           geometryHeight: window.geometryHeight,
           monitorId: window.monitorId,
+          workspaceId: window.workspaceId,
+          minimized: window.minimized,
           transform: window.transform,
           scale120: window.scale120,
           pinned: window.pinned,

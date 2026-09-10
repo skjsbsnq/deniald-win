@@ -13,6 +13,8 @@ class SettingsLayoutPage extends StatelessWidget {
     required this.settings,
     required this.displayLayout,
     required this.onWindowLayoutChanged,
+    required this.onWorkspacesEnabledChanged,
+    required this.onWorkspaceCountChanged,
     required this.onSystemBarChanged,
     required this.onSystemBarThicknessChanged,
     required this.onMaximizePaddingChanged,
@@ -27,6 +29,8 @@ class SettingsLayoutPage extends StatelessWidget {
   final ShellLayoutSettings settings;
   final DisplayLayout? displayLayout;
   final ValueChanged<DesktopWindowLayout> onWindowLayoutChanged;
+  final ValueChanged<bool> onWorkspacesEnabledChanged;
+  final ValueChanged<double> onWorkspaceCountChanged;
   final SystemBarPlacementChanged onSystemBarChanged;
   final ValueChanged<double> onSystemBarThicknessChanged;
   final ValueChanged<double> onMaximizePaddingChanged;
@@ -75,6 +79,38 @@ class SettingsLayoutPage extends StatelessWidget {
                       fontSize: 11,
                       height: 1.4,
                     ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        SettingsCardGroup(
+          children: [
+            SettingsSection(
+              title: l10n.settingsWorkspacesTitle,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  SettingsToggle(
+                    key: const ValueKey<String>(
+                      'settings-workspaces-enabled-toggle',
+                    ),
+                    label: l10n.settingsWorkspacesEnable,
+                    description: l10n.settingsWorkspacesDescription,
+                    value: settings.workspacesEnabled,
+                    onChanged: onWorkspacesEnabledChanged,
+                  ),
+                  const SizedBox(height: 18),
+                  SettingsSlider(
+                    label: l10n.settingsWorkspaceCount,
+                    value: settings.workspaceCount.toDouble(),
+                    minimum: minimumWorkspaceCount.toDouble(),
+                    maximum: maximumWorkspaceCount.toDouble(),
+                    divisions: maximumWorkspaceCount - minimumWorkspaceCount,
+                    valueLabel: settings.workspaceCount.toString(),
+                    onChanged: onWorkspaceCountChanged,
+                    enabled: settings.workspacesEnabled,
                   ),
                 ],
               ),

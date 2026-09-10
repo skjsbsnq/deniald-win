@@ -224,6 +224,52 @@ impl WireBridge {
                 )?;
                 Ok(Some(self.outbound_builder.finished_data()))
             }
+            fb::WindowRequestKind::SwitchWorkspace => {
+                if request_id != 0 {
+                    return Err(WireError::RequestId);
+                }
+                if self.pending_window_commands.len() >= MAX_PENDING_WINDOW_COMMANDS {
+                    return Err(WireError::Count);
+                }
+                let monitor_id = request.monitor_id();
+                let workspace_id = u8::try_from(request.workspace_id())
+                    .ok()
+                    .filter(|workspace| (1..=9).contains(workspace))
+                    .ok_or(WireError::Identity)?;
+                if monitor_id < 0 {
+                    return Err(WireError::Identity);
+                }
+                self.pending_window_commands
+                    .push_back(WindowCommand::SwitchWorkspace {
+                        monitor_id,
+                        workspace_id,
+                    });
+                Ok(None)
+            }
+            fb::WindowRequestKind::MoveWindowToWorkspace => {
+                if request_id != 0 {
+                    return Err(WireError::RequestId);
+                }
+                if self.pending_window_commands.len() >= MAX_PENDING_WINDOW_COMMANDS {
+                    return Err(WireError::Count);
+                }
+                let window_id = request.window_id();
+                let workspace_id = u8::try_from(request.workspace_id())
+                    .ok()
+                    .filter(|workspace| (1..=9).contains(workspace))
+                    .ok_or(WireError::Identity)?;
+                if window_id == 0 || request.flags() & !1 != 0 {
+                    return Err(WireError::Identity);
+                }
+                self.pending_window_commands
+                    .push_back(WindowCommand::MoveToWorkspace {
+                        window_id,
+                        monitor_id: (request.monitor_id() >= 0).then(|| request.monitor_id()),
+                        workspace_id,
+                        follow: request.flags() & 1 != 0,
+                    });
+                Ok(None)
+            }
             kind @ (fb::WindowRequestKind::CloseWindow
             | fb::WindowRequestKind::FocusWindow
             | fb::WindowRequestKind::MinimizeWindow

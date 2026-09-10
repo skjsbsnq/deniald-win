@@ -542,6 +542,8 @@ class _SettingsPageBody extends ConsumerWidget {
           settings: settings,
           displayLayout: displayLayout,
           onWindowLayoutChanged: controller.setDesktopWindowLayout,
+          onWorkspacesEnabledChanged: controller.setWorkspacesEnabled,
+          onWorkspaceCountChanged: controller.setWorkspaceCount,
           onSystemBarChanged: (side, monitorIds) {
             final outputNames = <String>[
               for (final output

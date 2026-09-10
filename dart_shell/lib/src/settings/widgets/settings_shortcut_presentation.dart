@@ -11,6 +11,10 @@ String settingsShortcutDisplay(BuildContext context, String shortcut) {
       context.l10n.settingsShortcutGestureThreeFingerSwipeLeft,
     'ThreeFingerSwipeRight' =>
       context.l10n.settingsShortcutGestureThreeFingerSwipeRight,
+    'FourFingerSwipeLeft' =>
+      context.l10n.settingsShortcutGestureFourFingerSwipeLeft,
+    'FourFingerSwipeRight' =>
+      context.l10n.settingsShortcutGestureFourFingerSwipeRight,
     _ => null,
   };
   if (gesture != null) return gesture.toUpperCase();
@@ -30,6 +34,12 @@ String settingsShortcutActionLabel(
   DenialShortcutAction action,
 ) {
   final l10n = context.l10n;
+  final workspace = action.workspaceNumber;
+  if (workspace != null) {
+    return action.movesWindowToWorkspace
+        ? '${l10n.settingsShortcutActionMoveToWorkspace} $workspace'
+        : '${l10n.settingsShortcutActionSwitchWorkspace} $workspace';
+  }
   return switch (action) {
     DenialShortcutAction.shutdown => l10n.settingsShortcutActionShutdown,
     DenialShortcutAction.openApplications =>
@@ -79,6 +89,15 @@ String settingsShortcutActionLabel(
     DenialShortcutAction.swapRight => l10n.settingsShortcutActionSwapRight,
     DenialShortcutAction.swapUp => l10n.settingsShortcutActionSwapUp,
     DenialShortcutAction.swapDown => l10n.settingsShortcutActionSwapDown,
+    DenialShortcutAction.previousWorkspace =>
+      l10n.settingsShortcutActionPreviousWorkspace,
+    DenialShortcutAction.nextWorkspace =>
+      l10n.settingsShortcutActionNextWorkspace,
+    DenialShortcutAction.moveToPreviousWorkspace =>
+      l10n.settingsShortcutActionMoveToPreviousWorkspace,
+    DenialShortcutAction.moveToNextWorkspace =>
+      l10n.settingsShortcutActionMoveToNextWorkspace,
+    _ => throw StateError('unhandled numbered workspace shortcut'),
   };
 }
 
@@ -153,6 +172,10 @@ IconData settingsShortcutActionIcon(DenialShortcutAction action) {
     DenialShortcutAction.swapRight => Icons.arrow_forward_rounded,
     DenialShortcutAction.swapUp => Icons.arrow_upward_rounded,
     DenialShortcutAction.swapDown => Icons.arrow_downward_rounded,
+    _ =>
+      action.movesWindowToWorkspace
+          ? Icons.drive_file_move_outline
+          : Icons.space_dashboard_outlined,
   };
 }
 

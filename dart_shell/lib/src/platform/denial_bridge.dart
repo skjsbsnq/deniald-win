@@ -37,6 +37,7 @@ enum DenialShellAction {
   clientPointerPressed,
   wallpaper,
   openSettings,
+  workspaceChanged,
 }
 
 class DenialShellActionEvent {
@@ -45,12 +46,16 @@ class DenialShellActionEvent {
     required this.monitorId,
     required this.requestId,
     required this.textureId,
+    this.workspaceId,
   });
 
   final DenialShellAction action;
   final int? monitorId;
   final int requestId;
   final int? textureId;
+
+  /// One-based monitor-local workspace for [DenialShellAction.workspaceChanged].
+  final int? workspaceId;
 }
 
 class DenialAudioState {
@@ -1390,6 +1395,47 @@ class DenialBridge {
     );
   }
 
+  /// Switches one monitor to a one-based monitor-local workspace.
+  ///
+  /// The compositor stays authoritative: the resulting
+  /// [DenialShellAction.workspaceChanged] echo is what updates shell state.
+  void switchWorkspace({required int monitorId, required int workspaceId}) {
+    if (monitorId < 0 || workspaceId < 1 || workspaceId > 9) {
+      return;
+    }
+    _sendWire(
+      _wireCodec.encodeWindowRequest(
+        wire.WindowRequestKind.SwitchWorkspace,
+        monitorId: monitorId,
+        workspaceId: workspaceId,
+      ),
+    );
+  }
+
+  /// Moves a window to another monitor-local workspace.
+  ///
+  /// [follow] also switches the destination monitor to [workspaceId] so the
+  /// moved window stays visible.
+  void moveWindowToWorkspace(
+    DenialWindow window, {
+    int? monitorId,
+    required int workspaceId,
+    bool follow = true,
+  }) {
+    if (window.windowId <= 0 || workspaceId < 1 || workspaceId > 9) {
+      return;
+    }
+    _sendWire(
+      _wireCodec.encodeWindowRequest(
+        wire.WindowRequestKind.MoveWindowToWorkspace,
+        windowId: window.windowId,
+        monitorId: monitorId,
+        workspaceId: workspaceId,
+        flags: follow ? 1 : 0,
+      ),
+    );
+  }
+
   void configureWindow(
     DenialWindow window,
     Rect contentRect, {
@@ -2584,6 +2630,8 @@ class DenialBridge {
             DenialShellAction.clientPointerPressed,
           wire.ShellActionKind.Wallpaper => DenialShellAction.wallpaper,
           wire.ShellActionKind.OpenSettings => DenialShellAction.openSettings,
+          wire.ShellActionKind.WorkspaceChanged =>
+            DenialShellAction.workspaceChanged,
         };
         if (!_shellActions.isClosed) {
           _shellActions.add(
@@ -2594,6 +2642,11 @@ class DenialBridge {
                   : null,
               requestId: decoded.requestId,
               textureId: payload.textureId > 0 ? payload.textureId : null,
+              workspaceId:
+                  action == DenialShellAction.workspaceChanged &&
+                      payload.workspaceId > 0
+                  ? payload.workspaceId
+                  : null,
             ),
           );
         }

@@ -303,6 +303,9 @@ impl WaylandFrontend {
             });
         }
         self.outputs.sort_by_key(|entry| entry.id);
+        // Workspace ownership follows the surviving outputs: disconnected
+        // outputs migrate their windows, reconnected ones start fresh.
+        self.reconcile_workspace_outputs();
 
         let new_output_geometries = self
             .outputs

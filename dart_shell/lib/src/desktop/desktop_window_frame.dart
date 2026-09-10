@@ -1,5 +1,90 @@
 part of 'desktop_shell.dart';
 
+/// Logical bounds of the output hosting [monitorId], or null when the layout
+/// has not published that monitor yet.
+Rect? desktopWorkspaceOutputRect(DisplayLayout? layout, int monitorId) {
+  for (final output in layout?.outputs ?? const <DisplayOutput>[]) {
+    if (output.monitorId == monitorId) {
+      return output.logicalRect;
+    }
+  }
+  return null;
+}
+
+/// Slides one window horizontally while its monitor changes workspace.
+///
+/// A normal window belongs to exactly one monitor-local workspace, so only the
+/// outgoing and incoming workspaces of the animating monitor participate. The
+/// travel distance is the output width; the transition clips to the output so
+/// an off-screen neighbour can never paint over adjacent chrome.
+class DesktopWorkspaceWindowTransition extends StatelessWidget {
+  const DesktopWorkspaceWindowTransition({
+    required this.placement,
+    required this.transition,
+    required this.outputRect,
+    required this.duration,
+    required this.child,
+    super.key,
+  });
+
+  final DesktopWindowPlacement placement;
+  final DesktopWorkspaceTransition? transition;
+  final Rect? outputRect;
+  final Duration duration;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final transition = this.transition;
+    final resolvedOutput = outputRect;
+    final travel = resolvedOutput?.width.isFinite == true
+        ? resolvedOutput!.width
+        : placement.frame.width;
+    final participates =
+        !placement.minimized &&
+        transition != null &&
+        (placement.workspaceId == transition.fromWorkspace ||
+            placement.workspaceId == transition.toWorkspace);
+    final entering =
+        participates && placement.workspaceId == transition.toWorkspace;
+    final outgoing =
+        participates && placement.workspaceId == transition.fromWorkspace;
+    final direction = participates ? transition.direction.toDouble() : 0.0;
+    return ClipPath(
+      clipper: participates && resolvedOutput != null
+          ? _WorkspaceOutputClipper(
+              resolvedOutput.shift(-placement.frame.topLeft),
+            )
+          : null,
+      clipBehavior: participates ? Clip.hardEdge : Clip.none,
+      child: TweenAnimationBuilder<Offset>(
+        tween: Tween<Offset>(
+          begin: entering ? Offset(direction * travel, 0) : Offset.zero,
+          end: outgoing ? Offset(-direction * travel, 0) : Offset.zero,
+        ),
+        duration: participates ? duration : Duration.zero,
+        curve: Motion.md3Emphasized,
+        child: child,
+        builder: (context, offset, child) =>
+            Transform.translate(offset: offset, child: child),
+      ),
+    );
+  }
+}
+
+class _WorkspaceOutputClipper extends CustomClipper<Path> {
+  const _WorkspaceOutputClipper(this.outputRect);
+
+  final Rect outputRect;
+
+  @override
+  Path getClip(Size size) => Path()..addRect(outputRect);
+
+  @override
+  bool shouldReclip(covariant _WorkspaceOutputClipper oldClipper) =>
+      oldClipper.outputRect != outputRect;
+}
+
 class _ClosingDesktopWindow {
   const _ClosingDesktopWindow({
     required this.id,
@@ -136,6 +221,16 @@ class _DesktopWindowFrame extends ConsumerWidget {
         liveGeometry?.dragging == true &&
         selectedPlacement != null;
     final placement = followsLivePlacement ? selectedPlacement : this.placement;
+    final workspaceTransition = ref.watch(
+      desktopWorkspaceProvider.select(
+        (state) => state.workspaceTransitions[placement.monitorId],
+      ),
+    );
+    final workspaceOutputRect = ref.watch(
+      displayLayoutProvider.select(
+        (layout) => desktopWorkspaceOutputRect(layout, placement.monitorId),
+      ),
+    );
     final liveFrame = followsLivePlacement
         ? desktopLivePlacementVisualFrame(
             visualFrame: this.frame,
@@ -194,6 +289,9 @@ class _DesktopWindowFrame extends ConsumerWidget {
       rect: frame,
       layoutRect: transformed ? placement.frame : null,
       placementObjectId: placement.objectId,
+      placement: placement,
+      workspaceTransition: workspaceTransition,
+      workspaceOutputRect: workspaceOutputRect,
       overview: overview,
       switching: switching,
       desktopWidget: desktopWidget,
@@ -209,6 +307,10 @@ class _DesktopWindowFrame extends ConsumerWidget {
         child: DesktopWindowReveal(
           key: ValueKey<String>('desktop-window-content-${window.objectId}'),
           enabled: window.shouldAnimateEntrance,
+          // A window entering the scene because its workspace is animating
+          // back in is an existing window, not a new application entrance.
+          suppressInitialAnimation:
+              workspaceTransition != null && !placement.minimized,
           child: IgnorePointer(
             ignoring:
                 minimized ||
@@ -322,6 +424,9 @@ class _DesktopAnimatedWindowPosition extends ConsumerStatefulWidget {
     required this.rect,
     this.layoutRect,
     required this.placementObjectId,
+    this.placement,
+    this.workspaceTransition,
+    this.workspaceOutputRect,
     required this.overview,
     required this.switching,
     this.desktopWidget = false,
@@ -337,6 +442,13 @@ class _DesktopAnimatedWindowPosition extends ConsumerStatefulWidget {
   final Rect rect;
   final Rect? layoutRect;
   final int placementObjectId;
+
+  /// The window's own placement. Popup surface layers omit it because they
+  /// paint into a canvas-sized stack where the workspace clip geometry of the
+  /// owning window does not apply; they keep their existing presentation.
+  final DesktopWindowPlacement? placement;
+  final DesktopWorkspaceTransition? workspaceTransition;
+  final Rect? workspaceOutputRect;
   final bool overview;
   final bool switching;
   final bool desktopWidget;
@@ -458,7 +570,17 @@ class _DesktopAnimatedWindowPositionState
         translation: liveTranslation,
         enabled: widget.dragging,
         devicePixelRatio: pixelAlignmentInset == null ? null : devicePixelRatio,
-        child: widget.child,
+        child: widget.placement == null
+            ? widget.child
+            : DesktopWorkspaceWindowTransition(
+                placement: widget.placement!,
+                transition: widget.workspaceTransition,
+                outputRect: widget.workspaceOutputRect,
+                duration: MediaQuery.disableAnimationsOf(context)
+                    ? Duration.zero
+                    : Motion.workspaceSwitch,
+                child: widget.child,
+              ),
       ),
     );
   }

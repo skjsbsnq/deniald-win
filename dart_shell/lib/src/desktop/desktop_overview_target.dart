@@ -76,6 +76,11 @@ class DesktopOverviewTarget {
       if (!DesktopOverviewLayout.isUsefulPreview(placement.frame)) {
         continue;
       }
+      // Another workspace's windows are not part of this overview.
+      if (!placement.minimized &&
+          !workspace.isPlacementOnActiveWorkspace(placement)) {
+        continue;
+      }
       final belongsToOutput = switch ((output, fallbackMonitorId)) {
         (final DisplayOutput targetOutput, _) when placement.monitorId >= 0 =>
           placement.monitorId == targetOutput.monitorId,

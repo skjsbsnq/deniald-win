@@ -409,6 +409,11 @@ List<Widget> _buildDesktopWindowLayers({
 }) {
   final layers = <Widget>[];
   for (final placement in placements) {
+    // Windows of another workspace are only on screen while their monitor's
+    // slide transition still presents the outgoing or incoming workspace.
+    if (!placement.minimized && !desktop.isPlacementPresented(placement)) {
+      continue;
+    }
     final window = windowsById[placement.objectId]!;
     final overview = desktop.isInOverview(placement.objectId);
     final switching =
@@ -943,7 +948,12 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
     );
     final windowsById = topology.windowsById;
     final inputMethodPopups = topology.inputMethodPopups;
-    final placements = topology.placements;
+    final placements = topology.placements
+        .where(
+          (placement) =>
+              placement.minimized || desktop.isPlacementPresented(placement),
+        )
+        .toList(growable: false);
     final homeSlots = ref.watch(
       homeGridControllerProvider.select((state) => state.asData?.value.slots),
     );
@@ -976,7 +986,15 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
       homeSlots: homeSlots,
       hasBatteryData: hasBatteryData,
     );
-    final topZ = topology.topZ;
+    // Rising above another workspace's window must not raise the shell's
+    // z-order for windows the user cannot see.
+    final topZ = placements
+        .where(
+          (placement) =>
+              !placement.minimized &&
+              desktop.isPlacementOnActiveWorkspace(placement),
+        )
+        .fold<int>(0, (value, placement) => math.max(value, placement.z));
     final systemBars = _systemBarGeometries(viewSize, displayLayout);
     // True fullscreen owns the complete output, so the bar yields instead of
     // floating above the fullscreen surface.
@@ -1072,6 +1090,7 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
                       child: useChromeOsShelf
                           ? ShelfLayer(
                               height: bar.rect.height,
+                              monitorId: bar.monitorId,
                               onLauncherPressed: () {
                                 shelfBubbles.close();
                                 onOpenLauncher();

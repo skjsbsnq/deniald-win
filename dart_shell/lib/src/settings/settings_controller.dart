@@ -305,6 +305,25 @@ class ShellSettingsController extends Notifier<ShellSettings> {
     _update(state.copyWith(layout: state.layout.copyWith(windowLayout: value)));
   }
 
+  void setWorkspacesEnabled(bool value) {
+    _update(
+      state.copyWith(layout: state.layout.copyWith(workspacesEnabled: value)),
+    );
+  }
+
+  void setWorkspaceCount(double value) {
+    _update(
+      state.copyWith(
+        layout: state.layout.copyWith(
+          workspaceCount: value.round().clamp(
+            minimumWorkspaceCount,
+            maximumWorkspaceCount,
+          ),
+        ),
+      ),
+    );
+  }
+
   void setUseChromeOsShelf(bool value) {
     _update(
       state.copyWith(layout: state.layout.copyWith(useChromeOsShelf: value)),

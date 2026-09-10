@@ -804,9 +804,10 @@ impl ShellActionKind {
   pub const WindowSwitcherPrevious: Self = Self(10);
   pub const OpenSettings: Self = Self(11);
   pub const Dashboard: Self = Self(12);
+  pub const WorkspaceChanged: Self = Self(13);
 
   pub const ENUM_MIN: u8 = 0;
-  pub const ENUM_MAX: u8 = 12;
+  pub const ENUM_MAX: u8 = 13;
   pub const ENUM_VALUES: &'static [Self] = &[
     Self::Applications,
     Self::Overview,
@@ -821,6 +822,7 @@ impl ShellActionKind {
     Self::WindowSwitcherPrevious,
     Self::OpenSettings,
     Self::Dashboard,
+    Self::WorkspaceChanged,
   ];
   /// Returns the variant's name or "" if unknown.
   pub fn variant_name(self) -> Option<&'static str> {
@@ -838,6 +840,7 @@ impl ShellActionKind {
       Self::WindowSwitcherPrevious => Some("WindowSwitcherPrevious"),
       Self::OpenSettings => Some("OpenSettings"),
       Self::Dashboard => Some("Dashboard"),
+      Self::WorkspaceChanged => Some("WorkspaceChanged"),
       _ => None,
     }
   }
@@ -1280,9 +1283,31 @@ impl ShortcutActionKind {
   pub const SwapRight: Self = Self(28);
   pub const SwapUp: Self = Self(29);
   pub const SwapDown: Self = Self(30);
+  pub const PreviousWorkspace: Self = Self(31);
+  pub const NextWorkspace: Self = Self(32);
+  pub const MoveToPreviousWorkspace: Self = Self(33);
+  pub const MoveToNextWorkspace: Self = Self(34);
+  pub const SwitchWorkspace1: Self = Self(35);
+  pub const SwitchWorkspace2: Self = Self(36);
+  pub const SwitchWorkspace3: Self = Self(37);
+  pub const SwitchWorkspace4: Self = Self(38);
+  pub const SwitchWorkspace5: Self = Self(39);
+  pub const SwitchWorkspace6: Self = Self(40);
+  pub const SwitchWorkspace7: Self = Self(41);
+  pub const SwitchWorkspace8: Self = Self(42);
+  pub const SwitchWorkspace9: Self = Self(43);
+  pub const MoveToWorkspace1: Self = Self(44);
+  pub const MoveToWorkspace2: Self = Self(45);
+  pub const MoveToWorkspace3: Self = Self(46);
+  pub const MoveToWorkspace4: Self = Self(47);
+  pub const MoveToWorkspace5: Self = Self(48);
+  pub const MoveToWorkspace6: Self = Self(49);
+  pub const MoveToWorkspace7: Self = Self(50);
+  pub const MoveToWorkspace8: Self = Self(51);
+  pub const MoveToWorkspace9: Self = Self(52);
 
   pub const ENUM_MIN: u8 = 0;
-  pub const ENUM_MAX: u8 = 30;
+  pub const ENUM_MAX: u8 = 52;
   pub const ENUM_VALUES: &'static [Self] = &[
     Self::Shutdown,
     Self::OpenApplications,
@@ -1315,6 +1340,28 @@ impl ShortcutActionKind {
     Self::SwapRight,
     Self::SwapUp,
     Self::SwapDown,
+    Self::PreviousWorkspace,
+    Self::NextWorkspace,
+    Self::MoveToPreviousWorkspace,
+    Self::MoveToNextWorkspace,
+    Self::SwitchWorkspace1,
+    Self::SwitchWorkspace2,
+    Self::SwitchWorkspace3,
+    Self::SwitchWorkspace4,
+    Self::SwitchWorkspace5,
+    Self::SwitchWorkspace6,
+    Self::SwitchWorkspace7,
+    Self::SwitchWorkspace8,
+    Self::SwitchWorkspace9,
+    Self::MoveToWorkspace1,
+    Self::MoveToWorkspace2,
+    Self::MoveToWorkspace3,
+    Self::MoveToWorkspace4,
+    Self::MoveToWorkspace5,
+    Self::MoveToWorkspace6,
+    Self::MoveToWorkspace7,
+    Self::MoveToWorkspace8,
+    Self::MoveToWorkspace9,
   ];
   /// Returns the variant's name or "" if unknown.
   pub fn variant_name(self) -> Option<&'static str> {
@@ -1350,6 +1397,28 @@ impl ShortcutActionKind {
       Self::SwapRight => Some("SwapRight"),
       Self::SwapUp => Some("SwapUp"),
       Self::SwapDown => Some("SwapDown"),
+      Self::PreviousWorkspace => Some("PreviousWorkspace"),
+      Self::NextWorkspace => Some("NextWorkspace"),
+      Self::MoveToPreviousWorkspace => Some("MoveToPreviousWorkspace"),
+      Self::MoveToNextWorkspace => Some("MoveToNextWorkspace"),
+      Self::SwitchWorkspace1 => Some("SwitchWorkspace1"),
+      Self::SwitchWorkspace2 => Some("SwitchWorkspace2"),
+      Self::SwitchWorkspace3 => Some("SwitchWorkspace3"),
+      Self::SwitchWorkspace4 => Some("SwitchWorkspace4"),
+      Self::SwitchWorkspace5 => Some("SwitchWorkspace5"),
+      Self::SwitchWorkspace6 => Some("SwitchWorkspace6"),
+      Self::SwitchWorkspace7 => Some("SwitchWorkspace7"),
+      Self::SwitchWorkspace8 => Some("SwitchWorkspace8"),
+      Self::SwitchWorkspace9 => Some("SwitchWorkspace9"),
+      Self::MoveToWorkspace1 => Some("MoveToWorkspace1"),
+      Self::MoveToWorkspace2 => Some("MoveToWorkspace2"),
+      Self::MoveToWorkspace3 => Some("MoveToWorkspace3"),
+      Self::MoveToWorkspace4 => Some("MoveToWorkspace4"),
+      Self::MoveToWorkspace5 => Some("MoveToWorkspace5"),
+      Self::MoveToWorkspace6 => Some("MoveToWorkspace6"),
+      Self::MoveToWorkspace7 => Some("MoveToWorkspace7"),
+      Self::MoveToWorkspace8 => Some("MoveToWorkspace8"),
+      Self::MoveToWorkspace9 => Some("MoveToWorkspace9"),
       _ => None,
     }
   }
@@ -5821,6 +5890,7 @@ impl<'a> ShellAction<'a> {
   pub const VT_MONITOR_ID: flatbuffers::VOffsetT = 6;
   pub const VT_HAS_MONITOR_ID: flatbuffers::VOffsetT = 8;
   pub const VT_TEXTURE_ID: flatbuffers::VOffsetT = 10;
+  pub const VT_WORKSPACE_ID: flatbuffers::VOffsetT = 12;
 
   #[inline]
   pub unsafe fn init_from_table(table: flatbuffers::Table<'a>) -> Self {
@@ -5832,6 +5902,7 @@ impl<'a> ShellAction<'a> {
     args: &'args ShellActionArgs
   ) -> flatbuffers::WIPOffset<ShellAction<'bldr>> {
     let mut builder = ShellActionBuilder::new(_fbb);
+    builder.add_workspace_id(args.workspace_id);
     builder.add_texture_id(args.texture_id);
     builder.add_monitor_id(args.monitor_id);
     builder.add_has_monitor_id(args.has_monitor_id);
@@ -5868,6 +5939,13 @@ impl<'a> ShellAction<'a> {
     // which contains a valid value in this slot
     unsafe { self._tab.get::<i64>(ShellAction::VT_TEXTURE_ID, Some(0)).unwrap()}
   }
+  #[inline]
+  pub fn workspace_id(&self) -> u32 {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<u32>(ShellAction::VT_WORKSPACE_ID, Some(1)).unwrap()}
+  }
 }
 
 impl flatbuffers::Verifiable for ShellAction<'_> {
@@ -5881,6 +5959,7 @@ impl flatbuffers::Verifiable for ShellAction<'_> {
      .visit_field::<i64>("monitor_id", Self::VT_MONITOR_ID, false)?
      .visit_field::<bool>("has_monitor_id", Self::VT_HAS_MONITOR_ID, false)?
      .visit_field::<i64>("texture_id", Self::VT_TEXTURE_ID, false)?
+     .visit_field::<u32>("workspace_id", Self::VT_WORKSPACE_ID, false)?
      .finish();
     Ok(())
   }
@@ -5890,6 +5969,7 @@ pub struct ShellActionArgs {
     pub monitor_id: i64,
     pub has_monitor_id: bool,
     pub texture_id: i64,
+    pub workspace_id: u32,
 }
 impl<'a> Default for ShellActionArgs {
   #[inline]
@@ -5899,6 +5979,7 @@ impl<'a> Default for ShellActionArgs {
       monitor_id: -1,
       has_monitor_id: false,
       texture_id: 0,
+      workspace_id: 1,
     }
   }
 }
@@ -5925,6 +6006,10 @@ impl<'a: 'b, 'b, A: flatbuffers::Allocator + 'a> ShellActionBuilder<'a, 'b, A> {
     self.fbb_.push_slot::<i64>(ShellAction::VT_TEXTURE_ID, texture_id, 0);
   }
   #[inline]
+  pub fn add_workspace_id(&mut self, workspace_id: u32) {
+    self.fbb_.push_slot::<u32>(ShellAction::VT_WORKSPACE_ID, workspace_id, 1);
+  }
+  #[inline]
   pub fn new(_fbb: &'b mut flatbuffers::FlatBufferBuilder<'a, A>) -> ShellActionBuilder<'a, 'b, A> {
     let start = _fbb.start_table();
     ShellActionBuilder {
@@ -5946,6 +6031,7 @@ impl core::fmt::Debug for ShellAction<'_> {
       ds.field("monitor_id", &self.monitor_id());
       ds.field("has_monitor_id", &self.has_monitor_id());
       ds.field("texture_id", &self.texture_id());
+      ds.field("workspace_id", &self.workspace_id());
       ds.finish()
   }
 }

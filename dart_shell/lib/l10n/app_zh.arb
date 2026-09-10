@@ -1160,5 +1160,19 @@
   "shelfCloseAllWindows": "关闭全部窗口",
   "@shelfCloseAllWindows": {"description": "Context menu entry to close every window of the app."},
   "weatherMetricUv": "紫外线",
-  "@weatherMetricUv": {"description": "Label for the UV index metric card."}
+  "@weatherMetricUv": {"description": "Label for the UV index metric card."},
+  "desktopWorkspaceDesk": "桌面",
+  "desktopWorkspaceSwitch": "切换工作区",
+  "settingsWorkspaceCount": "工作区数量",
+  "settingsWorkspacesDescription": "为每台显示器提供各自独立的可切换工作区，并支持滑动切换。",
+  "settingsWorkspacesEnable": "启用工作区",
+  "settingsWorkspacesTitle": "工作区",
+  "settingsShortcutActionMoveToNextWorkspace": "窗口移至下一个工作区",
+  "settingsShortcutActionMoveToPreviousWorkspace": "窗口移至上一个工作区",
+  "settingsShortcutActionMoveToWorkspace": "窗口移至工作区",
+  "settingsShortcutActionNextWorkspace": "下一个工作区",
+  "settingsShortcutActionPreviousWorkspace": "上一个工作区",
+  "settingsShortcutActionSwitchWorkspace": "切换到工作区",
+  "settingsShortcutGestureFourFingerSwipeLeft": "四指左滑",
+  "settingsShortcutGestureFourFingerSwipeRight": "四指右滑"
 }

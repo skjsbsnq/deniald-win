@@ -44,6 +44,12 @@ fn shell_document(value: Value) -> String {
     layout
         .entry("windowLayout")
         .or_insert_with(|| Value::String("stacking".to_owned()));
+    layout
+        .entry("workspacesEnabled")
+        .or_insert(Value::Bool(false));
+    layout
+        .entry("workspaceCount")
+        .or_insert(Value::from(DEFAULT_WORKSPACE_COUNT));
     document.insert("version".to_owned(), Value::from(SETTINGS_SCHEMA_VERSION));
     serde_json::to_string(&document).expect("test shell document serializes")
 }

@@ -3946,4 +3946,46 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get weatherMetricUv => 'UV';
+
+  @override
+  String get desktopWorkspaceDesk => 'Desk';
+
+  @override
+  String get desktopWorkspaceSwitch => 'Switch workspace';
+
+  @override
+  String get settingsWorkspaceCount => 'Workspace count';
+
+  @override
+  String get settingsWorkspacesDescription => 'Give every monitor its own switchable workspaces and slide between them.';
+
+  @override
+  String get settingsWorkspacesEnable => 'Enable workspaces';
+
+  @override
+  String get settingsWorkspacesTitle => 'Workspaces';
+
+  @override
+  String get settingsShortcutActionMoveToNextWorkspace => 'Move window to next workspace';
+
+  @override
+  String get settingsShortcutActionMoveToPreviousWorkspace => 'Move window to previous workspace';
+
+  @override
+  String get settingsShortcutActionMoveToWorkspace => 'Move window to workspace';
+
+  @override
+  String get settingsShortcutActionNextWorkspace => 'Next workspace';
+
+  @override
+  String get settingsShortcutActionPreviousWorkspace => 'Previous workspace';
+
+  @override
+  String get settingsShortcutActionSwitchWorkspace => 'Switch to workspace';
+
+  @override
+  String get settingsShortcutGestureFourFingerSwipeLeft => 'Four-finger swipe left';
+
+  @override
+  String get settingsShortcutGestureFourFingerSwipeRight => 'Four-finger swipe right';
 }

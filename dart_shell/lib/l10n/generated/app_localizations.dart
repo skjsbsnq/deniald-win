@@ -7029,6 +7029,90 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'UV'**
   String get weatherMetricUv;
+
+  /// Short noun shown inside the shelf Desk button before its number.
+  ///
+  /// In en, this message translates to:
+  /// **'Desk'**
+  String get desktopWorkspaceDesk;
+
+  /// Tooltip for the shelf Desk button.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch workspace'**
+  String get desktopWorkspaceSwitch;
+
+  /// Label for the number of monitor-local workspaces.
+  ///
+  /// In en, this message translates to:
+  /// **'Workspace count'**
+  String get settingsWorkspaceCount;
+
+  /// Description for enabling monitor-local workspaces.
+  ///
+  /// In en, this message translates to:
+  /// **'Give every monitor its own switchable workspaces and slide between them.'**
+  String get settingsWorkspacesDescription;
+
+  /// Label for enabling monitor-local workspaces.
+  ///
+  /// In en, this message translates to:
+  /// **'Enable workspaces'**
+  String get settingsWorkspacesEnable;
+
+  /// Title of the workspaces settings section.
+  ///
+  /// In en, this message translates to:
+  /// **'Workspaces'**
+  String get settingsWorkspacesTitle;
+
+  /// Display name for moving the focused window one workspace forward.
+  ///
+  /// In en, this message translates to:
+  /// **'Move window to next workspace'**
+  String get settingsShortcutActionMoveToNextWorkspace;
+
+  /// Display name for moving the focused window one workspace back.
+  ///
+  /// In en, this message translates to:
+  /// **'Move window to previous workspace'**
+  String get settingsShortcutActionMoveToPreviousWorkspace;
+
+  /// Display name prefix for moving the focused window to a numbered workspace.
+  ///
+  /// In en, this message translates to:
+  /// **'Move window to workspace'**
+  String get settingsShortcutActionMoveToWorkspace;
+
+  /// Display name for switching one workspace forward.
+  ///
+  /// In en, this message translates to:
+  /// **'Next workspace'**
+  String get settingsShortcutActionNextWorkspace;
+
+  /// Display name for switching one workspace back.
+  ///
+  /// In en, this message translates to:
+  /// **'Previous workspace'**
+  String get settingsShortcutActionPreviousWorkspace;
+
+  /// Display name prefix for switching to a numbered workspace.
+  ///
+  /// In en, this message translates to:
+  /// **'Switch to workspace'**
+  String get settingsShortcutActionSwitchWorkspace;
+
+  /// Display name for the four-finger horizontal touchpad gesture.
+  ///
+  /// In en, this message translates to:
+  /// **'Four-finger swipe left'**
+  String get settingsShortcutGestureFourFingerSwipeLeft;
+
+  /// Display name for the four-finger horizontal touchpad gesture.
+  ///
+  /// In en, this message translates to:
+  /// **'Four-finger swipe right'**
+  String get settingsShortcutGestureFourFingerSwipeRight;
 }
 
 class _AppLocalizationsDelegate

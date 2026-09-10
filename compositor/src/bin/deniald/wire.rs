@@ -128,6 +128,16 @@ pub enum WindowCommand {
         exact: bool,
         layout_drop: bool,
     },
+    SwitchWorkspace {
+        monitor_id: i64,
+        workspace_id: u8,
+    },
+    MoveToWorkspace {
+        window_id: u64,
+        monitor_id: Option<i64>,
+        workspace_id: u8,
+        follow: bool,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -212,10 +222,12 @@ impl WindowCommand {
     pub fn window_id(&self) -> Option<u64> {
         match self {
             Self::CreateLocal { .. } => None,
+            Self::SwitchWorkspace { .. } => None,
             Self::Close { window_id }
             | Self::Focus { window_id }
             | Self::Minimize { window_id }
-            | Self::Configure { window_id, .. } => Some(*window_id),
+            | Self::Configure { window_id, .. }
+            | Self::MoveToWorkspace { window_id, .. } => Some(*window_id),
         }
     }
 }
@@ -255,6 +267,7 @@ pub enum ShellAction {
     ClientPointerPressed,
     Wallpaper,
     OpenSettings,
+    WorkspaceChanged,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -287,6 +300,7 @@ impl ShellAction {
             Self::ClientPointerPressed => fb::ShellActionKind::ClientPointerPressed,
             Self::Wallpaper => fb::ShellActionKind::Wallpaper,
             Self::OpenSettings => fb::ShellActionKind::OpenSettings,
+            Self::WorkspaceChanged => fb::ShellActionKind::WorkspaceChanged,
         }
     }
 }
@@ -534,6 +548,10 @@ pub struct WindowDescription {
     pub geometry_width: f64,
     pub geometry_height: f64,
     pub monitor_id: i64,
+    /// Monitor-local workspace membership. Minimized windows carry -1 because
+    /// minimization is a workspace-less state.
+    pub workspace_id: i64,
+    pub minimized: bool,
     pub transform: u32,
     pub scale_120: u32,
     pub content_x: f64,

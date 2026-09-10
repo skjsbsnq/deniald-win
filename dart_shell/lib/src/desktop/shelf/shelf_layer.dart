@@ -9,12 +9,14 @@ import '../../widgets/shell_backdrop_blur.dart';
 import '../system_tray_module.dart';
 import 'shelf_app_strip.dart';
 import 'shelf_launcher_button.dart';
+import 'shelf_workspace_button.dart';
 import 'unified_tray_button.dart';
 
 /// The bottom shelf backdrop container for the ChromeOS-style shell.
 class ShelfLayer extends ConsumerWidget {
   const ShelfLayer({
     this.height,
+    this.monitorId,
     this.onLauncherPressed,
     required this.trayExpanded,
     this.onTrayPressed,
@@ -26,6 +28,9 @@ class ShelfLayer extends ConsumerWidget {
   static const double defaultThickness = 56.0;
 
   final double? height;
+
+  /// Output this shelf belongs to. The workspace Desk button is scoped to it.
+  final int? monitorId;
   final VoidCallback? onLauncherPressed;
 
   /// Listenable so tray expansion rebuilds the tray button alone, not the
@@ -76,6 +81,13 @@ class ShelfLayer extends ConsumerWidget {
                       onPressed: onLauncherPressed,
                     ),
                     const SizedBox(width: 8.0),
+                    // The Desk button lives on the shelf's left edge, between
+                    // the launcher and the centered application strip, so it
+                    // never competes with the app icons for space.
+                    ShelfWorkspaceButton(
+                      key: const ValueKey('shelf-workspace-button'),
+                      monitorId: monitorId,
+                    ),
                     const Spacer(),
                     const _ShelfSystemTrayModule(),
                     const SizedBox(width: 8.0),

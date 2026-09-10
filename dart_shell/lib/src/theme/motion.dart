@@ -14,6 +14,10 @@ class Motion {
   // Scripted durations -------------------------------------------------------
   static const Duration overviewOpen = Duration(milliseconds: 380);
   static const Duration overviewClose = Duration(milliseconds: 280);
+
+  /// Duration of a monitor-local workspace slide. The shell keeps both the
+  /// outgoing and incoming workspaces presented for exactly this long.
+  static const Duration workspaceSwitch = Duration(milliseconds: 320);
   static const Duration launch = Duration(milliseconds: 430);
   static const Duration launchReveal = Duration(milliseconds: 160);
   static const Duration focusZoom = Duration(milliseconds: 320);
