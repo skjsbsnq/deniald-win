@@ -449,8 +449,9 @@ impl TouchpadSettings {
     }
 }
 
-/// Effective monitor-local workspace policy (upstream fdb986e). Disabled by
-/// default so existing installations keep the single-workspace behavior.
+/// Effective monitor-local workspace policy (upstream fdb986e). Enabled by
+/// default so the Shelf Desk button and workspace shortcuts work out of the
+/// box; existing documents keep their persisted value.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) struct WorkspaceSettings {
     pub(super) enabled: bool,
@@ -460,7 +461,7 @@ pub(super) struct WorkspaceSettings {
 impl Default for WorkspaceSettings {
     fn default() -> Self {
         Self {
-            enabled: false,
+            enabled: true,
             count: DEFAULT_WORKSPACE_COUNT,
         }
     }

@@ -297,7 +297,7 @@ class DesktopWorkspaceState {
     this.panel = DesktopPanel.none,
     this.overview,
     this.inputLayoutRevision = 0,
-    this.workspacesEnabled = false,
+    this.workspacesEnabled = true,
     this.workspaceCount = 4,
     Map<int, int> activeWorkspaces = const <int, int>{},
     Map<int, DesktopWorkspaceTransition> workspaceTransitions =

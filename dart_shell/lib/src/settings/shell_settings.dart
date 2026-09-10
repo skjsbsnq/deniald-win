@@ -415,7 +415,7 @@ class ShellAnimationSettings {
 class ShellLayoutSettings {
   const ShellLayoutSettings({
     this.windowLayout = DesktopWindowLayout.stacking,
-    this.workspacesEnabled = false,
+    this.workspacesEnabled = true,
     this.workspaceCount = defaultWorkspaceCount,
     this.systemBarSide,
     this.systemBarOutputNames = const <String>[],
