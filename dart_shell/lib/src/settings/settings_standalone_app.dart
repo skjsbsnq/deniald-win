@@ -14,6 +14,7 @@ import '../theme/shell_theme.dart';
 import '../theme/tokens.dart';
 import '../wallpaper/state/wallpaper_accent.dart';
 import 'settings_application.dart';
+import 'widgets/settings_loading_indicator.dart';
 import 'widgets/settings_navigation.dart';
 
 /// The process root for the standalone Wayland Settings client.
@@ -222,7 +223,11 @@ class _SettingsSynchronizationLoading extends StatelessWidget {
   Widget build(BuildContext context) {
     return ColoredBox(
       color: context.shellColors.background.withValues(alpha: 0.74),
-      child: const Center(child: CircularProgressIndicator()),
+      child: Center(
+        child: SettingsLoadingIndicator(
+          semanticsLabel: AppLocalizations.of(context).commonLoading,
+        ),
+      ),
     );
   }
 }

@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui' show SemanticsRole;
 
 import 'package:flutter/material.dart';
@@ -10,6 +11,8 @@ import '../../theme/shell_theme.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/shell_cursor.dart';
 import '../color_format.dart';
+import 'settings_buttons.dart';
+import 'settings_menu.dart';
 
 class SettingsPageLayout extends StatelessWidget {
   const SettingsPageLayout({
@@ -253,6 +256,17 @@ class SettingsSection extends StatelessWidget {
   }
 }
 
+/// M3E slider geometry (`02-VISUAL-SPEC.md` §3.5).
+const double settingsSliderTrackHeight = 16;
+const double settingsSliderHandleWidth = 4;
+const double settingsSliderHandleHeight = 44;
+const double settingsSliderHandleGap = 6;
+const double settingsSliderTickDiameter = 4;
+const double settingsSliderMinimumTrackWidth = 144;
+
+/// Key for the slider's [SliderTheme], so tests can assert its geometry.
+const Key settingsSliderThemeKey = ValueKey<String>('settings_slider_theme');
+
 class SettingsSlider extends StatelessWidget {
   const SettingsSlider({
     required this.label,
@@ -279,11 +293,17 @@ class SettingsSlider extends StatelessWidget {
   final ValueChanged<double>? onChangeStart;
   final ValueChanged<double>? onChangeEnd;
 
+  /// Fixed width of the label, gap and value columns in the three-column form.
+  static const double _fixedRowWidth = 150 + 10 + 10 + 58;
+
   @override
   Widget build(BuildContext context) {
     final theme = ShellTheme.of(context);
-    final accent = theme.accent;
+    final palette = theme.accentPalette;
     final displayValue = valueLabel ?? value.toStringAsFixed(0);
+    final valueStyle = ShellText.cardTitle.copyWith(
+      fontFamily: ShellText.systemBarFontFamily,
+    );
     return Semantics(
       slider: true,
       enabled: enabled,
@@ -294,7 +314,14 @@ class SettingsSlider extends StatelessWidget {
         opacity: enabled ? 1 : 0.46,
         child: LayoutBuilder(
           builder: (context, constraints) {
-            final compact = constraints.maxWidth < 430;
+            final available = constraints.maxWidth;
+            // Three columns need room for the fixed label/value columns plus
+            // the spec's 144dp minimum track (§3.5); below that the heading
+            // and slider stack vertically.
+            final threeColumn =
+                available >= 430 &&
+                (available - _fixedRowWidth) >=
+                    settingsSliderMinimumTrackWidth;
             final heading = Row(
               children: [
                 Expanded(
@@ -306,34 +333,28 @@ class SettingsSlider extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 10),
-                Text(
-                  displayValue,
-                  textAlign: TextAlign.right,
-                  style: ShellText.cardTitle.copyWith(
-                    fontFamily: ShellText.systemBarFontFamily,
-                  ),
-                ),
+                Text(displayValue, textAlign: TextAlign.right, style: valueStyle),
               ],
             );
             final slider = SliderTheme(
+              key: settingsSliderThemeKey,
               data: SliderTheme.of(context).copyWith(
-                activeTrackColor: accent,
+                activeTrackColor: palette.primary,
                 inactiveTrackColor: context.shellColors.surfaceContainerHighest,
-                thumbColor: context.shellColors.sliderThumb,
-                overlayColor: accent.withAlpha(32),
-                trackHeight: 5,
-                trackShape: _SettingsSliderTrackShape(
+                activeTickMarkColor: palette.onPrimary.withValues(alpha: 0.6),
+                inactiveTickMarkColor: context.shellColors.hairline,
+                thumbColor: palette.primary,
+                overlayColor: palette.primary.withValues(alpha: 0.12),
+                trackHeight: settingsSliderTrackHeight,
+                trackShape: const _SettingsSliderTrackShape(
+                  handleGap: settingsSliderHandleGap,
+                ),
+                thumbShape: _SettingsSliderHandleShape(
                   cornerRadiusScale: theme.cornerRadiusScale,
                 ),
-                thumbShape: _SettingsSliderThumbShape(
-                  cornerRadiusScale: theme.cornerRadiusScale,
-                  shadowColor: context.shellColors.shadow,
-                ),
-                overlayShape: _SettingsSliderOverlayShape(
-                  cornerRadiusScale: theme.cornerRadiusScale,
-                ),
-                tickMarkShape: _SettingsSliderTickMarkShape(
-                  cornerRadiusScale: theme.cornerRadiusScale,
+                overlayShape: const RoundSliderOverlayShape(overlayRadius: 20),
+                tickMarkShape: const RoundSliderTickMarkShape(
+                  tickMarkRadius: settingsSliderTickDiameter / 2,
                 ),
               ),
               child: Slider(
@@ -346,7 +367,7 @@ class SettingsSlider extends StatelessWidget {
                 onChangeEnd: enabled ? onChangeEnd : null,
               ),
             );
-            if (compact) {
+            if (!threeColumn) {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [heading, const SizedBox(height: 3), slider],
@@ -371,9 +392,7 @@ class SettingsSlider extends StatelessWidget {
                   child: Text(
                     displayValue,
                     textAlign: TextAlign.right,
-                    style: ShellText.cardTitle.copyWith(
-                      fontFamily: ShellText.systemBarFontFamily,
-                    ),
+                    style: valueStyle,
                   ),
                 ),
               ],
@@ -385,177 +404,16 @@ class SettingsSlider extends StatelessWidget {
   }
 }
 
-class SettingsToggle extends StatefulWidget {
-  const SettingsToggle({
-    required this.label,
-    required this.description,
-    required this.value,
-    required this.onChanged,
-    this.enabled = true,
-    super.key,
-  });
-
-  final String label;
-  final String description;
-  final bool value;
-  final ValueChanged<bool> onChanged;
-  final bool enabled;
-
-  @override
-  State<SettingsToggle> createState() => _SettingsToggleState();
-}
-
-class _SettingsToggleState extends State<SettingsToggle>
-    with SingleTickerProviderStateMixin {
-  late final AnimationController _valueController;
-
-  @override
-  void initState() {
-    super.initState();
-    _valueController = AnimationController(
-      vsync: this,
-      value: widget.value ? 1.0 : 0.0,
-    );
-  }
-
-  @override
-  void didUpdateWidget(covariant SettingsToggle oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.value != widget.value) {
-      if (MediaQuery.disableAnimationsOf(context)) {
-        _valueController.value = widget.value ? 1.0 : 0.0;
-      } else {
-        springTo(
-          _valueController,
-          widget.value ? 1.0 : 0.0,
-          spring: Motion.expressiveEffectsDefault,
-          telemetryLabel: 'settings_toggle_effects',
-        );
-      }
-    }
-  }
-
-  @override
-  void dispose() {
-    _valueController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = ShellTheme.of(context);
-    final accent = theme.accent;
-    final enabled = widget.enabled;
-    final value = widget.value;
-    return Semantics(
-      button: true,
-      enabled: enabled,
-      toggled: value,
-      label: widget.label,
-      child: FocusableActionDetector(
-        enabled: enabled,
-        mouseCursor: enabled
-            ? ShellMouseCursors.link
-            : SystemMouseCursors.basic,
-        shortcuts: const <ShortcutActivator, Intent>{
-          SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
-          SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
-        },
-        actions: <Type, Action<Intent>>{
-          ActivateIntent: CallbackAction<ActivateIntent>(
-            onInvoke: (_) {
-              if (enabled) {
-                widget.onChanged(!value);
-              }
-              return null;
-            },
-          ),
-        },
-        child: AnimatedOpacity(
-          duration: Motion.tile,
-          opacity: enabled ? 1 : 0.46,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: enabled ? () => widget.onChanged(!value) : null,
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(widget.label, style: ShellText.cardTitle),
-                      const SizedBox(height: 4),
-                      Text(
-                        widget.description,
-                        style: ShellText.base.copyWith(
-                          color: context.shellColors.textTertiary,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 18),
-                AnimatedBuilder(
-                  animation: _valueController,
-                  builder: (context, _) {
-                    // The color cross-fade runs on the effects spring; the
-                    // thumb position keeps its container alignment animation.
-                    final t = _valueController.value.clamp(0.0, 1.0);
-                    return AnimatedContainer(
-                      duration: Motion.tile,
-                      width: 44,
-                      height: 25,
-                      padding: const EdgeInsets.all(3),
-                      alignment: value
-                          ? Alignment.centerRight
-                          : Alignment.centerLeft,
-                      decoration: BoxDecoration(
-                        color: Color.lerp(
-                          context.shellColors.surfaceContainerHighest,
-                          accent,
-                          t,
-                        )!,
-                        borderRadius: context.shellTheme.borderRadius(
-                          ShellShapeScale.full,
-                        ),
-                        border: Border.all(
-                          color: Color.lerp(
-                            context.shellColors.hairline,
-                            accent,
-                            t,
-                          )!,
-                        ),
-                      ),
-                      child: DecoratedBox(
-                        decoration: BoxDecoration(
-                          color: context.shellColors.sliderThumb,
-                          borderRadius: theme.borderRadius(
-                            ShellShapeScale.small,
-                          ),
-                        ),
-                        child: SizedBox.square(dimension: 17),
-                      ),
-                    );
-                  },
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
+/// Draws the M3E track as two segments separated from the 4dp handle by the
+/// spec's 6dp `ActiveHandleLeading/TrailingSpace` (§3.5).
 class _SettingsSliderTrackShape extends SliderTrackShape
     with BaseSliderTrackShape {
-  const _SettingsSliderTrackShape({required this.cornerRadiusScale});
+  const _SettingsSliderTrackShape({required this.handleGap});
 
-  final double cornerRadiusScale;
+  final double handleGap;
 
   @override
-  bool get isRounded => cornerRadiusScale > 0;
+  bool get isRounded => true;
 
   @override
   void paint(
@@ -581,75 +439,55 @@ class _SettingsSliderTrackShape extends SliderTrackShape
       isEnabled: isEnabled,
       isDiscrete: isDiscrete,
     );
-    final radius = Radius.circular(
-      _scaledControlRadius(trackRect.height / 2, cornerRadiusScale),
-    );
-    final activePaint = Paint()
-      ..color = ColorTween(
-        begin: sliderTheme.disabledActiveTrackColor,
-        end: sliderTheme.activeTrackColor,
-      ).evaluate(enableAnimation)!;
-    final inactivePaint = Paint()
-      ..color = ColorTween(
-        begin: sliderTheme.disabledInactiveTrackColor,
-        end: sliderTheme.inactiveTrackColor,
-      ).evaluate(enableAnimation)!;
+    final activeColor = ColorTween(
+      begin: sliderTheme.disabledActiveTrackColor,
+      end: sliderTheme.activeTrackColor,
+    ).evaluate(enableAnimation)!;
+    final inactiveColor = ColorTween(
+      begin: sliderTheme.disabledInactiveTrackColor,
+      end: sliderTheme.inactiveTrackColor,
+    ).evaluate(enableAnimation)!;
     final canvas = context.canvas;
-    canvas.drawRRect(RRect.fromRectAndRadius(trackRect, radius), inactivePaint);
-
+    final inset = handleGap + settingsSliderHandleWidth / 2;
     final thumbX = thumbCenter.dx.clamp(trackRect.left, trackRect.right);
-    final activeRect = textDirection == TextDirection.ltr
-        ? Rect.fromLTRB(trackRect.left, trackRect.top, thumbX, trackRect.bottom)
-        : Rect.fromLTRB(
-            thumbX,
-            trackRect.top,
-            trackRect.right,
-            trackRect.bottom,
-          );
-    if (!activeRect.isEmpty) {
+
+    void drawSegment(double start, double end, Color color) {
+      final left = math.min(start, end);
+      final right = math.max(start, end);
+      if (right - left <= 0.01) {
+        return;
+      }
+      final radius = math.min(trackRect.height / 2, (right - left) / 2);
       canvas.drawRRect(
-        RRect.fromRectAndRadius(activeRect, radius),
-        activePaint,
+        RRect.fromRectAndRadius(
+          Rect.fromLTRB(left, trackRect.top, right, trackRect.bottom),
+          Radius.circular(radius),
+        ),
+        Paint()..color = color,
       );
     }
 
-    final secondaryColor = ColorTween(
-      begin: sliderTheme.disabledSecondaryActiveTrackColor,
-      end: sliderTheme.secondaryActiveTrackColor,
-    ).evaluate(enableAnimation);
-    if (secondaryOffset == null || secondaryColor == null) {
-      return;
-    }
-    final secondaryX = secondaryOffset.dx.clamp(
-      trackRect.left,
-      trackRect.right,
-    );
-    final secondaryRect = textDirection == TextDirection.ltr
-        ? Rect.fromLTRB(thumbX, trackRect.top, secondaryX, trackRect.bottom)
-        : Rect.fromLTRB(secondaryX, trackRect.top, thumbX, trackRect.bottom);
-    if (!secondaryRect.isEmpty) {
-      canvas.drawRRect(
-        RRect.fromRectAndRadius(secondaryRect, radius),
-        Paint()..color = secondaryColor,
-      );
+    if (textDirection == TextDirection.ltr) {
+      drawSegment(thumbX + inset, trackRect.right, inactiveColor);
+      drawSegment(trackRect.left, thumbX - inset, activeColor);
+    } else {
+      drawSegment(trackRect.left, thumbX - inset, inactiveColor);
+      drawSegment(thumbX + inset, trackRect.right, activeColor);
     }
   }
 }
 
-class _SettingsSliderThumbShape extends SliderComponentShape {
-  const _SettingsSliderThumbShape({
-    required this.cornerRadiusScale,
-    required this.shadowColor,
-  });
-
-  static const double _extent = 20;
+/// 4×44 full-rounded slider handle (§3.5).
+class _SettingsSliderHandleShape extends SliderComponentShape {
+  const _SettingsSliderHandleShape({required this.cornerRadiusScale});
 
   final double cornerRadiusScale;
-  final Color shadowColor;
 
   @override
-  Size getPreferredSize(bool isEnabled, bool isDiscrete) =>
-      const Size.square(_extent);
+  Size getPreferredSize(bool isEnabled, bool isDiscrete) => const Size(
+    settingsSliderHandleWidth,
+    settingsSliderHandleHeight,
+  );
 
   @override
   void paint(
@@ -672,127 +510,286 @@ class _SettingsSliderThumbShape extends SliderComponentShape {
     ).evaluate(enableAnimation)!;
     final rect = Rect.fromCenter(
       center: center,
-      width: _extent,
-      height: _extent,
+      width: settingsSliderHandleWidth,
+      height: settingsSliderHandleHeight,
     );
-    final shape = RRect.fromRectAndRadius(
-      rect,
-      Radius.circular(_scaledControlRadius(_extent / 2, cornerRadiusScale)),
-    );
-    final canvas = context.canvas;
-    canvas.drawShadow(
-      Path()..addRRect(shape),
-      shadowColor,
-      1 + 5 * activationAnimation.value,
-      true,
-    );
-    canvas.drawRRect(shape, Paint()..color = color);
-  }
-}
-
-class _SettingsSliderOverlayShape extends SliderComponentShape {
-  const _SettingsSliderOverlayShape({required this.cornerRadiusScale});
-
-  static const double _extent = 40;
-
-  final double cornerRadiusScale;
-
-  @override
-  Size getPreferredSize(bool isEnabled, bool isDiscrete) =>
-      const Size.square(_extent);
-
-  @override
-  void paint(
-    PaintingContext context,
-    Offset center, {
-    required Animation<double> activationAnimation,
-    required Animation<double> enableAnimation,
-    required bool isDiscrete,
-    required TextPainter labelPainter,
-    required RenderBox parentBox,
-    required SliderThemeData sliderTheme,
-    required TextDirection textDirection,
-    required double value,
-    required double textScaleFactor,
-    required Size sizeWithOverflow,
-  }) {
-    final overlayColor = sliderTheme.overlayColor;
-    final opacity = activationAnimation.value;
-    if (overlayColor == null || opacity <= 0) {
-      return;
-    }
-    final rect = Rect.fromCenter(
-      center: center,
-      width: _extent,
-      height: _extent,
-    );
+    final maximum = settingsSliderHandleWidth / 2;
+    final radius = (maximum * cornerRadiusScale).clamp(0.0, maximum);
     context.canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        rect,
-        Radius.circular(_scaledControlRadius(_extent / 2, cornerRadiusScale)),
-      ),
-      Paint()..color = overlayColor.withValues(alpha: overlayColor.a * opacity),
-    );
-  }
-}
-
-class _SettingsSliderTickMarkShape extends SliderTickMarkShape {
-  const _SettingsSliderTickMarkShape({required this.cornerRadiusScale});
-
-  final double cornerRadiusScale;
-
-  @override
-  Size getPreferredSize({
-    required SliderThemeData sliderTheme,
-    required bool isEnabled,
-  }) {
-    final extent = (sliderTheme.trackHeight ?? 0) / 2;
-    return Size.square(extent);
-  }
-
-  @override
-  void paint(
-    PaintingContext context,
-    Offset center, {
-    required RenderBox parentBox,
-    required SliderThemeData sliderTheme,
-    required Animation<double> enableAnimation,
-    required Offset thumbCenter,
-    required bool isEnabled,
-    required TextDirection textDirection,
-  }) {
-    final inactive = switch (textDirection) {
-      TextDirection.ltr => center.dx > thumbCenter.dx,
-      TextDirection.rtl => center.dx < thumbCenter.dx,
-    };
-    final color = ColorTween(
-      begin: inactive
-          ? sliderTheme.disabledInactiveTickMarkColor
-          : sliderTheme.disabledActiveTickMarkColor,
-      end: inactive
-          ? sliderTheme.inactiveTickMarkColor
-          : sliderTheme.activeTickMarkColor,
-    ).evaluate(enableAnimation);
-    final extent = getPreferredSize(
-      sliderTheme: sliderTheme,
-      isEnabled: isEnabled,
-    ).width;
-    if (color == null || extent <= 0) {
-      return;
-    }
-    final rect = Rect.fromCenter(center: center, width: extent, height: extent);
-    context.canvas.drawRRect(
-      RRect.fromRectAndRadius(
-        rect,
-        Radius.circular(_scaledControlRadius(extent / 2, cornerRadiusScale)),
-      ),
+      RRect.fromRectAndRadius(rect, Radius.circular(radius)),
       Paint()..color = color,
     );
   }
 }
 
-double _scaledControlRadius(double maximum, double scale) =>
-    (maximum * scale).clamp(0.0, maximum).toDouble();
+/// Key for the 52×32 M3E switch track, so tests can assert its geometry.
+const Key settingsToggleTrackKey = ValueKey<String>('settings_toggle_track');
+
+/// Key for the 40dp switch state layer, so tests can assert its presence.
+const Key settingsToggleStateLayerKey = ValueKey<String>(
+  'settings_toggle_state_layer',
+);
+
+class SettingsToggle extends StatefulWidget {
+  const SettingsToggle({
+    required this.label,
+    required this.description,
+    required this.value,
+    required this.onChanged,
+    this.enabled = true,
+    super.key,
+  });
+
+  final String label;
+  final String description;
+  final bool value;
+  final ValueChanged<bool> onChanged;
+  final bool enabled;
+
+  @override
+  State<SettingsToggle> createState() => _SettingsToggleState();
+}
+
+class _SettingsToggleState extends State<SettingsToggle>
+    with TickerProviderStateMixin {
+  /// Track width / height (§3.4).
+  static const double _trackWidth = 52;
+  static const double _trackHeight = 32;
+  static const double _thumbOff = 16;
+  static const double _thumbOn = 24;
+  static const double _thumbPressed = 28;
+  static const double _stateLayerExtent = 40;
+
+  /// Spatial controller driving the thumb position.
+  ///
+  /// It is deliberately unbounded: [Motion.expressiveSpatialFast] has a 0.6
+  /// damping ratio, so the thumb is allowed to overshoot and settle instead of
+  /// being clamped mid-bounce.
+  late final AnimationController _positionController;
+  late final AnimationController _colorController;
+  var _pressed = false;
+  var _hovered = false;
+  var _focused = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _positionController = AnimationController.unbounded(
+      vsync: this,
+      value: widget.value ? 1.0 : 0.0,
+    );
+    _colorController = AnimationController(
+      vsync: this,
+      value: widget.value ? 1.0 : 0.0,
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant SettingsToggle oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.value != widget.value) {
+      _animateTo(widget.value);
+    }
+  }
+
+  @override
+  void dispose() {
+    _positionController.dispose();
+    _colorController.dispose();
+    super.dispose();
+  }
+
+  void _animateTo(bool value) {
+    final target = value ? 1.0 : 0.0;
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _positionController.value = target;
+      _colorController.value = target;
+      return;
+    }
+    springTo(
+      _positionController,
+      target,
+      spring: Motion.expressiveSpatialFast,
+      telemetryLabel: 'settings_toggle_spatial',
+    );
+    springTo(
+      _colorController,
+      target,
+      spring: Motion.expressiveEffectsDefault,
+      telemetryLabel: 'settings_toggle_effects',
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = widget.enabled;
+    final value = widget.value;
+    final motionDuration = MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : Motion.tile;
+    return Semantics(
+      button: true,
+      enabled: enabled,
+      toggled: value,
+      label: widget.label,
+      child: FocusableActionDetector(
+        enabled: enabled,
+        mouseCursor: enabled
+            ? ShellMouseCursors.link
+            : SystemMouseCursors.basic,
+        onShowHoverHighlight: (highlight) =>
+            setState(() => _hovered = highlight),
+        onShowFocusHighlight: (highlight) =>
+            setState(() => _focused = highlight),
+        shortcuts: const <ShortcutActivator, Intent>{
+          SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+          SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
+        },
+        actions: <Type, Action<Intent>>{
+          ActivateIntent: CallbackAction<ActivateIntent>(
+            onInvoke: (_) {
+              if (enabled) {
+                widget.onChanged(!value);
+              }
+              return null;
+            },
+          ),
+        },
+        child: AnimatedOpacity(
+          duration: motionDuration,
+          opacity: enabled ? 1 : 0.46,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTapDown: enabled ? (_) => setState(() => _pressed = true) : null,
+            onTapUp: enabled ? (_) => setState(() => _pressed = false) : null,
+            onTapCancel: enabled ? () => setState(() => _pressed = false) : null,
+            onTap: enabled ? () => widget.onChanged(!value) : null,
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(widget.label, style: ShellText.cardTitle),
+                      const SizedBox(height: 4),
+                      Text(
+                        widget.description,
+                        style: ShellText.base.copyWith(
+                          color: context.shellColors.textSecondary,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 18),
+                AnimatedBuilder(
+                  animation: Listenable.merge([
+                    _positionController,
+                    _colorController,
+                  ]),
+                  builder: (context, _) => _buildSwitch(context),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSwitch(BuildContext context) {
+    final theme = ShellTheme.of(context);
+    final colors = context.shellColors;
+    final palette = theme.accentPalette;
+    final enabled = widget.enabled;
+    final value = widget.value;
+    final position = _positionController.value;
+    final colorT = _colorController.value.clamp(0.0, 1.0);
+    final alignment =
+        Alignment.lerp(Alignment.centerLeft, Alignment.centerRight, position) ??
+        Alignment.centerLeft;
+    final baseThumb = _thumbOff + (_thumbOn - _thumbOff) * colorT;
+    final thumbSize = _pressed && enabled ? _thumbPressed : baseThumb;
+    final trackColor = Color.lerp(
+      colors.surfaceContainerHighest,
+      palette.primary,
+      colorT,
+    )!;
+    final borderColor = Color.lerp(colors.hairline, palette.primary, colorT)!;
+    final thumbColor = Color.lerp(colors.hairline, palette.onPrimary, colorT)!;
+    final iconColor = Color.lerp(
+      colors.surfaceContainerHighest,
+      palette.onContainer,
+      colorT,
+    )!;
+    final motionDuration = MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : Motion.tile;
+    return SizedBox(
+      key: settingsToggleTrackKey,
+      width: _trackWidth,
+      height: _trackHeight,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned.fill(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: trackColor,
+                borderRadius: theme.borderRadius(ShellShapeScale.full),
+                border: Border.all(color: borderColor, width: 2),
+              ),
+            ),
+          ),
+          Align(
+            alignment: alignment,
+            child: IgnorePointer(
+              child: AnimatedOpacity(
+                key: settingsToggleStateLayerKey,
+                duration: motionDuration,
+                opacity: _pressed || _hovered || _focused ? 1 : 0,
+                child: SizedBox.square(
+                  dimension: _stateLayerExtent,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: palette.primary.withValues(
+                        alpha: _pressed ? 0.12 : 0.08,
+                      ),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(2),
+            child: Align(
+              alignment: alignment,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: thumbColor,
+                  borderRadius: theme.borderRadius(ShellShapeScale.full),
+                ),
+                child: SizedBox.square(
+                  dimension: thumbSize,
+                  child: Center(
+                    child: Icon(
+                      value ? Icons.check_rounded : Icons.close_rounded,
+                      size: 16,
+                      color: iconColor,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class SettingsChoice<T> {
   const SettingsChoice(this.value, this.label);
@@ -821,7 +818,6 @@ class SettingsSelect<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final selected = choices.firstWhere((choice) => choice.value == value);
     final heading = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
@@ -830,63 +826,21 @@ class SettingsSelect<T> extends StatelessWidget {
         Text(
           description,
           style: ShellText.base.copyWith(
-            color: context.shellColors.textTertiary,
+            color: context.shellColors.textSecondary,
             fontSize: 12,
           ),
         ),
       ],
     );
-    final selector = Semantics(
-      button: true,
+    final selector = SettingsMenu<T>(
+      semanticsLabel: label,
+      value: value,
+      items: <SettingsMenuItem<T>>[
+        for (final choice in choices)
+          SettingsMenuItem<T>(choice.value, choice.label),
+      ],
+      onChanged: onChanged,
       enabled: enabled,
-      label: label,
-      value: selected.label,
-      child: AnimatedOpacity(
-        duration: Motion.tile,
-        opacity: enabled ? 1 : 0.46,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: context.shellColors.surfaceContainerHigh,
-            borderRadius: context.shellTheme.borderRadius(10),
-            border: Border.all(color: context.shellColors.hairline),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: DropdownButtonHideUnderline(
-              child: DropdownButton<T>(
-                value: value,
-                isExpanded: true,
-                borderRadius: context.shellTheme.borderRadius(10),
-                dropdownColor: context.shellColors.surfaceContainerHighest,
-                focusColor: Colors.transparent,
-                icon: Icon(
-                  Icons.expand_more_rounded,
-                  color: context.shellColors.textTertiary,
-                ),
-                items: <DropdownMenuItem<T>>[
-                  for (final choice in choices)
-                    DropdownMenuItem<T>(
-                      value: choice.value,
-                      child: Text(
-                        choice.label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: ShellText.cardTitle,
-                      ),
-                    ),
-                ],
-                onChanged: enabled
-                    ? (next) {
-                        if (next != null) {
-                          onChanged(next);
-                        }
-                      }
-                    : null,
-              ),
-            ),
-          ),
-        ),
-      ),
     );
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -909,7 +863,17 @@ class SettingsSelect<T> extends StatelessWidget {
   }
 }
 
-class SettingsSegmentedControl<T> extends StatelessWidget {
+/// M3E segmented control geometry (`02-VISUAL-SPEC.md` §3.7).
+const double settingsSegmentHeight = 40;
+const double settingsSegmentSpacing = 12;
+
+class _MoveSegmentFocusIntent extends Intent {
+  const _MoveSegmentFocusIntent(this.delta);
+
+  final int delta;
+}
+
+class SettingsSegmentedControl<T> extends StatefulWidget {
   const SettingsSegmentedControl({
     required this.value,
     required this.choices,
@@ -922,23 +886,212 @@ class SettingsSegmentedControl<T> extends StatelessWidget {
   final ValueChanged<T> onChanged;
 
   @override
+  State<SettingsSegmentedControl<T>> createState() =>
+      _SettingsSegmentedControlState<T>();
+}
+
+class _SettingsSegmentedControlState<T>
+    extends State<SettingsSegmentedControl<T>> {
+  late List<FocusNode> _focusNodes;
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNodes = _createFocusNodes();
+  }
+
+  @override
+  void didUpdateWidget(covariant SettingsSegmentedControl<T> oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.choices.length != widget.choices.length) {
+      for (final node in _focusNodes) {
+        node.dispose();
+      }
+      _focusNodes = _createFocusNodes();
+    }
+  }
+
+  @override
+  void dispose() {
+    for (final node in _focusNodes) {
+      node.dispose();
+    }
+    super.dispose();
+  }
+
+  List<FocusNode> _createFocusNodes() => <FocusNode>[
+    for (var index = 0; index < widget.choices.length; index++)
+      FocusNode(debugLabel: 'settings-segment-$index'),
+  ];
+
+  void _moveFocus(int index, int delta) {
+    final next = (index + delta).clamp(0, widget.choices.length - 1);
+    _focusNodes[next].requestFocus();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Semantics(
       role: SemanticsRole.radioGroup,
       explicitChildNodes: true,
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: [
-          for (final choice in choices)
-            _SettingsChoiceChip(
-              label: choice.label,
-              selected: choice.value == value,
-              selectionControl: true,
-              onPressed: () => onChanged(choice.value),
-            ),
-        ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final children = <Widget>[
+            for (var index = 0; index < widget.choices.length; index++)
+              _SettingsSegment(
+                label: widget.choices[index].label,
+                selected: widget.choices[index].value == widget.value,
+                focusNode: _focusNodes[index],
+                onSelect: () => widget.onChanged(widget.choices[index].value),
+                onMove: (delta) => _moveFocus(index, delta),
+              ),
+          ];
+          if (constraints.maxWidth < 430) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                for (var index = 0; index < children.length; index++) ...[
+                  if (index > 0) const SizedBox(height: settingsSegmentSpacing),
+                  children[index],
+                ],
+              ],
+            );
+          }
+          return Row(
+            children: <Widget>[
+              for (var index = 0; index < children.length; index++) ...[
+                if (index > 0) const SizedBox(width: settingsSegmentSpacing),
+                Expanded(child: children[index]),
+              ],
+            ],
+          );
+        },
       ),
+    );
+  }
+}
+
+class _SettingsSegment extends StatelessWidget {
+  const _SettingsSegment({
+    required this.label,
+    required this.selected,
+    required this.focusNode,
+    required this.onSelect,
+    required this.onMove,
+  });
+
+  final String label;
+  final bool selected;
+  final FocusNode focusNode;
+  final VoidCallback onSelect;
+  final ValueChanged<int> onMove;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = ShellTheme.of(context);
+    final colors = context.shellColors;
+    final palette = theme.accentPalette;
+    final motionDuration = MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : Motion.tile;
+    return SettingsInteractiveSurface(
+      height: settingsSegmentHeight,
+      pressedRadius: ShellShapeScale.small,
+      focusNode: focusNode,
+      onPressed: onSelect,
+      semanticsButton: false,
+      semanticsChecked: selected,
+      semanticsInMutuallyExclusiveGroup: true,
+      semanticsLabel: label,
+      shortcuts: const <ShortcutActivator, Intent>{
+        SingleActivator(LogicalKeyboardKey.arrowLeft):
+            _MoveSegmentFocusIntent(-1),
+        SingleActivator(LogicalKeyboardKey.arrowRight):
+            _MoveSegmentFocusIntent(1),
+      },
+      actions: <Type, Action<Intent>>{
+        _MoveSegmentFocusIntent: CallbackAction<_MoveSegmentFocusIntent>(
+          onInvoke: (intent) {
+            onMove(intent.delta);
+            return null;
+          },
+        ),
+      },
+      builder: (context, radius, state) {
+        final foreground = selected ? palette.onContainer : colors.textPrimary;
+        return Stack(
+          alignment: Alignment.center,
+          children: <Widget>[
+            Positioned.fill(
+              child: IgnorePointer(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: selected
+                        ? palette.container
+                        : colors.surfaceContainerHigh,
+                    borderRadius: radius,
+                  ),
+                ),
+              ),
+            ),
+            Positioned.fill(
+              child: IgnorePointer(
+                child: AnimatedOpacity(
+                  duration: motionDuration,
+                  opacity: !selected && (state.hovered || state.pressed)
+                      ? 1
+                      : 0,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: palette.primary.withValues(
+                        alpha: state.pressed ? 0.12 : 0.08,
+                      ),
+                      borderRadius: radius,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            if (state.focused)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      borderRadius: radius,
+                      border: Border.all(color: palette.primary, width: 2),
+                    ),
+                  ),
+                ),
+              ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: <Widget>[
+                  if (selected) ...[
+                    Icon(
+                      Icons.check_rounded,
+                      size: 16,
+                      color: palette.onContainer,
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                  Flexible(
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: ShellText.settingsButtonLabel.copyWith(
+                        color: foreground,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
@@ -957,55 +1110,97 @@ class SettingsColorButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
-      label: label,
-      value: formatOpaqueColorHex(color),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onPressed,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: context.shellColors.surfaceContainerHigh,
-            borderRadius: context.shellTheme.borderRadius(ShellRadii.chip),
-            border: Border.all(color: context.shellColors.hairline),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(8, 6, 12, 6),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                AnimatedContainer(
-                  duration: Motion.tile,
-                  width: 32,
-                  height: 32,
+    final theme = ShellTheme.of(context);
+    final colors = context.shellColors;
+    final palette = theme.accentPalette;
+    final motionDuration = MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : Motion.tile;
+    return SettingsInteractiveSurface(
+      height: 40,
+      pressedRadius: ShellShapeScale.small,
+      onPressed: onPressed,
+      semanticsLabel: label,
+      semanticsValue: formatOpaqueColorHex(color),
+      builder: (context, radius, state) {
+        return Stack(
+          alignment: Alignment.center,
+          children: <Widget>[
+            Positioned.fill(
+              child: IgnorePointer(
+                child: DecoratedBox(
                   decoration: BoxDecoration(
-                    color: color,
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: context.shellColors.panelHighlight,
+                    color: colors.surfaceContainerHigh,
+                    borderRadius: radius,
+                    border: Border.all(color: colors.hairline),
+                  ),
+                ),
+              ),
+            ),
+            Positioned.fill(
+              child: IgnorePointer(
+                child: AnimatedOpacity(
+                  duration: motionDuration,
+                  opacity: state.hovered || state.pressed ? 1 : 0,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: palette.primary.withValues(
+                        alpha: state.pressed ? 0.12 : 0.08,
+                      ),
+                      borderRadius: radius,
                     ),
                   ),
                 ),
-                const SizedBox(width: 9),
-                Text(
-                  formatOpaqueColorHex(color),
-                  style: ShellText.cardTitle.copyWith(
-                    color: context.shellColors.textSecondary,
-                    fontFamily: ShellText.systemBarFontFamily,
+              ),
+            ),
+            if (state.focused)
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      borderRadius: radius,
+                      border: Border.all(color: palette.primary, width: 2),
+                    ),
                   ),
                 ),
-                const SizedBox(width: 7),
-                Icon(
-                  Icons.expand_more_rounded,
-                  size: 18,
-                  color: context.shellColors.textTertiary,
-                ),
-              ],
+              ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: color,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: colors.panelHighlight),
+                    ),
+                    child: const SizedBox.square(dimension: 32),
+                  ),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      formatOpaqueColorHex(color),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: ShellText.settingsButtonLabel.copyWith(
+                        color: colors.textSecondary,
+                        fontFamily: ShellText.systemBarFontFamily,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Icon(
+                    Icons.expand_more_rounded,
+                    size: 20,
+                    color: colors.textSecondary,
+                  ),
+                ],
+              ),
             ),
-          ),
-        ),
-      ),
+          ],
+        );
+      },
     );
   }
 }
@@ -1027,13 +1222,12 @@ class SettingsAnchorPicker extends StatelessWidget {
       explicitChildNodes: true,
       child: SizedBox(
         width: 132,
-        height: 92,
+        height: 132,
         child: GridView.count(
           physics: const NeverScrollableScrollPhysics(),
           crossAxisCount: 3,
-          childAspectRatio: 1.5,
-          mainAxisSpacing: 5,
-          crossAxisSpacing: 5,
+          mainAxisSpacing: 6,
+          crossAxisSpacing: 6,
           children: [
             for (final anchor in ShellPopupAnchor.values)
               _AnchorButton(
@@ -1060,149 +1254,16 @@ class SettingsTextButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return _SettingsChoiceChip(
+    return SettingsButton(
       label: label,
-      selected: false,
       onPressed: onPressed,
+      variant: SettingsButtonVariant.text,
+      size: SettingsButtonSize.small,
     );
   }
 }
 
-class _SettingsChoiceChip extends StatefulWidget {
-  const _SettingsChoiceChip({
-    required this.label,
-    required this.selected,
-    required this.onPressed,
-    this.selectionControl = false,
-  });
-
-  final String label;
-  final bool selected;
-  final VoidCallback? onPressed;
-  final bool selectionControl;
-
-  @override
-  State<_SettingsChoiceChip> createState() => _SettingsChoiceChipState();
-}
-
-class _SettingsChoiceChipState extends State<_SettingsChoiceChip> {
-  var _hovered = false;
-  var _focused = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final accent = ShellTheme.of(context).accent;
-    final enabled = widget.onPressed != null;
-    final motionDuration = MediaQuery.disableAnimationsOf(context)
-        ? Duration.zero
-        : Motion.tile;
-    return Semantics(
-      button: !widget.selectionControl,
-      checked: widget.selectionControl ? widget.selected : null,
-      inMutuallyExclusiveGroup: widget.selectionControl,
-      enabled: enabled,
-      selected: widget.selectionControl ? null : widget.selected,
-      label: widget.label,
-      child: FocusableActionDetector(
-        enabled: enabled,
-        mouseCursor: enabled
-            ? ShellMouseCursors.link
-            : SystemMouseCursors.basic,
-        onShowFocusHighlight: (value) => setState(() => _focused = value),
-        onShowHoverHighlight: (value) => setState(() => _hovered = value),
-        shortcuts: const <ShortcutActivator, Intent>{
-          SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
-          SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
-        },
-        actions: <Type, Action<Intent>>{
-          ActivateIntent: CallbackAction<ActivateIntent>(
-            onInvoke: (_) {
-              widget.onPressed?.call();
-              return null;
-            },
-          ),
-        },
-        child: AnimatedOpacity(
-          duration: motionDuration,
-          opacity: enabled ? 1 : 0.46,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: widget.onPressed,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                color: context.shellColors.surfaceContainerHigh,
-                borderRadius: context.shellTheme.borderRadius(ShellRadii.chip),
-                border: Border.all(color: context.shellColors.hairline),
-              ),
-              child: Stack(
-                children: [
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: AnimatedOpacity(
-                        duration: motionDuration,
-                        curve: Motion.standard,
-                        opacity: widget.selected ? 1 : 0,
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            color: accent.withAlpha(42),
-                            borderRadius: context.shellTheme.borderRadius(
-                              ShellRadii.chip,
-                            ),
-                            border: Border.all(color: accent),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  Positioned.fill(
-                    child: IgnorePointer(
-                      child: AnimatedOpacity(
-                        duration: motionDuration,
-                        curve: Motion.standard,
-                        opacity: !widget.selected && (_hovered || _focused)
-                            ? 1
-                            : 0,
-                        child: DecoratedBox(
-                          decoration: BoxDecoration(
-                            color: context.shellColors.surfaceContainerHighest,
-                            borderRadius: context.shellTheme.borderRadius(
-                              ShellRadii.chip,
-                            ),
-                            border: Border.all(
-                              color: _focused
-                                  ? accent
-                                  : context.shellColors.textTertiary,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 13,
-                      vertical: 9,
-                    ),
-                    child: Text(
-                      widget.label,
-                      style: ShellText.cardTitle.copyWith(
-                        color: widget.selected
-                            ? accent
-                            : context.shellColors.textSecondary,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _AnchorButton extends StatelessWidget {
+class _AnchorButton extends StatefulWidget {
   const _AnchorButton({
     required this.anchor,
     required this.selected,
@@ -1214,36 +1275,84 @@ class _AnchorButton extends StatelessWidget {
   final VoidCallback onPressed;
 
   @override
+  State<_AnchorButton> createState() => _AnchorButtonState();
+}
+
+class _AnchorButtonState extends State<_AnchorButton> {
+  final _focusNode = FocusNode();
+  var _hovered = false;
+  var _focused = false;
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final accent = ShellTheme.of(context).accent;
+    final theme = ShellTheme.of(context);
+    final colors = context.shellColors;
+    final palette = theme.accentPalette;
+    final radius = theme.borderRadius(ShellShapeScale.medium);
+    final motionDuration = MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : Motion.tile;
     return Semantics(
       button: true,
-      selected: selected,
-      label: _anchorLabel(anchor, context),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onPressed,
-        child: AnimatedContainer(
-          duration: Motion.tile,
-          decoration: BoxDecoration(
-            color: selected
-                ? accent.withAlpha(46)
-                : context.shellColors.surfaceContainerHigh,
-            borderRadius: context.shellTheme.borderRadius(
-              ShellShapeScale.small,
-            ),
-            border: Border.all(
-              color: selected ? accent : context.shellColors.hairline,
-            ),
+      selected: widget.selected,
+      label: _anchorLabel(widget.anchor, context),
+      child: FocusableActionDetector(
+        focusNode: _focusNode,
+        mouseCursor: ShellMouseCursors.link,
+        onShowHoverHighlight: (highlight) =>
+            setState(() => _hovered = highlight),
+        onShowFocusHighlight: (highlight) =>
+            setState(() => _focused = highlight),
+        shortcuts: const <ShortcutActivator, Intent>{
+          SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+          SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
+        },
+        actions: <Type, Action<Intent>>{
+          ActivateIntent: CallbackAction<ActivateIntent>(
+            onInvoke: (_) {
+              widget.onPressed();
+              return null;
+            },
           ),
-          child: Center(
+        },
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: widget.onPressed,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 40),
             child: AnimatedContainer(
-              duration: Motion.tile,
-              width: selected ? 10 : 7,
-              height: selected ? 10 : 7,
+              duration: motionDuration,
               decoration: BoxDecoration(
-                color: selected ? accent : context.shellColors.textTertiary,
-                shape: BoxShape.circle,
+                color: widget.selected
+                    ? palette.container
+                    : colors.surfaceContainerHigh,
+                borderRadius: radius,
+                border: Border.all(
+                  color: widget.selected
+                      ? palette.primary
+                      : (_focused ? palette.primary : colors.hairline),
+                ),
+              ),
+              child: Center(
+                child: AnimatedContainer(
+                  duration: motionDuration,
+                  width: widget.selected ? 10 : 7,
+                  height: widget.selected ? 10 : 7,
+                  decoration: BoxDecoration(
+                    color: widget.selected
+                        ? palette.onContainer
+                        : (_hovered || _focused
+                              ? colors.textSecondary
+                              : colors.textTertiary),
+                    shape: BoxShape.circle,
+                  ),
+                ),
               ),
             ),
           ),

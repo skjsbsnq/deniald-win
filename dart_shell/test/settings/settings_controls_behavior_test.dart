@@ -1,3 +1,4 @@
+import 'package:denial_dart_shell/src/settings/widgets/settings_buttons.dart';
 import 'package:denial_dart_shell/src/settings/widgets/settings_controls.dart';
 import 'package:denial_dart_shell/src/theme/shell_theme.dart';
 import 'package:flutter/material.dart';
@@ -21,7 +22,7 @@ void main() {
       ),
     );
 
-    await tester.tap(find.byType(DropdownButton<String>));
+    await tester.tap(find.byType(SettingsButton));
     await tester.pumpAndSettle();
     await tester.tap(find.text('Floating').last);
     await tester.pumpAndSettle();
