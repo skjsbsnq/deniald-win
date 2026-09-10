@@ -1544,6 +1544,40 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsBarThickness => '系统栏厚度';
 
   @override
+  String get settingsChromeOsShelfTitle => 'ChromeOS shelf';
+
+  @override
+  String get settingsClipboardTrayEdgeBottom => '下边缘';
+
+  @override
+  String get settingsClipboardTrayEdgeLeft => '左边缘';
+
+  @override
+  String get settingsClipboardTrayEdgeRight => '右边缘';
+
+  @override
+  String get settingsClipboardTrayEdgeTop => '上边缘';
+
+  @override
+  String get settingsClipboardTraySize => '托盘尺寸';
+
+  @override
+  String get settingsClipboardTrayTitle => '剪贴板托盘';
+
+  @override
+  String get settingsShelfDisplaysHint => '每个选中的显示器都会显示独立的 shelf。';
+
+  @override
+  String get settingsShelfHeight => 'Shelf 高度';
+
+  @override
+  String get settingsUseChromeOsShelf => '使用 ChromeOS shelf';
+
+  @override
+  String get settingsUseChromeOsShelfDescription =>
+      '用底部 shelf、应用栏与统一托盘替代经典系统栏。';
+
+  @override
   String get settingsBluetoothAdapterDescription => '当前适配器';
 
   @override

@@ -8,6 +8,21 @@ import '../shell_settings.dart';
 import 'settings_controls.dart';
 import 'system_bar_placement_card.dart';
 
+/// Identifies the system bar / shelf thickness slider (§5.1), so tests can
+/// assert the effective range while its label switches between the two modes.
+const settingsBarThicknessSliderKey = ValueKey<String>(
+  'settings-bar-thickness-slider',
+);
+
+/// Floor of the classic system bar thickness slider (§5.1).
+const double settingsBarMinimumHeight = 24;
+
+/// Floor of the shelf height slider when ChromeOS shelf is active (§5.1).
+const double settingsShelfMinimumHeight = 48;
+
+/// Ceiling shared by the classic bar thickness and the shelf height (§5.1).
+const double settingsBarMaximumHeight = 112;
+
 class SettingsLayoutPage extends StatelessWidget {
   const SettingsLayoutPage({
     required this.settings,
@@ -44,6 +59,18 @@ class SettingsLayoutPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
+    // Single validity source for the ChromeOS shelf (§E4): the layout settings
+    // are already selected once by the page host, and the card never reads a
+    // provider of its own.
+    final shelfActive = settings.useChromeOsShelf;
+    final thicknessMinimum = shelfActive
+        ? settingsShelfMinimumHeight
+        : settingsBarMinimumHeight;
+    final thickness = shelfActive
+        ? settings.effectiveSystemBarThickness
+              .clamp(settingsShelfMinimumHeight, settingsBarMaximumHeight)
+              .toDouble()
+        : settings.systemBarThickness;
     return SettingsPageLayout(
       icon: Icons.space_dashboard_outlined,
       eyebrow: l10n.settingsLayoutSection,
@@ -120,14 +147,13 @@ class SettingsLayoutPage extends StatelessWidget {
         SettingsCardGroup(
           children: [
             SettingsSection(
-              title: 'ChromeOS shelf',
+              title: l10n.settingsChromeOsShelfTitle,
               child: SettingsToggle(
                 key: const ValueKey<String>(
                   'settings-use-chromeos-shelf-toggle',
                 ),
-                label: 'Use ChromeOS shelf',
-                description:
-                    'Replace the classic system bar with a bottom shelf, application strip, and unified tray.',
+                label: l10n.settingsUseChromeOsShelf,
+                description: l10n.settingsUseChromeOsShelfDescription,
                 value: settings.useChromeOsShelf,
                 onChanged: onUseChromeOsShelfChanged ?? (_) {},
                 enabled: onUseChromeOsShelfChanged != null,
@@ -136,18 +162,22 @@ class SettingsLayoutPage extends StatelessWidget {
             SystemBarPlacementCard(
               layout: displayLayout,
               onChanged: onSystemBarChanged,
+              showEdgeSelector: !shelfActive,
             ),
             SettingsSection(
               title: l10n.settingsBarGeometryTitle,
               child: SettingsSlider(
-                label: l10n.settingsBarThickness,
-                value: settings.systemBarThickness,
-                minimum: 24,
-                maximum: 112,
-                divisions: 88,
-                valueLabel: l10n.settingsPixels(
-                  settings.systemBarThickness.round(),
-                ),
+                key: settingsBarThicknessSliderKey,
+                label: shelfActive
+                    ? l10n.settingsShelfHeight
+                    : l10n.settingsBarThickness,
+                value: thickness,
+                minimum: thicknessMinimum,
+                maximum: settingsBarMaximumHeight,
+                // One division per logical pixel across the active range.
+                divisions: (settingsBarMaximumHeight - thicknessMinimum)
+                    .round(),
+                valueLabel: l10n.settingsPixels(thickness.round()),
                 onChanged: onSystemBarThicknessChanged,
               ),
             ),
@@ -201,23 +231,35 @@ class SettingsLayoutPage extends StatelessWidget {
               ),
             ),
             SettingsSection(
-              title: 'Clipboard tray',
+              title: l10n.settingsClipboardTrayTitle,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   SettingsSegmentedControl<ClipboardTrayEdge>(
                     value: settings.clipboardTrayEdge,
-                    choices: const [
-                      SettingsChoice(ClipboardTrayEdge.left, 'Left edge'),
-                      SettingsChoice(ClipboardTrayEdge.right, 'Right edge'),
-                      SettingsChoice(ClipboardTrayEdge.top, 'Top edge'),
-                      SettingsChoice(ClipboardTrayEdge.bottom, 'Bottom edge'),
+                    choices: [
+                      SettingsChoice(
+                        ClipboardTrayEdge.left,
+                        l10n.settingsClipboardTrayEdgeLeft,
+                      ),
+                      SettingsChoice(
+                        ClipboardTrayEdge.right,
+                        l10n.settingsClipboardTrayEdgeRight,
+                      ),
+                      SettingsChoice(
+                        ClipboardTrayEdge.top,
+                        l10n.settingsClipboardTrayEdgeTop,
+                      ),
+                      SettingsChoice(
+                        ClipboardTrayEdge.bottom,
+                        l10n.settingsClipboardTrayEdgeBottom,
+                      ),
                     ],
                     onChanged: onClipboardTrayEdgeChanged,
                   ),
                   const SizedBox(height: 18),
                   SettingsSlider(
-                    label: 'Tray size',
+                    label: l10n.settingsClipboardTraySize,
                     value: settings.clipboardTrayExtent,
                     minimum: clipboardTrayMinimumExtent,
                     maximum: clipboardTrayMaximumExtent,

@@ -2269,6 +2269,50 @@
   "@settingsBarThickness": {
     "description": "English UI text for settingsBarThickness."
   },
+  "settingsChromeOsShelfTitle": "ChromeOS shelf",
+  "@settingsChromeOsShelfTitle": {
+    "description": "Section title for the ChromeOS shelf toggle."
+  },
+  "settingsClipboardTrayEdgeBottom": "Bottom edge",
+  "@settingsClipboardTrayEdgeBottom": {
+    "description": "Clipboard tray edge choice: bottom."
+  },
+  "settingsClipboardTrayEdgeLeft": "Left edge",
+  "@settingsClipboardTrayEdgeLeft": {
+    "description": "Clipboard tray edge choice: left."
+  },
+  "settingsClipboardTrayEdgeRight": "Right edge",
+  "@settingsClipboardTrayEdgeRight": {
+    "description": "Clipboard tray edge choice: right."
+  },
+  "settingsClipboardTrayEdgeTop": "Top edge",
+  "@settingsClipboardTrayEdgeTop": {
+    "description": "Clipboard tray edge choice: top."
+  },
+  "settingsClipboardTraySize": "Tray size",
+  "@settingsClipboardTraySize": {
+    "description": "Slider label for the clipboard tray size."
+  },
+  "settingsClipboardTrayTitle": "Clipboard tray",
+  "@settingsClipboardTrayTitle": {
+    "description": "Section title for the clipboard tray setting."
+  },
+  "settingsShelfDisplaysHint": "Each selected display shows its own shelf.",
+  "@settingsShelfDisplaysHint": {
+    "description": "Display hint shown while the ChromeOS shelf is active."
+  },
+  "settingsShelfHeight": "Shelf height",
+  "@settingsShelfHeight": {
+    "description": "Slider label for the shelf height while the ChromeOS shelf is active."
+  },
+  "settingsUseChromeOsShelf": "Use ChromeOS shelf",
+  "@settingsUseChromeOsShelf": {
+    "description": "Label of the ChromeOS shelf toggle."
+  },
+  "settingsUseChromeOsShelfDescription": "Replace the classic system bar with a bottom shelf, app strip, and unified tray.",
+  "@settingsUseChromeOsShelfDescription": {
+    "description": "Explanation of what the ChromeOS shelf replaces."
+  },
   "settingsBluetoothAdapterDescription": "Current adapter",
   "@settingsBluetoothAdapterDescription": {
     "description": "English UI text for settingsBluetoothAdapterDescription."

@@ -13,6 +13,12 @@ const settingsSystemBarPlacementCardKey = ValueKey<String>(
   'settings-system-bar-placement-card',
 );
 
+/// Identifies the edge selector, so tests can assert it is absent while
+/// ChromeOS shelf owns the bar edge (§5.1, 禁令 §E1).
+const settingsSystemBarEdgeSelectorKey = ValueKey<String>(
+  'settings-system-bar-edge-selector',
+);
+
 typedef SystemBarPlacementChanged =
     void Function(SystemBarSide side, List<int> monitorIds);
 
@@ -21,10 +27,18 @@ class SystemBarPlacementCard extends StatelessWidget {
     super.key,
     required this.layout,
     required this.onChanged,
+    this.showEdgeSelector = true,
   });
 
   final DisplayLayout? layout;
   final SystemBarPlacementChanged onChanged;
+
+  /// Whether the top/bottom/left/right edge picker is rendered.
+  ///
+  /// The ChromeOS shelf pins the bar to the bottom edge, so the classic edge
+  /// choice is invalid there and the layout page hides it (§5.1). The display
+  /// selection below stays: every monitor still gets its own shelf.
+  final bool showEdgeSelector;
 
   void _setSide(SystemBarSide side) {
     final current = layout;
@@ -82,14 +96,17 @@ class SystemBarPlacementCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _SettingLabel(label: l10n.settingsSystemBarEdgeLabel),
-          const SizedBox(height: 10),
-          _EdgeSelector(
-            selected: current?.systemBarSide ?? SystemBarSide.hidden,
-            enabled: current != null,
-            onSelected: _setSide,
-          ),
-          const SizedBox(height: 24),
+          if (showEdgeSelector) ...[
+            _SettingLabel(label: l10n.settingsSystemBarEdgeLabel),
+            const SizedBox(height: 10),
+            _EdgeSelector(
+              key: settingsSystemBarEdgeSelectorKey,
+              selected: current?.systemBarSide ?? SystemBarSide.hidden,
+              enabled: current != null,
+              onSelected: _setSide,
+            ),
+            const SizedBox(height: 24),
+          ],
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
@@ -107,7 +124,12 @@ class SystemBarPlacementCard extends StatelessWidget {
           ),
           const SizedBox(height: 7),
           Text(
-            l10n.settingsSystemBarCloneHint,
+            // With the edge picker gone the shelf owns the bar, and the clone
+            // hint describes shelves rather than classic bars (§5.1). Tying the
+            // two keeps the card's API surface at one new parameter.
+            showEdgeSelector
+                ? l10n.settingsSystemBarCloneHint
+                : l10n.settingsShelfDisplaysHint,
             style: ShellText.base.copyWith(
               color: context.shellColors.textSecondary,
               height: 1.4,
@@ -148,6 +170,7 @@ class _SettingLabel extends StatelessWidget {
 
 class _EdgeSelector extends StatelessWidget {
   const _EdgeSelector({
+    super.key,
     required this.selected,
     required this.enabled,
     required this.onSelected,

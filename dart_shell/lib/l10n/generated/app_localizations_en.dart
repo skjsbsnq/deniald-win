@@ -1597,6 +1597,41 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsBarThickness => 'Bar thickness';
 
   @override
+  String get settingsChromeOsShelfTitle => 'ChromeOS shelf';
+
+  @override
+  String get settingsClipboardTrayEdgeBottom => 'Bottom edge';
+
+  @override
+  String get settingsClipboardTrayEdgeLeft => 'Left edge';
+
+  @override
+  String get settingsClipboardTrayEdgeRight => 'Right edge';
+
+  @override
+  String get settingsClipboardTrayEdgeTop => 'Top edge';
+
+  @override
+  String get settingsClipboardTraySize => 'Tray size';
+
+  @override
+  String get settingsClipboardTrayTitle => 'Clipboard tray';
+
+  @override
+  String get settingsShelfDisplaysHint =>
+      'Each selected display shows its own shelf.';
+
+  @override
+  String get settingsShelfHeight => 'Shelf height';
+
+  @override
+  String get settingsUseChromeOsShelf => 'Use ChromeOS shelf';
+
+  @override
+  String get settingsUseChromeOsShelfDescription =>
+      'Replace the classic system bar with a bottom shelf, app strip, and unified tray.';
+
+  @override
   String get settingsBluetoothAdapterDescription => 'Current adapter';
 
   @override

@@ -18,6 +18,7 @@ class SettingsOverlaysPage extends StatelessWidget {
   const SettingsOverlaysPage({
     required this.settings,
     required this.onChanged,
+    required this.useChromeOsShelf,
     required this.onReset,
     super.key,
   });
@@ -28,6 +29,15 @@ class SettingsOverlaysPage extends StatelessWidget {
     ShellPopupPlacement placement,
   )
   onChanged;
+
+  /// Whether the ChromeOS shelf owns the launcher and dashboard surfaces.
+  ///
+  /// Under the shelf those shells are taken over by shelf bubbles or are not
+  /// rendered at all, so their placement editors are invalid and hidden rather
+  /// than deleted (§5.2, 禁令 §E1). Notifications and the system-level display
+  /// stay valid either way (禁令 §E3).
+  final bool useChromeOsShelf;
+
   final VoidCallback onReset;
 
   @override
@@ -41,24 +51,28 @@ class SettingsOverlaysPage extends StatelessWidget {
       children: [
         SettingsCardGroup(
           children: [
-            _PlacementEditor(
-              title: l10n.settingsLauncherOverlayTitle,
-              surface: ShellOverlaySurface.launcher,
-              placement: settings.launcher,
-              onChanged: onChanged,
-              minimumWidth: 420,
-              minimumHeight: launcherOverlayMinimumHeight,
-              showHoverTrigger: true,
-            ),
-            _PlacementEditor(
-              title: l10n.settingsDashboardOverlayTitle,
-              surface: ShellOverlaySurface.dashboard,
-              placement: settings.dashboard,
-              onChanged: onChanged,
-              minimumWidth: 320,
-              minimumHeight: 360,
-              showHoverTrigger: true,
-            ),
+            // Dropping the two invalid editors before they reach the group
+            // keeps the remaining rows adjacent, with no stranded divider.
+            if (!useChromeOsShelf) ...[
+              _PlacementEditor(
+                title: l10n.settingsLauncherOverlayTitle,
+                surface: ShellOverlaySurface.launcher,
+                placement: settings.launcher,
+                onChanged: onChanged,
+                minimumWidth: 420,
+                minimumHeight: launcherOverlayMinimumHeight,
+                showHoverTrigger: true,
+              ),
+              _PlacementEditor(
+                title: l10n.settingsDashboardOverlayTitle,
+                surface: ShellOverlaySurface.dashboard,
+                placement: settings.dashboard,
+                onChanged: onChanged,
+                minimumWidth: 320,
+                minimumHeight: 360,
+                showHoverTrigger: true,
+              ),
+            ],
             _PlacementEditor(
               title: l10n.settingsNotificationOverlayTitle,
               surface: ShellOverlaySurface.notifications,

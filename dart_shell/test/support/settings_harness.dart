@@ -1,4 +1,5 @@
 import 'package:denial_dart_shell/l10n/generated/app_localizations.dart';
+import 'package:denial_dart_shell/src/models/display_layout.dart';
 import 'package:denial_dart_shell/src/models/output_configuration.dart';
 import 'package:denial_dart_shell/src/models/suspend_mode.dart';
 import 'package:denial_dart_shell/src/platform/denial_bridge.dart';
@@ -41,6 +42,11 @@ const Size settingsHarnessWindowSize = Size(1280, 1800);
 /// [windowSize] defaults to [settingsHarnessWindowSize]; pass a width below the
 /// 840 breakpoint to exercise the single-column drill-down.
 ///
+/// [initialSettings] seeds the document state (for example
+/// `layout.useChromeOsShelf: true`). [displayLayout] pins the monitor topology
+/// the system bar placement card reads; the default null renders its
+/// "unavailable" fallback.
+///
 /// Any provider a specific test needs can be layered on top through
 /// [overrides]. The returned container lets a test drive providers (for
 /// example the one-shot [settingsPageOpenRequestProvider]).
@@ -48,6 +54,8 @@ Future<ProviderContainer> pumpSettingsApp(
   WidgetTester tester, {
   SettingsPageId initialPage = SettingsPageId.about,
   Size windowSize = settingsHarnessWindowSize,
+  ShellSettings initialSettings = const ShellSettings(),
+  DisplayLayout? displayLayout,
   List<Override> overrides = const <Override>[],
 }) async {
   tester.view.physicalSize = windowSize;
@@ -62,8 +70,12 @@ Future<ProviderContainer> pumpSettingsApp(
     overrides: <Override>[
       denialBridgeProvider.overrideWithValue(bridge),
       // The real controller retries over a socket and owns a retry timer.
-      displayLayoutProvider.overrideWithBuild((ref, controller) => null),
-      shellSettingsProvider.overrideWith(SettingsTestSettingsController.new),
+      displayLayoutProvider.overrideWithBuild(
+        (ref, controller) => displayLayout,
+      ),
+      shellSettingsProvider.overrideWith(
+        () => SettingsTestSettingsController(initialSettings),
+      ),
       // Battery and suspend-capability reads reach D-Bus and `/sys`; the
       // static fakes keep the pending-timer invariant checkable.
       upowerProvider.overrideWith(SettingsTestUPowerController.new),
@@ -106,13 +118,38 @@ class SettingsTestBridge extends DenialBridge {
   void close() => dispose();
 }
 
-/// Serves default [ShellSettings] without a settings document store.
+/// Serves [initial] without a settings document store.
 ///
 /// Bypassing `settingsStoreProvider` also skips `SystemThemePropagation`,
 /// which would shell out to fontconfig and gsettings.
+///
+/// The two layout mutators used by S05 are overridden to write state directly:
+/// the inherited `_update` path would reach `SystemThemePropagation` (gsettings
+/// plus writes under `$HOME/.config`) and schedule a store write, none of which
+/// a widget test may touch.
 class SettingsTestSettingsController extends ShellSettingsController {
+  SettingsTestSettingsController([this.initial = const ShellSettings()]);
+
+  final ShellSettings initial;
+
   @override
-  ShellSettings build() => const ShellSettings();
+  ShellSettings build() => initial;
+
+  @override
+  void setUseChromeOsShelf(bool value) {
+    state = state.copyWith(
+      layout: state.layout.copyWith(useChromeOsShelf: value),
+    );
+  }
+
+  @override
+  void setSystemBarThickness(double value) {
+    state = state.copyWith(
+      layout: state.layout.copyWith(
+        systemBarThickness: value.clamp(24, 112).toDouble(),
+      ),
+    );
+  }
 }
 
 /// UPower state that never probes the system bus.

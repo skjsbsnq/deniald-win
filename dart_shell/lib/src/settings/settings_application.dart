@@ -641,6 +641,11 @@ class _SettingsPageBody extends ConsumerWidget {
         );
         return SettingsOverlaysPage(
           settings: settings,
+          useChromeOsShelf: ref.watch(
+            shellSettingsProvider.select(
+              (settings) => settings.layout.useChromeOsShelf,
+            ),
+          ),
           onChanged: controller.setOverlayPlacement,
           onReset: controller.resetOverlays,
         );

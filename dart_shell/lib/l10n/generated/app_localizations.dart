@@ -2861,6 +2861,72 @@ abstract class AppLocalizations {
   /// **'Bar thickness'**
   String get settingsBarThickness;
 
+  /// Section title for the ChromeOS shelf toggle.
+  ///
+  /// In en, this message translates to:
+  /// **'ChromeOS shelf'**
+  String get settingsChromeOsShelfTitle;
+
+  /// Clipboard tray edge choice: bottom.
+  ///
+  /// In en, this message translates to:
+  /// **'Bottom edge'**
+  String get settingsClipboardTrayEdgeBottom;
+
+  /// Clipboard tray edge choice: left.
+  ///
+  /// In en, this message translates to:
+  /// **'Left edge'**
+  String get settingsClipboardTrayEdgeLeft;
+
+  /// Clipboard tray edge choice: right.
+  ///
+  /// In en, this message translates to:
+  /// **'Right edge'**
+  String get settingsClipboardTrayEdgeRight;
+
+  /// Clipboard tray edge choice: top.
+  ///
+  /// In en, this message translates to:
+  /// **'Top edge'**
+  String get settingsClipboardTrayEdgeTop;
+
+  /// Slider label for the clipboard tray size.
+  ///
+  /// In en, this message translates to:
+  /// **'Tray size'**
+  String get settingsClipboardTraySize;
+
+  /// Section title for the clipboard tray setting.
+  ///
+  /// In en, this message translates to:
+  /// **'Clipboard tray'**
+  String get settingsClipboardTrayTitle;
+
+  /// Display hint shown while the ChromeOS shelf is active.
+  ///
+  /// In en, this message translates to:
+  /// **'Each selected display shows its own shelf.'**
+  String get settingsShelfDisplaysHint;
+
+  /// Slider label for the shelf height while the ChromeOS shelf is active.
+  ///
+  /// In en, this message translates to:
+  /// **'Shelf height'**
+  String get settingsShelfHeight;
+
+  /// Label of the ChromeOS shelf toggle.
+  ///
+  /// In en, this message translates to:
+  /// **'Use ChromeOS shelf'**
+  String get settingsUseChromeOsShelf;
+
+  /// Explanation of what the ChromeOS shelf replaces.
+  ///
+  /// In en, this message translates to:
+  /// **'Replace the classic system bar with a bottom shelf, app strip, and unified tray.'**
+  String get settingsUseChromeOsShelfDescription;
+
   /// English UI text for settingsBluetoothAdapterDescription.
   ///
   /// In en, this message translates to:
