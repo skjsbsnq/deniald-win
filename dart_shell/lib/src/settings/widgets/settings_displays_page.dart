@@ -18,6 +18,7 @@ import '../../theme/tokens.dart';
 import '../../widgets/shell_cursor.dart';
 import '../monitor_arrangement.dart';
 import 'settings_controls.dart';
+import 'settings_menu.dart';
 
 const settingsMonitorLayoutEditorKey = ValueKey<String>(
   'settings-monitor-layout-editor',
@@ -236,14 +237,18 @@ class _SettingsDisplayConfirmationDialogState
                       ),
                     ),
                     const SizedBox(height: 20),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
+                    // A Wrap keeps both actions reachable when the labels and
+                    // the dialog's 410dp cap leave less room than the two
+                    // buttons need; the confirmation flow itself is untouched.
+                    Wrap(
+                      alignment: WrapAlignment.end,
+                      spacing: 10,
+                      runSpacing: 8,
                       children: <Widget>[
                         SettingsTextButton(
                           label: l10n.settingsDisplayRevertNow,
                           onPressed: widget.busy ? null : widget.onRevert,
                         ),
-                        const SizedBox(width: 10),
                         SettingsTextButton(
                           key: settingsKeepDisplayConfigurationKey,
                           label: l10n.settingsDisplayKeepChanges,
@@ -333,9 +338,8 @@ class _OutputConfigurationBody extends StatelessWidget {
                   state.configuration!.capabilities.persistent
                       ? context.l10n.settingsDisplayApplyPersistentHint
                       : context.l10n.settingsDisplayApplySessionHint,
-                  style: ShellText.base.copyWith(
-                    color: context.shellColors.textTertiary,
-                    fontSize: 11,
+                  style: ShellText.settingsRowSupport.copyWith(
+                    color: context.shellColors.textSecondary,
                   ),
                 ),
               ),
@@ -388,7 +392,7 @@ class _PrimaryDisplayControl extends StatelessWidget {
           !outputs.any((output) => output.enabled && output.name == value))
         SettingsChoice<String?>(value, value!),
     ];
-    final selector = _DisplayDropdown<String?>(
+    final selector = _DisplayField<String?>(
       key: settingsPrimaryDisplaySelectorKey,
       label: context.l10n.settingsDisplayPrimary,
       value: value,
@@ -398,10 +402,8 @@ class _PrimaryDisplayControl extends StatelessWidget {
     );
     final hint = Text(
       context.l10n.settingsDisplayPrimaryHint,
-      style: ShellText.base.copyWith(
-        color: context.shellColors.textTertiary,
-        fontSize: 11,
-        height: 1.4,
+      style: ShellText.settingsRowSupport.copyWith(
+        color: context.shellColors.textSecondary,
       ),
     );
     return LayoutBuilder(
@@ -593,9 +595,8 @@ class _MonitorLayoutEditorState extends State<MonitorLayoutEditor> {
                   Expanded(
                     child: Text(
                       context.l10n.settingsDisplayCanvasPanHint,
-                      style: ShellText.base.copyWith(
-                        color: context.shellColors.textTertiary,
-                        fontSize: 11,
+                      style: ShellText.settingsRowSupport.copyWith(
+                        color: context.shellColors.textSecondary,
                       ),
                     ),
                   ),
@@ -622,9 +623,8 @@ class _MonitorLayoutEditorState extends State<MonitorLayoutEditor> {
                       child: Text(
                         '${(_viewScale * 100).round()}%',
                         textAlign: TextAlign.center,
-                        style: ShellText.base.copyWith(
+                        style: ShellText.settingsRowSupport.copyWith(
                           color: context.shellColors.textSecondary,
-                          fontSize: 11,
                         ),
                       ),
                     ),
@@ -775,7 +775,7 @@ class _CanvasZoomButton extends StatelessWidget {
       padding: EdgeInsets.zero,
       style: IconButton.styleFrom(
         foregroundColor: context.shellColors.textSecondary,
-        disabledForegroundColor: context.shellColors.textTertiary.withAlpha(82),
+        disabledForegroundColor: context.shellColors.textSecondary.withAlpha(82),
         backgroundColor: context.shellColors.surfaceContainerHigh,
         hoverColor: context.shellColors.textSecondary.withAlpha(26),
         focusColor: context.shellColors.textSecondary.withAlpha(26),
@@ -949,12 +949,16 @@ class _MonitorTileState extends State<_MonitorTile> {
                     color: context.shellColors.textPrimary,
                   ),
                   const SizedBox(height: 4),
-                  Text(widget.output.name, style: ShellText.cardTitle),
+                  Text(
+                    widget.output.name,
+                    style: ShellText.settingsRowTitle.copyWith(
+                      color: context.shellColors.textPrimary,
+                    ),
+                  ),
                   Text(
                     '${mode.width} × ${mode.height}',
-                    style: ShellText.base.copyWith(
-                      color: context.shellColors.textTertiary,
-                      fontSize: 10,
+                    style: ShellText.settingsBadgeLabel.copyWith(
+                      color: context.shellColors.textSecondary,
                     ),
                   ),
                 ],
@@ -1011,13 +1015,17 @@ class _MonitorControls extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
-        Text(output.description, style: ShellText.base),
+        Text(
+          output.description,
+          style: ShellText.settingsRowTitle.copyWith(
+            color: context.shellColors.textPrimary,
+          ),
+        ),
         const SizedBox(height: 4),
         Text(
           context.l10n.settingsDisplayPosition(output.x, output.y),
-          style: ShellText.base.copyWith(
-            color: context.shellColors.textTertiary,
-            fontSize: 11,
+          style: ShellText.settingsRowSupport.copyWith(
+            color: context.shellColors.textSecondary,
           ),
         ),
         const SizedBox(height: 12),
@@ -1025,7 +1033,7 @@ class _MonitorControls extends StatelessWidget {
           builder: (context, constraints) {
             final compact = constraints.maxWidth < 620;
             final fields = <Widget>[
-              _DisplayDropdown<_Resolution>(
+              _DisplayField<_Resolution>(
                 key: ValueKey<String>(
                   '${output.name}-resolution-${selectedResolution.width}x${selectedResolution.height}',
                 ),
@@ -1063,7 +1071,7 @@ class _MonitorControls extends StatelessWidget {
                   onModeChanged(next);
                 },
               ),
-              _DisplayDropdown<DenialOutputMode>(
+              _DisplayField<DenialOutputMode>(
                 key: ValueKey<String>(
                   '${output.name}-refresh-${selectedMode.refreshMillihz}',
                 ),
@@ -1079,7 +1087,7 @@ class _MonitorControls extends StatelessWidget {
                 ],
                 onChanged: onModeChanged,
               ),
-              _DisplayDropdown<DenialOutputTransform>(
+              _DisplayField<DenialOutputTransform>(
                 key: ValueKey<String>(
                   '${output.name}-rotation-${output.transform.wireName}',
                 ),
@@ -1273,15 +1281,11 @@ class _SettingsDisplayScaleControlState
       },
       onSubmitted: _focusNode.unfocus,
     );
-    final presets = _DisplayDropdown<double>(
+    final presets = _ScalePresetField(
       key: settingsDisplayScalePresetKey,
-      label: context.l10n.settingsDisplayScalePreset,
       value: widget.scale,
       enabled: widget.enabled,
-      choices: <SettingsChoice<double>>[
-        for (final scale in choices)
-          SettingsChoice<double>(scale, _scalePercentLabel(scale)),
-      ],
+      scales: choices,
       onChanged: _selectPreset,
     );
     final message = _invalid
@@ -1312,12 +1316,10 @@ class _SettingsDisplayScaleControlState
               liveRegion: _invalid,
               child: Text(
                 message,
-                style: ShellText.base.copyWith(
+                style: ShellText.settingsRowSupport.copyWith(
                   color: _invalid
                       ? context.shellColors.performanceBad
-                      : context.shellColors.textTertiary,
-                  fontSize: 11,
-                  height: 1.3,
+                      : context.shellColors.textSecondary,
                 ),
               ),
             ),
@@ -1383,52 +1385,54 @@ class _ScalePercentField extends StatelessWidget {
                 context.l10n.settingsDisplayScale,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: ShellText.base.copyWith(
+                style: ShellText.cardTitle.copyWith(
                   color: invalid
                       ? context.shellColors.performanceBad
-                      : context.shellColors.textTertiary,
-                  fontSize: 10,
+                      : context.shellColors.textSecondary,
                 ),
               ),
               const SizedBox(height: 3),
-              Row(
-                children: <Widget>[
-                  Expanded(
-                    child: TextField(
-                      key: settingsDisplayScaleFieldKey,
-                      controller: controller,
-                      focusNode: focusNode,
-                      enabled: enabled,
-                      autocorrect: false,
-                      enableSuggestions: false,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      textInputAction: TextInputAction.done,
-                      inputFormatters: <TextInputFormatter>[
-                        FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
-                        LengthLimitingTextInputFormatter(6),
-                      ],
-                      onChanged: onChanged,
-                      onSubmitted: (_) => onSubmitted(),
-                      style: valueStyle,
-                      decoration: const InputDecoration(
-                        isCollapsed: true,
-                        border: InputBorder.none,
-                        enabledBorder: InputBorder.none,
-                        focusedBorder: InputBorder.none,
-                        disabledBorder: InputBorder.none,
+              SizedBox(
+                height: 40,
+                child: Row(
+                  children: <Widget>[
+                    Expanded(
+                      child: TextField(
+                        key: settingsDisplayScaleFieldKey,
+                        controller: controller,
+                        focusNode: focusNode,
+                        enabled: enabled,
+                        autocorrect: false,
+                        enableSuggestions: false,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                        ),
+                        textInputAction: TextInputAction.done,
+                        inputFormatters: <TextInputFormatter>[
+                          FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
+                          LengthLimitingTextInputFormatter(6),
+                        ],
+                        onChanged: onChanged,
+                        onSubmitted: (_) => onSubmitted(),
+                        style: valueStyle,
+                        decoration: const InputDecoration(
+                          isCollapsed: true,
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          disabledBorder: InputBorder.none,
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    '%',
-                    style: valueStyle.copyWith(
-                      color: context.shellColors.textSecondary,
+                    const SizedBox(width: 4),
+                    Text(
+                      '%',
+                      style: valueStyle.copyWith(
+                        color: context.shellColors.textSecondary,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ],
           ),
@@ -1459,8 +1463,15 @@ String _scalePercentValue(double scale) {
   return percent.toStringAsFixed(2).replaceFirst(RegExp(r'0+$'), '');
 }
 
-class _DisplayDropdown<T> extends StatefulWidget {
-  const _DisplayDropdown({
+/// Compact labelled selector built on the shared S03 [SettingsMenu]
+/// (`02-VISUAL-SPEC.md` §3.9), replacing the page's bespoke `_DisplayDropdown`.
+///
+/// The menu keeps the defensive `orElse` fallback: a persisted flipped
+/// transform or a compositor mode that does not byte-match an entry in `modes`
+/// must not throw during build, so an unmatched value falls back to its own
+/// string form instead.
+class _DisplayField<T> extends StatelessWidget {
+  const _DisplayField({
     required this.label,
     required this.value,
     required this.enabled,
@@ -1476,408 +1487,93 @@ class _DisplayDropdown<T> extends StatefulWidget {
   final ValueChanged<T> onChanged;
 
   @override
-  State<_DisplayDropdown<T>> createState() => _DisplayDropdownState<T>();
-}
-
-class _DisplayDropdownState<T> extends State<_DisplayDropdown<T>> {
-  final _layerLink = LayerLink();
-  final _buttonKey = GlobalKey();
-  final _buttonFocusNode = FocusNode();
-  OverlayEntry? _menuEntry;
-  var _expanded = false;
-  var _focused = false;
-
-  void _toggle() {
-    if (!widget.enabled) {
-      return;
-    }
-    if (_expanded) {
-      _closeMenu();
-    } else {
-      _openMenu();
-    }
-  }
-
-  void _openMenu() {
-    final target = _buttonKey.currentContext?.findRenderObject();
-    final overlay = Overlay.of(context);
-    final overlayBox = overlay.context.findRenderObject();
-    if (target is! RenderBox || overlayBox is! RenderBox) {
-      return;
-    }
-
-    final targetOffset = target.localToGlobal(
-      Offset.zero,
-      ancestor: overlayBox,
-    );
-    final targetSize = target.size;
-    final desiredHeight = math.min(220.0, widget.choices.length * 40.0 + 10);
-    final below = overlayBox.size.height - targetOffset.dy - targetSize.height;
-    final above = targetOffset.dy;
-    final showAbove = below < desiredHeight + 6 && above > below;
-    final available = showAbove ? above : below;
-    final maximumHeight = math.max(48.0, math.min(220.0, available - 8));
-    final accent = ShellTheme.of(context).accent;
-
-    setState(() => _expanded = true);
-    _menuEntry = OverlayEntry(
-      builder: (_) => _DisplayDropdownOverlay<T>(
-        link: _layerLink,
-        width: targetSize.width,
-        maximumHeight: maximumHeight,
-        showAbove: showAbove,
-        choices: widget.choices,
-        value: widget.value,
-        accent: accent,
-        onDismissed: _closeMenu,
-        onSelected: _select,
-      ),
-    );
-    overlay.insert(_menuEntry!);
-  }
-
-  void _closeMenu() {
-    _menuEntry?.remove();
-    _menuEntry = null;
-    if (mounted && _expanded) {
-      setState(() => _expanded = false);
-    }
-  }
-
-  void _select(T value) {
-    _closeMenu();
-    _buttonFocusNode.requestFocus();
-    widget.onChanged(value);
-  }
-
-  @override
-  void didUpdateWidget(covariant _DisplayDropdown<T> oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (!widget.enabled && _expanded) {
-      _closeMenu();
-    } else {
-      _menuEntry?.markNeedsBuild();
-    }
-  }
-
-  @override
-  void dispose() {
-    _menuEntry?.remove();
-    _buttonFocusNode.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final accent = ShellTheme.of(context).accent;
-    // The current value can be absent from the choices: a flipped transform
-    // from a persisted configuration, or a compositor mode snapshot whose
-    // current_mode does not byte-match an entry in modes. Fall back to a raw
-    // label instead of throwing during build.
-    final selected = widget.choices.firstWhere(
-      (choice) => choice.value == widget.value,
-      orElse: () => SettingsChoice(
-        widget.value,
-        widget.value.toString(),
-      ),
-    );
-    return Semantics(
-      button: true,
-      enabled: widget.enabled,
-      expanded: _expanded,
-      label: widget.label,
-      value: selected.label,
-      child: AnimatedOpacity(
-        duration: Motion.tile,
-        opacity: widget.enabled ? 1 : 0.46,
-        child: CompositedTransformTarget(
-          link: _layerLink,
-          child: KeyedSubtree(
-            key: _buttonKey,
-            child: FocusableActionDetector(
-              focusNode: _buttonFocusNode,
-              enabled: widget.enabled,
-              mouseCursor: widget.enabled
-                  ? ShellMouseCursors.link
-                  : SystemMouseCursors.basic,
-              onShowFocusHighlight: (focused) =>
-                  setState(() => _focused = focused),
-              shortcuts: const <ShortcutActivator, Intent>{
-                SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
-                SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
-                SingleActivator(LogicalKeyboardKey.escape):
-                    _CloseDisplayDropdownIntent(),
-              },
-              actions: <Type, Action<Intent>>{
-                ActivateIntent: CallbackAction<ActivateIntent>(
-                  onInvoke: (_) {
-                    _toggle();
-                    return null;
-                  },
-                ),
-                _CloseDisplayDropdownIntent:
-                    CallbackAction<_CloseDisplayDropdownIntent>(
-                      onInvoke: (_) {
-                        _closeMenu();
-                        return null;
-                      },
-                    ),
-              },
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onTap: widget.enabled ? _toggle : null,
-                child: AnimatedContainer(
-                  duration: Motion.tile,
-                  padding: const EdgeInsets.fromLTRB(12, 8, 9, 9),
-                  decoration: BoxDecoration(
-                    color: context.shellColors.surfaceContainerHigh,
-                    borderRadius: context.shellTheme.borderRadius(
-                      ShellShapeScale.medium,
-                    ),
-                    border: Border.all(
-                      color: _expanded || _focused
-                          ? accent
-                          : context.shellColors.hairline,
-                    ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Text(
-                        widget.label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: ShellText.base.copyWith(
-                          color: context.shellColors.textTertiary,
-                          fontSize: 10,
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      Row(
-                        children: <Widget>[
-                          Expanded(
-                            child: Text(
-                              selected.label,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: ShellText.cardTitle,
-                            ),
-                          ),
-                          AnimatedRotation(
-                            turns: _expanded ? 0.5 : 0,
-                            duration: Motion.tile,
-                            child: Icon(
-                              Icons.expand_more_rounded,
-                              size: 18,
-                              color: context.shellColors.textTertiary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: <Widget>[
+        Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: ShellText.cardTitle.copyWith(
+            color: context.shellColors.textSecondary,
           ),
         ),
-      ),
+        const SizedBox(height: 6),
+        SettingsMenu<T>(
+          semanticsLabel: label,
+          value: value,
+          items: <SettingsMenuItem<T>>[
+            for (final choice in choices)
+              SettingsMenuItem<T>(choice.value, choice.label),
+          ],
+          onChanged: onChanged,
+          enabled: enabled,
+        ),
+      ],
     );
   }
 }
 
-class _DisplayDropdownOverlay<T> extends StatelessWidget {
-  const _DisplayDropdownOverlay({
-    required this.link,
-    required this.width,
-    required this.maximumHeight,
-    required this.showAbove,
-    required this.choices,
+/// Scale-preset selector laid out to match [_ScalePercentField], so the two
+/// controls stay equally tall in the wide layout.
+class _ScalePresetField extends StatelessWidget {
+  const _ScalePresetField({
     required this.value,
-    required this.accent,
-    required this.onDismissed,
-    required this.onSelected,
+    required this.enabled,
+    required this.scales,
+    required this.onChanged,
+    super.key,
   });
 
-  final LayerLink link;
-  final double width;
-  final double maximumHeight;
-  final bool showAbove;
-  final List<SettingsChoice<T>> choices;
-  final T value;
-  final Color accent;
-  final VoidCallback onDismissed;
-  final ValueChanged<T> onSelected;
+  final double value;
+  final bool enabled;
+  final List<double> scales;
+  final ValueChanged<double> onChanged;
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      type: MaterialType.transparency,
-      child: Stack(
-        children: <Widget>[
-          Positioned.fill(
-            child: GestureDetector(
-              behavior: HitTestBehavior.translucent,
-              onTap: onDismissed,
-              child: const SizedBox.expand(),
-            ),
+    return AnimatedOpacity(
+      duration: Motion.tile,
+      opacity: enabled ? 1 : 0.46,
+      child: AnimatedContainer(
+        duration: Motion.tile,
+        padding: const EdgeInsets.fromLTRB(12, 8, 9, 8),
+        decoration: BoxDecoration(
+          color: context.shellColors.surfaceContainerHigh,
+          borderRadius: context.shellTheme.borderRadius(ShellShapeScale.medium),
+          border: Border.all(
+            color: enabled
+                ? context.shellColors.hairline
+                : context.shellColors.hairlineSoft,
           ),
-          CompositedTransformFollower(
-            link: link,
-            showWhenUnlinked: false,
-            targetAnchor: showAbove ? Alignment.topLeft : Alignment.bottomLeft,
-            followerAnchor: showAbove
-                ? Alignment.bottomLeft
-                : Alignment.topLeft,
-            offset: Offset(0, showAbove ? -6 : 6),
-            child: SizedBox(
-              width: width,
-              child: Focus(
-                autofocus: true,
-                onKeyEvent: (node, event) {
-                  if (event is KeyDownEvent &&
-                      event.logicalKey == LogicalKeyboardKey.escape) {
-                    onDismissed();
-                    return KeyEventResult.handled;
-                  }
-                  return KeyEventResult.ignored;
-                },
-                child: Semantics(
-                  container: true,
-                  explicitChildNodes: true,
-                  child: ConstrainedBox(
-                    constraints: BoxConstraints(maxHeight: maximumHeight),
-                    child: DecoratedBox(
-                      decoration: BoxDecoration(
-                        color: context.shellColors.surfaceContainerHighest,
-                        borderRadius: context.shellTheme.borderRadius(
-                          ShellShapeScale.medium,
-                        ),
-                        border: Border.all(color: context.shellColors.hairline),
-                        boxShadow: <BoxShadow>[
-                          BoxShadow(
-                            color: ShellMediaColors.darkness.withValues(
-                              alpha: 0.32,
-                            ),
-                            blurRadius: 20,
-                            offset: Offset(0, 8),
-                          ),
-                        ],
-                      ),
-                      child: SingleChildScrollView(
-                        padding: const EdgeInsets.all(5),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: <Widget>[
-                            for (final choice in choices)
-                              _DisplayDropdownOption<T>(
-                                choice: choice,
-                                selected: choice.value == value,
-                                accent: accent,
-                                onSelected: onSelected,
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: <Widget>[
+            Text(
+              context.l10n.settingsDisplayScalePreset,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: ShellText.cardTitle.copyWith(
+                color: context.shellColors.textSecondary,
               ),
             ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _CloseDisplayDropdownIntent extends Intent {
-  const _CloseDisplayDropdownIntent();
-}
-
-class _DisplayDropdownOption<T> extends StatefulWidget {
-  const _DisplayDropdownOption({
-    required this.choice,
-    required this.selected,
-    required this.accent,
-    required this.onSelected,
-  });
-
-  final SettingsChoice<T> choice;
-  final bool selected;
-  final Color accent;
-  final ValueChanged<T> onSelected;
-
-  @override
-  State<_DisplayDropdownOption<T>> createState() =>
-      _DisplayDropdownOptionState<T>();
-}
-
-class _DisplayDropdownOptionState<T> extends State<_DisplayDropdownOption<T>> {
-  var _highlighted = false;
-
-  @override
-  Widget build(BuildContext context) {
-    void select() => widget.onSelected(widget.choice.value);
-    return Semantics(
-      button: true,
-      selected: widget.selected,
-      label: widget.choice.label,
-      child: FocusableActionDetector(
-        mouseCursor: ShellMouseCursors.link,
-        onShowFocusHighlight: (highlighted) =>
-            setState(() => _highlighted = highlighted),
-        onShowHoverHighlight: (highlighted) =>
-            setState(() => _highlighted = highlighted),
-        shortcuts: const <ShortcutActivator, Intent>{
-          SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
-          SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
-        },
-        actions: <Type, Action<Intent>>{
-          ActivateIntent: CallbackAction<ActivateIntent>(
-            onInvoke: (_) {
-              select();
-              return null;
-            },
-          ),
-        },
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: select,
-          child: AnimatedContainer(
-            duration: Motion.tile,
-            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 8),
-            decoration: BoxDecoration(
-              color: widget.selected
-                  ? widget.accent.withAlpha(42)
-                  : _highlighted
-                  ? context.shellColors.surfaceContainerHigh
-                  : ShellMediaColors.transparentDark,
-              borderRadius: context.shellTheme.borderRadius(
-                ShellShapeScale.small,
-              ),
-            ),
-            child: Row(
-              children: <Widget>[
-                Expanded(
-                  child: Text(
-                    widget.choice.label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: ShellText.cardTitle.copyWith(
-                      color: widget.selected
-                          ? widget.accent
-                          : context.shellColors.textSecondary,
-                    ),
-                  ),
-                ),
-                if (widget.selected) ...<Widget>[
-                  const SizedBox(width: 6),
-                  Icon(Icons.check_rounded, size: 16, color: widget.accent),
+            const SizedBox(height: 3),
+            SizedBox(
+              height: 40,
+              child: SettingsMenu<double>(
+                semanticsLabel: context.l10n.settingsDisplayScalePreset,
+                value: value,
+                items: <SettingsMenuItem<double>>[
+                  for (final scale in scales)
+                    SettingsMenuItem<double>(scale, _scalePercentLabel(scale)),
                 ],
-              ],
+                onChanged: onChanged,
+                enabled: enabled,
+              ),
             ),
-          ),
+          ],
         ),
       ),
     );
@@ -1934,10 +1630,7 @@ class _DisplayBrightnessCard extends ConsumerWidget {
                         },
                       ),
                       if (index != layout.outputs.length - 1)
-                        Divider(
-                          height: 18,
-                          color: context.shellColors.hairlineSoft,
-                        ),
+                        const SizedBox(height: 18),
                     ],
                   ],
                 ),
@@ -1957,7 +1650,7 @@ class _DisplayNotice extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: <Widget>[
-        Icon(icon, size: 18, color: context.shellColors.textTertiary),
+        Icon(icon, size: 18, color: context.shellColors.textSecondary),
         const SizedBox(width: 10),
         Expanded(
           child: Text(
@@ -1993,9 +1686,8 @@ class _InlineError extends StatelessWidget {
           padding: const EdgeInsets.all(10),
           child: Text(
             message,
-            style: ShellText.base.copyWith(
+            style: ShellText.settingsRowSupport.copyWith(
               color: context.shellColors.performanceBad,
-              fontSize: 11,
             ),
           ),
         ),

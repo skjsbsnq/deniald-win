@@ -4,44 +4,33 @@ import '../../localization/denial_localizations.dart';
 import '../../theme/shell_theme.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/denial_wordmark.dart';
+import 'settings_controls.dart';
 
 const settingsAboutWordmarkKey = ValueKey<String>('settings-about-wordmark');
 
+/// About page, converged onto the new page skeleton (`SettingsPageLayout`).
+///
+/// The hero content (wordmark, tagline, belief, description and credit) keeps
+/// its data source; the page title now lives in the shared page header, so the
+/// body no longer repeats a title of its own.
 class SettingsAboutPage extends StatelessWidget {
   const SettingsAboutPage({super.key});
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return Semantics(
       container: true,
-      label: context.l10n.settingsAboutPageSemanticsLabel,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final horizontalPadding = constraints.maxWidth < 600 ? 20.0 : 36.0;
-          return SingleChildScrollView(
-            padding: EdgeInsets.fromLTRB(
-              horizontalPadding,
-              28,
-              horizontalPadding,
-              40,
-            ),
-            child: Align(
-              alignment: Alignment.topCenter,
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 760),
-                child: const Column(
-                  children: [
-                    _AboutHero(),
-                    SizedBox(height: 28),
-                    _AboutDescription(),
-                    SizedBox(height: 28),
-                    _AboutCredit(),
-                  ],
-                ),
-              ),
-            ),
-          );
-        },
+      label: l10n.settingsAboutPageSemanticsLabel,
+      child: SettingsPageLayout(
+        icon: Icons.info_outline_rounded,
+        eyebrow: l10n.settingsAboutPageSemanticsLabel,
+        title: l10n.settingsNavigationAbout,
+        children: const <Widget>[
+          SettingsCardGroup(children: <Widget>[_AboutHero()]),
+          SettingsCardGroup(children: <Widget>[_AboutDescription()]),
+          SettingsCardGroup(children: <Widget>[_AboutCredit()]),
+        ],
       ),
     );
   }
@@ -55,7 +44,7 @@ class _AboutHero extends StatelessWidget {
     final l10n = context.l10n;
     final accent = ShellTheme.of(context).accent;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 12, 24, 30),
+      padding: const EdgeInsets.fromLTRB(24, 22, 24, 26),
       child: Column(
         children: [
           ConstrainedBox(
@@ -68,22 +57,21 @@ class _AboutHero extends StatelessWidget {
               ),
             ),
           ),
+          const SizedBox(height: 18),
           Text(
             l10n.settingsAboutTagline,
             textAlign: TextAlign.center,
-            style: TextStyle(
+            style: ShellText.settingsPageTitleCollapsed.copyWith(
               color: context.shellColors.textPrimary,
-              fontSize: 22,
-              height: 1.2,
-              fontWeight: FontWeight.w800,
-              decoration: TextDecoration.none,
             ),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 16),
           DecoratedBox(
             decoration: BoxDecoration(
               color: accent.withAlpha(26),
-              borderRadius: context.shellTheme.borderRadius(ShellRadii.chip),
+              borderRadius: context.shellTheme.borderRadius(
+                ShellShapeScale.full,
+              ),
               border: Border.all(color: accent.withAlpha(76)),
             ),
             child: Padding(
@@ -107,13 +95,11 @@ class _AboutDescription extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final bodyStyle = ShellText.base.copyWith(
+    final bodyStyle = ShellText.settingsRowSupport.copyWith(
       color: context.shellColors.textSecondary,
-      fontSize: 15,
-      height: 1.55,
     );
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 660),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 22),
       child: Column(
         children: [
           Text(
@@ -149,31 +135,24 @@ class _AboutCredit extends StatelessWidget {
           Text(
             l10n.settingsAboutCreditLabel,
             textAlign: TextAlign.center,
-            style: ShellText.cardTitle.copyWith(
-              color: context.shellColors.textTertiary,
-              fontSize: 10,
-              // Integral tracking keeps glyph phase on the physical pixel grid.
-              letterSpacing: 1,
+            style: ShellText.settingsRowSupport.copyWith(
+              color: context.shellColors.textSecondary,
             ),
           ),
           const SizedBox(height: 6),
           SelectableText(
             l10n.settingsAboutCreditName,
             textAlign: TextAlign.center,
-            style: TextStyle(
+            style: ShellText.settingsPageTitleCollapsed.copyWith(
               color: context.shellColors.textPrimary,
-              fontSize: 21,
-              fontWeight: FontWeight.w800,
-              decoration: TextDecoration.none,
             ),
           ),
           const SizedBox(height: 9),
           Text(
             l10n.settingsAboutCollaboration,
             textAlign: TextAlign.center,
-            style: ShellText.base.copyWith(
+            style: ShellText.settingsRowSupport.copyWith(
               color: context.shellColors.textSecondary,
-              height: 1.4,
             ),
           ),
         ],

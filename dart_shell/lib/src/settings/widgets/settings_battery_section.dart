@@ -8,6 +8,7 @@ import '../../theme/shell_theme.dart';
 import '../../theme/shell_color_scheme.dart';
 import '../../theme/tokens.dart';
 import 'settings_controls.dart';
+import 'settings_loading_indicator.dart';
 
 const settingsBatteryRefreshKey = ValueKey<String>('settings-battery-refresh');
 
@@ -162,7 +163,7 @@ class _BatteryNotice extends StatelessWidget {
   Widget build(BuildContext context) {
     final color = error
         ? context.shellColors.performanceBad
-        : context.shellColors.textTertiary;
+        : context.shellColors.textSecondary;
     return Semantics(
       liveRegion: true,
       label: message,
@@ -172,7 +173,7 @@ class _BatteryNotice extends StatelessWidget {
           color: context.shellTheme.cardColor(
             context.shellColors.surfaceContainerHigh,
           ),
-          borderRadius: context.shellTheme.borderRadius(ShellRadii.chip),
+          borderRadius: context.shellTheme.borderRadius(ShellShapeScale.large),
           border: Border.all(color: context.shellColors.hairlineSoft),
         ),
         child: Padding(
@@ -180,23 +181,15 @@ class _BatteryNotice extends StatelessWidget {
           child: Row(
             children: <Widget>[
               if (busy)
-                SizedBox.square(
-                  dimension: 17,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: ShellTheme.of(context).accent,
-                  ),
-                )
+                const SettingsLoadingIndicator()
               else
                 Icon(icon, size: 18, color: color),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
                   message,
-                  style: ShellText.base.copyWith(
+                  style: ShellText.settingsRowSupport.copyWith(
                     color: error ? color : context.shellColors.textSecondary,
-                    fontSize: 12,
-                    height: 1.4,
                   ),
                 ),
               ),
@@ -235,7 +228,7 @@ class _BatteryPanel extends StatelessWidget {
           color: context.shellTheme.cardColor(
             context.shellColors.surfaceContainerHigh,
           ),
-          borderRadius: context.shellTheme.borderRadius(ShellRadii.tile),
+          borderRadius: context.shellTheme.borderRadius(ShellShapeScale.large),
           border: Border.all(color: context.shellColors.hairlineSoft),
         ),
         child: Padding(
@@ -255,9 +248,7 @@ class _BatteryPanel extends StatelessWidget {
               const SizedBox(height: 14),
               _BatteryMetricGrid(battery: battery),
               if (battery.chargeThresholdSupported) ...<Widget>[
-                const SizedBox(height: 14),
-                Divider(height: 1, color: context.shellColors.hairlineSoft),
-                const SizedBox(height: 14),
+                const SizedBox(height: 28),
                 _ChargeThresholdControls(
                   battery: battery,
                   changing: thresholdChanging,
@@ -303,7 +294,7 @@ class _BatteryHeading extends StatelessWidget {
                 name,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: ShellText.cardTitle.copyWith(
+                style: ShellText.settingsRowTitle.copyWith(
                   color: context.shellColors.textPrimary,
                 ),
               ),
@@ -317,16 +308,15 @@ class _BatteryHeading extends StatelessWidget {
           children: <Widget>[
             Text(
               charge,
-              style: ShellText.cardTitle.copyWith(
+              style: ShellText.settingsRowTitle.copyWith(
                 color: context.shellColors.textPrimary,
                 fontFamily: ShellText.systemBarFontFamily,
-                fontSize: 14,
               ),
             ),
             const SizedBox(height: 2),
             Text(
               state,
-              style: ShellText.base.copyWith(color: color, fontSize: 11),
+              style: ShellText.settingsRowSupport.copyWith(color: color),
             ),
           ],
         );
@@ -365,7 +355,7 @@ class _BatteryLevelIndicator extends StatelessWidget {
       label: l10n.settingsBatteryChargeLevel,
       value: l10n.settingsPercent(percentage.round()),
       child: ClipRRect(
-        borderRadius: context.shellTheme.borderRadius(ShellRadii.chip),
+        borderRadius: context.shellTheme.borderRadius(ShellShapeScale.full),
         child: LinearProgressIndicator(
           value: percentage / 100,
           minHeight: 6,
@@ -417,7 +407,7 @@ class _BatteryMetricTile extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: context.shellColors.surfaceContainer,
-        borderRadius: context.shellTheme.borderRadius(ShellRadii.chip),
+        borderRadius: context.shellTheme.borderRadius(ShellShapeScale.medium),
         border: Border.all(color: context.shellColors.hairlineSoft),
       ),
       child: Padding(
@@ -427,15 +417,14 @@ class _BatteryMetricTile extends StatelessWidget {
             Icon(
               metric.icon,
               size: 16,
-              color: context.shellColors.textTertiary,
+              color: context.shellColors.textSecondary,
             ),
             const SizedBox(width: 9),
             Expanded(
               child: Text(
                 metric.label,
-                style: ShellText.base.copyWith(
-                  color: context.shellColors.textTertiary,
-                  fontSize: 11,
+                style: ShellText.settingsRowSupport.copyWith(
+                  color: context.shellColors.textSecondary,
                 ),
               ),
             ),
@@ -445,12 +434,11 @@ class _BatteryMetricTile extends StatelessWidget {
                 metric.value,
                 textAlign: TextAlign.right,
                 overflow: TextOverflow.ellipsis,
-                style: ShellText.cardTitle.copyWith(
+                style: ShellText.settingsRowSupport.copyWith(
                   color: context.shellColors.textSecondary,
                   fontFamily: metric.monospace
                       ? ShellText.systemBarFontFamily
                       : null,
-                  fontSize: 11,
                 ),
               ),
             ),
@@ -513,10 +501,8 @@ class _ChargeThresholdControls extends StatelessWidget {
           const SizedBox(height: 9),
           Text(
             l10n.settingsBatteryChargeLimitLevelsReadOnly,
-            style: ShellText.base.copyWith(
-              color: context.shellColors.textTertiary,
-              fontSize: 11,
-              height: 1.35,
+            style: ShellText.settingsRowSupport.copyWith(
+              color: context.shellColors.textSecondary,
             ),
           ),
         ],
@@ -538,7 +524,7 @@ class _ThresholdChip extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: accent.withAlpha(20),
-        borderRadius: context.shellTheme.borderRadius(ShellRadii.chip),
+        borderRadius: context.shellTheme.borderRadius(ShellShapeScale.full),
         border: Border.all(color: accent.withAlpha(70)),
       ),
       child: Padding(
@@ -550,9 +536,8 @@ class _ThresholdChip extends StatelessWidget {
             const SizedBox(width: 6),
             Text(
               value == null ? label : '$label · $value',
-              style: ShellText.cardTitle.copyWith(
+              style: ShellText.settingsBadgeLabel.copyWith(
                 color: context.shellColors.textSecondary,
-                fontSize: 10,
               ),
             ),
           ],
@@ -739,7 +724,7 @@ Color _batteryStateColor(ShellColorScheme colors, UPowerBattery battery) {
   return switch (battery.state) {
     UPowerBatteryState.charging ||
     UPowerBatteryState.fullyCharged => colors.gestureArmed,
-    _ => colors.textTertiary,
+    _ => colors.textSecondary,
   };
 }
 

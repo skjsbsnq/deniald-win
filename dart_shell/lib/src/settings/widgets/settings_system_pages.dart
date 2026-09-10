@@ -222,10 +222,7 @@ class SettingsNetworkPage extends ConsumerWidget {
                             },
                           ),
                           if (index != snapshot.networks.length - 1)
-                            Divider(
-                              height: 20,
-                              color: context.shellColors.hairlineSoft,
-                            ),
+                            const SizedBox(height: 12),
                         ],
                       ],
                     ),
@@ -339,10 +336,7 @@ class SettingsBluetoothPage extends ConsumerWidget {
                             ),
                           ),
                           if (index != state.devices.length - 1)
-                            Divider(
-                              height: 20,
-                              color: context.shellColors.hairlineSoft,
-                            ),
+                            const SizedBox(height: 12),
                         ],
                       ],
                     ),
@@ -435,13 +429,17 @@ class _StatusRow extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title, style: ShellText.cardTitle),
+              Text(
+                title,
+                style: ShellText.settingsRowTitle.copyWith(
+                  color: context.shellColors.textPrimary,
+                ),
+              ),
               const SizedBox(height: 3),
               Text(
                 subtitle,
-                style: ShellText.base.copyWith(
-                  color: context.shellColors.textTertiary,
-                  fontSize: 11,
+                style: ShellText.settingsRowSupport.copyWith(
+                  color: context.shellColors.textSecondary,
                 ),
               ),
             ],
@@ -475,7 +473,7 @@ class _SettingsNotice extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 10),
       child: Row(
         children: [
-          Icon(icon, size: 18, color: context.shellColors.textTertiary),
+          Icon(icon, size: 18, color: context.shellColors.textSecondary),
           const SizedBox(width: 10),
           Expanded(
             child: Text(
