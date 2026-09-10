@@ -234,4 +234,110 @@ abstract final class ShellText {
     fontWeight: FontWeight.w500,
     decoration: TextDecoration.none,
   );
+
+  // Settings typography roles (02-VISUAL-SPEC.md §6).
+  //
+  // The explicit `height` values are the spec's line-height / font-size
+  // ratios; every role keeps `letterSpacing` at zero so glyph phase stays on
+  // the physical pixel grid (constraint §D5).
+
+  /// Page headline, expanded state (M3E emphasized HeadlineMedium).
+  static const TextStyle settingsPageTitle = TextStyle(
+    fontFamilyFallback: fallbackFontFamilies,
+    fontSize: 28,
+    height: 36 / 28,
+    fontWeight: FontWeight.w500,
+    letterSpacing: 0,
+    decoration: TextDecoration.none,
+  );
+
+  /// Page headline, collapsed-and-pinned state (M3E emphasized TitleLarge).
+  static const TextStyle settingsPageTitleCollapsed = TextStyle(
+    fontFamilyFallback: fallbackFontFamilies,
+    fontSize: 22,
+    height: 28 / 22,
+    fontWeight: FontWeight.w500,
+    letterSpacing: 0,
+    decoration: TextDecoration.none,
+  );
+
+  /// Navigation destination title (M3 TitleMedium).
+  static const TextStyle settingsNavLabel = TextStyle(
+    fontFamilyFallback: fallbackFontFamilies,
+    fontSize: 16,
+    height: 24 / 16,
+    fontWeight: FontWeight.w500,
+    letterSpacing: 0,
+    decoration: TextDecoration.none,
+  );
+
+  /// Navigation destination supporting line (M3 BodyMedium).
+  static const TextStyle settingsNavSupport = TextStyle(
+    fontFamilyFallback: fallbackFontFamilies,
+    fontSize: 14,
+    height: 20 / 14,
+    fontWeight: FontWeight.w400,
+    letterSpacing: 0,
+    decoration: TextDecoration.none,
+  );
+
+  /// Content row title (M3 TitleMedium).
+  static const TextStyle settingsRowTitle = TextStyle(
+    fontFamilyFallback: fallbackFontFamilies,
+    fontSize: 16,
+    height: 24 / 16,
+    fontWeight: FontWeight.w500,
+    letterSpacing: 0,
+    decoration: TextDecoration.none,
+  );
+
+  /// Content row supporting line (M3 BodyMedium).
+  static const TextStyle settingsRowSupport = TextStyle(
+    fontFamilyFallback: fallbackFontFamilies,
+    fontSize: 14,
+    height: 20 / 14,
+    fontWeight: FontWeight.w400,
+    letterSpacing: 0,
+    decoration: TextDecoration.none,
+  );
+
+  /// Group or section title (M3 TitleSmall, deliberately restrained).
+  static const TextStyle settingsSectionHeader = TextStyle(
+    fontFamilyFallback: fallbackFontFamilies,
+    fontSize: 14,
+    height: 20 / 14,
+    fontWeight: FontWeight.w500,
+    letterSpacing: 0,
+    decoration: TextDecoration.none,
+  );
+
+  /// Button label (M3 LabelLarge).
+  static const TextStyle settingsButtonLabel = TextStyle(
+    fontFamilyFallback: fallbackFontFamilies,
+    fontSize: 14,
+    height: 20 / 14,
+    fontWeight: FontWeight.w500,
+    letterSpacing: 0,
+    decoration: TextDecoration.none,
+  );
+
+  /// "Live changes" badge label (M3 LabelSmall).
+  static const TextStyle settingsBadgeLabel = TextStyle(
+    fontFamilyFallback: fallbackFontFamilies,
+    fontSize: 11,
+    height: 16 / 11,
+    fontWeight: FontWeight.w500,
+    letterSpacing: 0,
+    decoration: TextDecoration.none,
+  );
+
+  /// Search field hint (M3 BodyLarge).
+  static const TextStyle settingsSearchHint = TextStyle(
+    fontFamilyFallback: fallbackFontFamilies,
+    fontSize: 16,
+    height: 24 / 16,
+    fontWeight: FontWeight.w400,
+    letterSpacing: 0,
+    decoration: TextDecoration.none,
+  );
 }
