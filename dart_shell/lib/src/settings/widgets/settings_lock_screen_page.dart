@@ -194,7 +194,10 @@ class _LockPreview extends StatelessWidget {
                         const SizedBox(height: 8),
                         Text(
                           l10n.settingsLockPreviewStatus,
-                          style: ShellText.lockStatus.copyWith(fontSize: 10),
+                          // Scaled-down mock of the lock readout; the mock's
+                          // smallest line still clears the page's 13pt floor
+                          // (§3.1.5).
+                          style: ShellText.lockStatus.copyWith(fontSize: 13),
                         ),
                       ],
                     ],
@@ -239,9 +242,8 @@ class _LockPreview extends StatelessWidget {
                         const SizedBox(height: 5),
                         Text(
                           l10n.lockPressEnter,
-                          style: ShellText.base.copyWith(
-                            color: context.shellColors.textTertiary,
-                            fontSize: 9,
+                          style: ShellText.settingsRowSupport.copyWith(
+                            color: context.shellColors.textSecondary,
                           ),
                         ),
                       ],

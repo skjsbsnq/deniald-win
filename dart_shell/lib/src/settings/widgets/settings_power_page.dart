@@ -109,9 +109,9 @@ class SettingsPowerPage extends ConsumerWidget {
             onEnabledChanged: onLockEnabledChanged,
             onTimeoutChanged: onLockTimeoutChanged,
           ),
-          const SizedBox(height: 18),
-          Divider(height: 1, color: context.shellColors.hairlineSoft),
-          const SizedBox(height: 18),
+          // The old page-level divider is gone (§3.1.5): the three idle
+          // policies share one section, so they separate by rhythm alone.
+          const SizedBox(height: 36),
           _IdleActionControls(
             toggleKey: settingsIdleDpmsToggleKey,
             sliderKey: settingsIdleDpmsTimeoutKey,
@@ -125,9 +125,7 @@ class SettingsPowerPage extends ConsumerWidget {
             onEnabledChanged: onDpmsEnabledChanged,
             onTimeoutChanged: onDpmsTimeoutChanged,
           ),
-          const SizedBox(height: 18),
-          Divider(height: 1, color: context.shellColors.hairlineSoft),
-          const SizedBox(height: 18),
+          const SizedBox(height: 36),
           _IdleActionControls(
             toggleKey: settingsIdleSuspendToggleKey,
             sliderKey: settingsIdleSuspendTimeoutKey,
@@ -268,10 +266,8 @@ class _IdleInhibitNotice extends StatelessWidget {
               Expanded(
                 child: Text(
                   l10n.settingsIdleInhibitDescription,
-                  style: ShellText.base.copyWith(
+                  style: ShellText.settingsRowSupport.copyWith(
                     color: context.shellColors.textSecondary,
-                    fontSize: 12,
-                    height: 1.4,
                   ),
                 ),
               ),

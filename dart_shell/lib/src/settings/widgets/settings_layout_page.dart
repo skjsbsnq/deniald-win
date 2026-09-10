@@ -101,10 +101,8 @@ class SettingsLayoutPage extends StatelessWidget {
                   const SizedBox(height: 8),
                   Text(
                     l10n.settingsWindowLayoutDescription,
-                    style: ShellText.base.copyWith(
-                      color: ShellTheme.colorsOf(context).textSecondary,
-                      fontSize: 11,
-                      height: 1.4,
+                    style: ShellText.settingsRowSupport.copyWith(
+                      color: context.shellColors.textSecondary,
                     ),
                   ),
                 ],
@@ -207,10 +205,8 @@ class SettingsLayoutPage extends StatelessWidget {
                   const SizedBox(height: 8),
                   Text(
                     l10n.settingsWindowMinimizationDescription,
-                    style: ShellText.base.copyWith(
-                      color: ShellTheme.colorsOf(context).textSecondary,
-                      fontSize: 11,
-                      height: 1.4,
+                    style: ShellText.settingsRowSupport.copyWith(
+                      color: context.shellColors.textSecondary,
                     ),
                   ),
                 ],

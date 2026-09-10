@@ -14,6 +14,7 @@ import '../../wallpaper/wallpaper.dart';
 import '../../wallpaper/widgets/wallpaper_image.dart';
 import '../../widgets/shell_cursor.dart';
 import 'settings_controls.dart';
+import 'settings_loading_indicator.dart';
 
 const settingsWallpaperTriggerKey = ValueKey<String>(
   'settings-wallpaper-trigger',
@@ -146,10 +147,8 @@ class SettingsAppearancePage extends StatelessWidget {
                             DesktopColorSchemePreference.noPreference
                         ? l10n.settingsColorSchemeNoPreferenceDescription
                         : l10n.settingsColorSchemeDescription,
-                    style: ShellText.base.copyWith(
-                      color: ShellTheme.colorsOf(context).textSecondary,
-                      fontSize: 11,
-                      height: 1.4,
+                    style: ShellText.settingsRowSupport.copyWith(
+                      color: context.shellColors.textSecondary,
                     ),
                   ),
                 ],
@@ -168,10 +167,8 @@ class SettingsAppearancePage extends StatelessWidget {
               ),
               child: Text(
                 l10n.settingsWallpaperDescription,
-                style: ShellText.base.copyWith(
-                  color: ShellTheme.colorsOf(context).textSecondary,
-                  fontSize: 11,
-                  height: 1.4,
+                style: ShellText.settingsRowSupport.copyWith(
+                  color: context.shellColors.textSecondary,
                 ),
               ),
             ),
@@ -415,10 +412,8 @@ class _FontsAndIconsSettings extends StatelessWidget {
         const SizedBox(height: 12),
         Text(
           l10n.settingsFontsAndIconsRestartNotice,
-          style: ShellText.base.copyWith(
-            color: ShellTheme.colorsOf(context).textSecondary,
-            fontSize: 11,
-            height: 1.4,
+          style: ShellText.settingsRowSupport.copyWith(
+            color: context.shellColors.textSecondary,
           ),
         ),
       ],
@@ -528,7 +523,7 @@ class _CursorSettingsState extends State<_CursorSettings> {
             const Center(
               child: Padding(
                 padding: EdgeInsets.all(16),
-                child: CircularProgressIndicator(),
+                child: SettingsLoadingIndicator(),
               ),
             )
           else
@@ -562,9 +557,8 @@ class _CursorSettingsState extends State<_CursorSettings> {
               liveRegion: true,
               child: Text(
                 error,
-                style: ShellText.base.copyWith(
+                style: ShellText.settingsRowSupport.copyWith(
                   color: Theme.of(context).colorScheme.error,
-                  fontSize: 11,
                 ),
               ),
             ),
@@ -702,9 +696,8 @@ class _CursorThemeCardState extends State<_CursorThemeCard> {
                                 widget.theme.author,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: ShellText.base.copyWith(
-                                  color: colors.textTertiary,
-                                  fontSize: 10,
+                                style: ShellText.settingsRowSupport.copyWith(
+                                  color: colors.textSecondary,
                                 ),
                               ),
                             ],
