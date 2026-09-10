@@ -42,6 +42,9 @@ import 'widgets/settings_navigation.dart';
 import 'widgets/settings_overlays_page.dart';
 import 'widgets/settings_page_header.dart';
 import 'widgets/settings_power_page.dart';
+import 'widgets/settings_search_bar.dart';
+import 'widgets/settings_search_index.dart';
+import 'widgets/settings_search_view.dart';
 import 'widgets/settings_shortcuts_page.dart';
 import 'widgets/settings_system_pages.dart';
 import 'widgets/settings_touchpad_page.dart';
@@ -241,6 +244,13 @@ class _DenialSettingsApplicationState
   var _colorPickerOpen = false;
   int? _scheduledPageRequestId;
 
+  // Settings search state (S07 §3.2). The application owns it so both layouts
+  // share one implementation: the wide left rail swaps its list for the
+  // results, the narrow home swaps its list for the same view.
+  var _searchActive = false;
+  var _searchQuery = '';
+  var _searchHighlight = 0;
+
   @override
   void initState() {
     super.initState();
@@ -296,6 +306,117 @@ class _DenialSettingsApplicationState
     setState(() => _detailOpen = false);
   }
 
+  /// Current matches for the active query (§3.1). Empty unless the search is
+  /// open, so closing it never renders stale results.
+  List<SettingsPageId> _searchResults() {
+    if (!_searchActive) {
+      return const <SettingsPageId>[];
+    }
+    return search(
+      _searchQuery,
+      SettingsSearchIndexData.standard,
+      (page) => page.label(context),
+    );
+  }
+
+  void _activateSearch() {
+    if (_searchActive) {
+      return;
+    }
+    setState(() {
+      _searchActive = true;
+      _searchHighlight = 0;
+    });
+  }
+
+  void _dismissSearch() {
+    if (!_searchActive && _searchQuery.isEmpty) {
+      return;
+    }
+    setState(() {
+      _searchActive = false;
+      _searchQuery = '';
+      _searchHighlight = 0;
+    });
+  }
+
+  void _onSearchQueryChanged(String query) {
+    setState(() {
+      _searchQuery = query;
+      // Typing the first character opens the search. Focus alone must not: the
+      // capsule is the first tab stop, so opening on focus would hide the
+      // navigation list before the keyboard could reach any destination.
+      if (query.trim().isNotEmpty) {
+        _searchActive = true;
+      }
+      _searchHighlight = 0;
+    });
+  }
+
+  int _highlightedResult(List<SettingsPageId> results) =>
+      _searchHighlight.clamp(0, results.length - 1);
+
+  void _moveSearchHighlight(List<SettingsPageId> results, int delta) {
+    if (results.isEmpty) {
+      return;
+    }
+    final next = (_highlightedResult(results) + delta).clamp(
+      0,
+      results.length - 1,
+    );
+    if (next == _searchHighlight) {
+      return;
+    }
+    setState(() => _searchHighlight = next);
+  }
+
+  void _openSearchResult(SettingsPageId page, {required bool openDetail}) {
+    _dismissSearch();
+    _selectPage(page, openDetail: openDetail);
+    // §3.2: focus returns to the navigation area after the result is opened.
+    FocusManager.instance.primaryFocus?.unfocus();
+  }
+
+  void _submitSearch(List<SettingsPageId> results, {required bool openDetail}) {
+    if (results.isEmpty) {
+      return;
+    }
+    _openSearchResult(results[_highlightedResult(results)], openDetail: openDetail);
+  }
+
+  SettingsSearchBinding _searchBinding(
+    List<SettingsPageId> results, {
+    required bool openDetail,
+  }) {
+    return SettingsSearchBinding(
+      query: _searchQuery,
+      active: _searchActive,
+      onQueryChanged: _onSearchQueryChanged,
+      onActivate: _activateSearch,
+      onDismiss: _dismissSearch,
+      onPrevious: results.isEmpty
+          ? null
+          : () => _moveSearchHighlight(results, -1),
+      onNext: results.isEmpty ? null : () => _moveSearchHighlight(results, 1),
+      onSubmit: results.isEmpty
+          ? null
+          : () => _submitSearch(results, openDetail: openDetail),
+      results: _searchActive
+          ? SettingsSearchResults(
+              groups: groupSearchResults(
+                results,
+                SettingsSearchIndexData.standard,
+              ),
+              highlighted: results.isEmpty
+                  ? null
+                  : results[_highlightedResult(results)],
+              onSelected: (page) =>
+                  _openSearchResult(page, openDetail: openDetail),
+            )
+          : null,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     _scheduleRequestedPage(ref.watch(settingsPageOpenRequestProvider));
@@ -336,6 +457,7 @@ class _DenialSettingsApplicationState
   /// Two-column list-detail layout used at [settingsWideLayoutBreakpoint] and
   /// above: a fixed navigation rail beside the centred content column.
   Widget _buildWideLayout(BuildContext context) {
+    final results = _searchResults();
     return Row(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: <Widget>[
@@ -343,6 +465,7 @@ class _DenialSettingsApplicationState
           selected: _page,
           form: SettingsNavigationForm.sidebar,
           onSelected: (page) => _selectPage(page, openDetail: false),
+          search: _searchBinding(results, openDetail: false),
         ),
         Expanded(
           child: _SettingsContentColumn(child: _buildPageSwitcher()),
@@ -352,6 +475,7 @@ class _DenialSettingsApplicationState
   }
 
   Widget _buildNarrowLayout() {
+    final results = _searchResults();
     final child = _detailOpen
         ? _SettingsContentColumn(
             child: _SettingsDetailScaffold(
@@ -369,6 +493,7 @@ class _DenialSettingsApplicationState
                 selected: _page,
                 form: SettingsNavigationForm.home,
                 onSelected: _selectPage,
+                search: _searchBinding(results, openDetail: true),
               ),
             ),
           );

@@ -2,10 +2,10 @@ import 'package:denial_dart_shell/l10n/generated/app_localizations.dart';
 import 'package:denial_dart_shell/src/settings/settings_application.dart';
 import 'package:denial_dart_shell/src/settings/widgets/settings_navigation.dart';
 import 'package:denial_dart_shell/src/settings/widgets/settings_search_bar.dart';
+import 'package:denial_dart_shell/src/settings/widgets/settings_search_view.dart';
 import 'package:denial_dart_shell/src/theme/shell_color_scheme.dart';
 import 'package:denial_dart_shell/src/theme/shell_theme.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import '../support/settings_harness.dart';
@@ -45,7 +45,7 @@ void main() {
     expect(find.byKey(settingsSearchBarKey), findsOneWidget);
   });
 
-  testWidgets('the search capsule is an inert 56dp placeholder', (
+  testWidgets('the search capsule is an interactive 56dp search field', (
     tester,
   ) async {
     await _withSemantics(tester, () async {
@@ -55,18 +55,19 @@ void main() {
       expect(capsule, findsOneWidget);
       expect(tester.getSize(capsule).height, settingsSearchBarHeight);
 
-      // S02 ships the appearance only: no handler, so no focus node, no tap
-      // action, and no button semantics (card §3.2, constraint §D8).
+      // S07 upgraded the S02 placeholder into a real field: it announces the
+      // search label as a text field (card §3.3) and opening it swaps the
+      // navigation list for the result area (card §3.2).
       expect(
-        find.descendant(
-          of: capsule,
-          matching: find.byType(FocusableActionDetector),
-        ),
-        findsNothing,
+        tester.getSemantics(find.byType(TextField)),
+        isSemantics(isTextField: true, label: 'Search settings'),
       );
-      final node = tester.getSemantics(capsule).getSemanticsData();
-      expect(node.hasAction(SemanticsAction.tap), isFalse);
-      expect(node.label, 'Search settings');
+
+      await tester.tap(capsule);
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(settingsSearchResultsKey), findsOneWidget);
+      expect(find.byKey(settingsNavigationListKey), findsNothing);
     });
   });
 
@@ -204,10 +205,11 @@ void main() {
     );
   });
 
-  testWidgets('an enabled search capsule is tappable and focusable', (
+  testWidgets('the search capsule forwards focus and typing to its host', (
     tester,
   ) async {
-    var taps = 0;
+    var activated = 0;
+    final queries = <String>[];
     await tester.pumpWidget(
       ShellTheme(
         data: const ShellThemeData(),
@@ -219,7 +221,13 @@ void main() {
             body: Center(
               child: SizedBox(
                 width: 320,
-                child: SettingsSearchBar(onTap: () => taps += 1),
+                child: SettingsSearchBar(
+                  query: '',
+                  active: false,
+                  onQueryChanged: queries.add,
+                  onActivate: () => activated += 1,
+                  onDismiss: () {},
+                ),
               ),
             ),
           ),
@@ -227,15 +235,13 @@ void main() {
       ),
     );
 
-    expect(
-      find.descendant(
-        of: find.byKey(settingsSearchBarKey),
-        matching: find.byType(FocusableActionDetector),
-      ),
-      findsOneWidget,
-    );
+    expect(find.byKey(settingsSearchBarKey), findsOneWidget);
     await tester.tap(find.byKey(settingsSearchBarKey));
-    expect(taps, 1);
+    await tester.pump();
+    expect(activated, 1, reason: 'tapping the capsule must activate the search');
+
+    await tester.enterText(find.byType(TextField), 'dis');
+    expect(queries, contains('dis'));
   });
 }
 
@@ -289,6 +295,13 @@ Future<void> _pumpNavigation(
               form: SettingsNavigationForm.home,
               showTouchpad: showTouchpad,
               onSelected: (_) {},
+              search: SettingsSearchBinding(
+                query: '',
+                active: false,
+                onQueryChanged: (_) {},
+                onActivate: () {},
+                onDismiss: () {},
+              ),
             ),
           ),
         ),

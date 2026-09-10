@@ -3871,6 +3871,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsSearchHint => '搜索设置';
 
   @override
+  String get settingsSearchNoResults => '没有匹配的设置';
+
+  @override
+  String get settingsSearchClear => '清除搜索';
+
+  @override
+  String get settingsSearchResults => '搜索结果';
+
+  @override
   String get settingsBackAction => '返回';
 
   @override

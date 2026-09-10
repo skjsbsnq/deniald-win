@@ -7192,6 +7192,24 @@ abstract class AppLocalizations {
   /// **'Search settings'**
   String get settingsSearchHint;
 
+  /// Empty state shown when no Settings destination matches the search query.
+  ///
+  /// In en, this message translates to:
+  /// **'No matching settings'**
+  String get settingsSearchNoResults;
+
+  /// Accessible label for the Settings search clear button.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear search'**
+  String get settingsSearchClear;
+
+  /// Accessible label for the Settings search result list.
+  ///
+  /// In en, this message translates to:
+  /// **'Results'**
+  String get settingsSearchResults;
+
   /// Accessible label for the single-column Settings back button.
   ///
   /// In en, this message translates to:

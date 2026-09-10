@@ -186,11 +186,16 @@ extension SettingsPageIdPresentation on SettingsPageId {
 /// [SettingsNavigationForm.sidebar] renders the fixed 288 rail used by the
 /// two-column layout; [SettingsNavigationForm.home] renders the drill-down home
 /// list. Both share the same search capsule, grouped ordering, and cards.
+///
+/// [search] carries the application-owned search state (§3.2). While it is
+/// active and supplies [SettingsSearchBinding.results], the result view stands
+/// in for the navigation list; the capsule and its position never move.
 class SettingsNavigation extends StatelessWidget {
   const SettingsNavigation({
     required this.selected,
     required this.onSelected,
     required this.form,
+    required this.search,
     this.showTouchpad = true,
     super.key,
   });
@@ -198,6 +203,7 @@ class SettingsNavigation extends StatelessWidget {
   final SettingsPageId selected;
   final ValueChanged<SettingsPageId> onSelected;
   final SettingsNavigationForm form;
+  final SettingsSearchBinding search;
   final bool showTouchpad;
 
   @override
@@ -207,6 +213,19 @@ class SettingsNavigation extends StatelessWidget {
       onSelected: onSelected,
       showTouchpad: showTouchpad,
     );
+    final body = search.active && search.results != null
+        ? search.results!
+        : list;
+    final capsule = SettingsSearchBar(
+      query: search.query,
+      active: search.active,
+      onQueryChanged: search.onQueryChanged,
+      onActivate: search.onActivate,
+      onDismiss: search.onDismiss,
+      onPrevious: search.onPrevious,
+      onNext: search.onNext,
+      onSubmit: search.onSubmit,
+    );
     switch (form) {
       case SettingsNavigationForm.home:
         return Padding(
@@ -214,9 +233,9 @@ class SettingsNavigation extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: <Widget>[
-              const SettingsSearchBar(),
+              capsule,
               const SizedBox(height: settingsNavGroupSpacing),
-              Expanded(child: list),
+              Expanded(child: body),
             ],
           ),
         );
@@ -234,9 +253,9 @@ class SettingsNavigation extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: <Widget>[
-                  const SettingsSearchBar(),
+                  capsule,
                   const SizedBox(height: settingsNavGroupSpacing),
-                  Expanded(child: list),
+                  Expanded(child: body),
                   const SizedBox(height: settingsNavGroupHeaderGap),
                   Align(
                     alignment: Alignment.centerLeft,
@@ -351,12 +370,19 @@ class SettingsNavItem extends StatefulWidget {
     required this.page,
     required this.selected,
     required this.onPressed,
+    this.support,
     super.key,
   });
 
   final SettingsPageId page;
   final bool selected;
   final VoidCallback onPressed;
+
+  /// Supporting line override (§3.2).
+  ///
+  /// Search results reuse this card with the destination's group name as the
+  /// supporting line; `null` keeps the page's own description (or none).
+  final String? support;
 
   @override
   State<SettingsNavItem> createState() => _SettingsNavItemState();
@@ -422,7 +448,7 @@ class _SettingsNavItemState extends State<SettingsNavItem>
     final colors = context.shellColors;
     final selected = widget.selected;
     final pageLabel = widget.page.label(context);
-    final support = widget.page.support(context);
+    final support = widget.support ?? widget.page.support(context);
     final radius = theme.borderRadius(settingsNavItemRadius);
     final hoverDuration = MediaQuery.disableAnimationsOf(context)
         ? Duration.zero
