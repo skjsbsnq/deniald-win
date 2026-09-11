@@ -1,5 +1,7 @@
 //! Published input scene, pointer projection, callbacks, and popup constraints.
 
+use std::os::fd::OwnedFd;
+
 use super::*;
 
 pub(super) fn constrain_pointer_to_outputs(
@@ -173,7 +175,7 @@ impl WaylandFrontend {
         &mut self,
         renderer: &mut GlesRenderer,
         dmabuf: &mut Dmabuf,
-    ) -> Result<(), Box<dyn Error>> {
+    ) -> Result<Option<OwnedFd>, Box<dyn Error>> {
         let mut framebuffer = renderer.bind(dmabuf)?;
         let output_result = smithay::desktop::space::render_output::<
             _,
@@ -191,9 +193,8 @@ impl WaylandFrontend {
             &mut self.damage_tracker,
             [0.015, 0.02, 0.035, 1.0],
         )?;
-        drop(output_result);
 
-        if !matches!(self.cursor_status, CursorImageStatus::Hidden) {
+        let sync = if !matches!(self.cursor_status, CursorImageStatus::Hidden) {
             let logical_cursor = self.pointer_location - self.atlas_origin;
             let cursor_rect = Rectangle::<i32, Physical>::new(
                 (
@@ -206,9 +207,26 @@ impl WaylandFrontend {
             let mut frame =
                 renderer.render(&mut framebuffer, self.atlas_size, Transform::Normal)?;
             frame.clear(Color32F::new(0.96, 0.98, 1.0, 1.0), &[cursor_rect])?;
-            frame.finish()?.wait()?;
+            // This sync point is created after every command on the context,
+            // so it covers the scene pass above as well.
+            frame.finish()?
+        } else {
+            // With the cursor hidden the scene pass issues the last GL
+            // commands, so its sync point must guard the atlas framebuffer
+            // reuse the same way.
+            output_result.sync
+        };
+        // The KMS commit consumes this fence as IN_FENCE_FD, so the kernel
+        // waits for the GPU before latching the atlas instead of blocking
+        // the event loop here.
+        if let Some(fence) = sync.export() {
+            return Ok(Some(fence));
         }
-        Ok(())
+        // Without EGL_ANDROID_native_fence_sync the sync point cannot leave
+        // the GL context; keep the previous CPU-side wait rather than race
+        // the page flip.
+        sync.wait()?;
+        Ok(None)
     }
 
     pub fn frame_submitted(&mut self) -> Result<(), Box<dyn Error>> {

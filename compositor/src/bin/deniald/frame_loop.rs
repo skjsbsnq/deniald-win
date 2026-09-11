@@ -1,5 +1,7 @@
 //! Finite diagnostic and non-Flutter shared-atlas frame loop.
 
+use std::os::fd::AsFd;
+
 use super::kms_pipeline::{
     HotplugRequest, apply_hotplug_topology, queue_atlas_page_flip, restore_source_rects,
     source_rects_for_atlas, test_atlas_page_flip,
@@ -96,6 +98,7 @@ pub(super) fn run_frame_loop(
         let render_started = Instant::now();
         let mut normal_next = None;
         let mut staged_swapchain = None;
+        let mut render_fence = None;
         let layout_change =
             layout_transition.filter(|transition| transition.at_frame == frame_number);
         let mut planned_layout = None;
@@ -161,7 +164,8 @@ pub(super) fn run_frame_loop(
             let next = atlas_swapchain.next_index();
             if let Some(frontend) = events.wayland.as_mut() {
                 frontend.process_pending_dmabufs(renderer)?;
-                frontend.render(renderer, &mut atlas_swapchain.buffers[next].dmabuf)?;
+                render_fence =
+                    frontend.render(renderer, &mut atlas_swapchain.buffers[next].dmabuf)?;
             } else {
                 render_diagnostic_atlas(
                     renderer,
@@ -182,8 +186,12 @@ pub(super) fn run_frame_loop(
         for scanout in scanouts.iter() {
             events.pending.insert(scanout.output.crtc);
         }
-        let render_fence = None;
-        if let Err(error) = queue_atlas_page_flip(drm, scanouts, framebuffer, render_fence) {
+        if let Err(error) = queue_atlas_page_flip(
+            drm,
+            scanouts,
+            framebuffer,
+            render_fence.as_ref().map(AsFd::as_fd),
+        ) {
             if let Some((_, previous_rects)) = staged_swapchain {
                 restore_source_rects(scanouts, &previous_rects);
             }
