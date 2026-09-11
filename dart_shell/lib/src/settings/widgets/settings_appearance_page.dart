@@ -11,14 +11,14 @@ import '../../theme/motion.dart';
 import '../../theme/shell_theme.dart';
 import '../../theme/tokens.dart';
 import '../../wallpaper/wallpaper.dart';
-import '../../wallpaper/widgets/wallpaper_image.dart';
 import '../../widgets/shell_cursor.dart';
 import 'settings_controls.dart';
+import 'settings_hero_preview_card.dart';
 import 'settings_loading_indicator.dart';
 
-const settingsWallpaperTriggerKey = ValueKey<String>(
-  'settings-wallpaper-trigger',
-);
+export 'settings_hero_preview_card.dart'
+    show settingsWallpaperTriggerKey, SettingsHeroPreviewCard;
+
 const settingsAccentColorTriggerKey = ValueKey<String>(
   'settings-accent-color-trigger',
 );
@@ -44,6 +44,8 @@ const settingsCardOpacitySliderKey = ValueKey<String>(
   'settings-card-opacity-slider',
 );
 
+/// Appearance page refactored into 7 modular card groups conforming to MD3E
+/// specification (Decisions 1-A, 2-A, 3-A).
 class SettingsAppearancePage extends StatelessWidget {
   const SettingsAppearancePage({
     required this.settings,
@@ -109,243 +111,438 @@ class SettingsAppearancePage extends StatelessWidget {
     final effectiveAccent = settings.accentSource == ShellAccentSource.wallpaper
         ? extractedAccent
         : settings.customAccentColor;
+
     return SettingsPageLayout(
       icon: Icons.palette_outlined,
       eyebrow: l10n.settingsAppearanceSection,
-      title: l10n.settingsAppearanceTitle,
+      title: l10n.settingsNavigationAppearance,
+      subtitle: l10n.settingsAppearanceTitle,
       onReset: onReset,
       children: [
+        // 1. Card 1: Desktop & Wallpaper Hero Preview (Decision 1-A)
         SettingsCardGroup(
           children: [
-            SettingsSection(
-              title: l10n.settingsColorSchemeTitle,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SettingsSegmentedControl<DesktopColorSchemePreference>(
-                    key: settingsColorSchemeControlKey,
-                    value: settings.colorSchemePreference,
-                    choices: [
-                      SettingsChoice(
-                        DesktopColorSchemePreference.preferDark,
-                        l10n.settingsColorSchemeDark,
-                      ),
-                      SettingsChoice(
-                        DesktopColorSchemePreference.preferLight,
-                        l10n.settingsColorSchemeLight,
-                      ),
-                      SettingsChoice(
-                        DesktopColorSchemePreference.noPreference,
-                        l10n.settingsColorSchemeNoPreference,
-                      ),
-                    ],
-                    onChanged: onColorSchemePreferenceChanged,
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    settings.colorSchemePreference ==
-                            DesktopColorSchemePreference.noPreference
-                        ? l10n.settingsColorSchemeNoPreferenceDescription
-                        : l10n.settingsColorSchemeDescription,
-                    style: ShellText.settingsRowSupport.copyWith(
-                      color: context.shellColors.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
+            SettingsHeroPreviewCard(
+              wallpaper: wallpaper,
+              onOpenWallpaperSelector: onOpenWallpaperSelector,
+              colorSchemePreference: settings.colorSchemePreference,
+              accentColor: effectiveAccent,
             ),
-            SettingsSection(
-              title: l10n.settingsWallpaperTitle,
-              leading: _WallpaperThumbnail(
-                wallpaper: wallpaper,
-                semanticsLabel: l10n.settingsWallpaperPreviewSemantics,
-              ),
-              trailing: SettingsTextButton(
-                key: settingsWallpaperTriggerKey,
-                label: l10n.settingsWallpaperChoose,
-                onPressed: onOpenWallpaperSelector,
-              ),
-              child: Text(
-                l10n.settingsWallpaperDescription,
-                style: ShellText.settingsRowSupport.copyWith(
-                  color: context.shellColors.textSecondary,
+          ],
+        ),
+
+        // 2. Card 2: Colour Scheme & Shell Accent (Decision 2-A & 3-A)
+        SettingsSectionContainer(
+          title: l10n.settingsColorSchemeTitle,
+          child: SettingsCardGroup(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SettingsSegmentedControl<DesktopColorSchemePreference>(
+                      key: settingsColorSchemeControlKey,
+                      value: settings.colorSchemePreference,
+                      choices: [
+                        SettingsChoice(
+                          DesktopColorSchemePreference.preferDark,
+                          l10n.settingsColorSchemeDark,
+                        ),
+                        SettingsChoice(
+                          DesktopColorSchemePreference.preferLight,
+                          l10n.settingsColorSchemeLight,
+                        ),
+                        SettingsChoice(
+                          DesktopColorSchemePreference.noPreference,
+                          l10n.settingsColorSchemeNoPreference,
+                        ),
+                      ],
+                      onChanged: onColorSchemePreferenceChanged,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      settings.colorSchemePreference ==
+                              DesktopColorSchemePreference.noPreference
+                          ? l10n.settingsColorSchemeNoPreferenceDescription
+                          : l10n.settingsColorSchemeDescription,
+                      style: ShellText.settingsRowSupport.copyWith(
+                        color: context.shellColors.textSecondary,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ),
-            SettingsSection(
-              title: l10n.settingsShellAccentTitle,
-              leading: _ColorOrb(color: effectiveAccent),
-              trailing: settings.accentSource == ShellAccentSource.custom
-                  ? SettingsColorButton(
-                      key: settingsAccentColorTriggerKey,
-                      color: settings.customAccentColor,
-                      label: l10n.settingsShellAccentChoose,
-                      onPressed: onOpenAccentPicker,
-                    )
-                  : null,
-              child: SettingsSegmentedControl<ShellAccentSource>(
-                value: settings.accentSource,
-                choices: [
-                  SettingsChoice(
-                    ShellAccentSource.wallpaper,
-                    l10n.settingsShellAccentWallpaper,
-                  ),
-                  SettingsChoice(
-                    ShellAccentSource.custom,
-                    l10n.settingsShellAccentCustom,
-                  ),
-                ],
-                onChanged: onAccentSourceChanged,
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        _ColorOrb(color: effectiveAccent),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                l10n.settingsShellAccentTitle,
+                                style: ShellText.settingsRowTitle,
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                settings.accentSource ==
+                                        ShellAccentSource.wallpaper
+                                    ? l10n.settingsShellAccentWallpaper
+                                    : l10n.settingsShellAccentCustom,
+                                style: ShellText.settingsRowSupport.copyWith(
+                                  color: context.shellColors.textSecondary,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (settings.accentSource == ShellAccentSource.custom)
+                          SettingsColorButton(
+                            key: settingsAccentColorTriggerKey,
+                            color: settings.customAccentColor,
+                            label: l10n.settingsShellAccentChoose,
+                            onPressed: onOpenAccentPicker,
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    SettingsSegmentedControl<ShellAccentSource>(
+                      value: settings.accentSource,
+                      choices: [
+                        SettingsChoice(
+                          ShellAccentSource.wallpaper,
+                          l10n.settingsShellAccentWallpaper,
+                        ),
+                        SettingsChoice(
+                          ShellAccentSource.custom,
+                          l10n.settingsShellAccentCustom,
+                        ),
+                      ],
+                      onChanged: onAccentSourceChanged,
+                    ),
+                    if (settings.accentSource ==
+                        ShellAccentSource.wallpaper) ...[
+                      const SizedBox(height: 12),
+                      _DynamicTonalSwatches(
+                        seedColor: extractedAccent,
+                        selectedColor: effectiveAccent,
+                      ),
+                    ],
+                  ],
+                ),
               ),
-            ),
-            SettingsSection(
-              title: l10n.settingsBackdropBlur,
-              child: Column(
-                children: [
-                  SettingsToggle(
-                    key: settingsBackdropBlurToggleKey,
-                    label: l10n.settingsBackdropBlurEnabled,
-                    description: l10n.settingsBackdropBlurEnabledDescription,
-                    value: settings.backdropBlurEnabled,
-                    onChanged: onBackdropBlurEnabledChanged,
-                  ),
-                  const SizedBox(height: 12),
-                  SettingsSlider(
-                    key: settingsBackdropBlurSliderKey,
-                    label: l10n.settingsBackdropBlurIntensity,
-                    value: settings.backdropBlurLevel.index.toDouble(),
-                    minimum: 0,
-                    maximum: ShellBackdropBlurLevel.values.length - 1,
-                    divisions: ShellBackdropBlurLevel.values.length - 1,
-                    enabled: settings.backdropBlurEnabled,
-                    valueLabel: _backdropBlurLevelLabel(
-                      l10n,
-                      settings.backdropBlurLevel,
-                    ),
-                    onChanged: (value) => onBackdropBlurLevelChanged(
-                      ShellBackdropBlurLevel.values[value.round()],
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  SettingsSlider(
-                    key: settingsBackdropBlurOpacityThresholdKey,
-                    label: l10n.settingsBackdropBlurOpacityThreshold,
-                    value: settings.backdropBlurOpacityThreshold,
-                    minimum: 0,
-                    maximum: 1,
-                    divisions: 100,
-                    enabled: settings.backdropBlurEnabled,
-                    valueLabel: l10n.settingsPercent(
-                      (settings.backdropBlurOpacityThreshold * 100).round(),
-                    ),
-                    onChanged: onBackdropBlurOpacityThresholdChanged,
-                  ),
-                ],
+            ],
+          ),
+        ),
+
+        // 3. Card 3: Material & Backdrop Blur
+        SettingsSectionContainer(
+          title: l10n.settingsBackdropBlur,
+          child: SettingsCardGroup(
+            indentDividers: true,
+            children: [
+              SettingsRow.toggle(
+                toggleKey: settingsBackdropBlurToggleKey,
+                leading: const Icon(Icons.blur_on_rounded, size: 24),
+                title: l10n.settingsBackdropBlurEnabled,
+                subtitle: l10n.settingsBackdropBlurEnabledDescription,
+                value: settings.backdropBlurEnabled,
+                onChanged: onBackdropBlurEnabledChanged,
               ),
-            ),
-            SettingsSection(
-              title: l10n.settingsShapeTitle,
-              child: Column(
-                children: [
-                  SettingsSlider(
-                    key: settingsCornerRoundnessSliderKey,
-                    label: l10n.settingsCornerRoundness,
-                    value: settings.cornerRadiusScale,
-                    minimum: ShellRoundness.minimum,
-                    maximum: ShellRoundness.maximum,
-                    divisions: 40,
-                    valueLabel: l10n.settingsPercent(
-                      (settings.cornerRadiusScale * 100).round(),
-                    ),
-                    onChanged: onCornerRadiusScaleChanged,
-                  ),
-                  const SizedBox(height: 8),
-                  SettingsSlider(
-                    label: l10n.settingsPanelOpacity,
-                    value: settings.panelOpacity,
-                    minimum: ShellOpacity.minimumPanel,
-                    maximum: 1,
-                    divisions: 95,
-                    valueLabel: l10n.settingsPercent(
-                      (settings.panelOpacity * 100).round(),
-                    ),
-                    onChanged: onPanelOpacityChanged,
-                  ),
-                  const SizedBox(height: 8),
-                  SettingsSlider(
-                    key: settingsCardOpacitySliderKey,
-                    label: l10n.settingsCardOpacity,
-                    value: settings.cardOpacity,
-                    minimum: ShellOpacity.minimumCard,
-                    maximum: 1,
-                    divisions: 95,
-                    valueLabel: l10n.settingsPercent(
-                      (settings.cardOpacity * 100).round(),
-                    ),
-                    onChanged: onCardOpacityChanged,
-                  ),
-                ],
+              SettingsRow.slider(
+                sliderKey: settingsBackdropBlurSliderKey,
+                leading: const Icon(Icons.tune_rounded, size: 24),
+                title: l10n.settingsBackdropBlurIntensity,
+                value: settings.backdropBlurLevel.index.toDouble(),
+                minimum: 0,
+                maximum: ShellBackdropBlurLevel.values.length - 1,
+                divisions: ShellBackdropBlurLevel.values.length - 1,
+                enabled: settings.backdropBlurEnabled,
+                valueLabel: _backdropBlurLevelLabel(
+                  l10n,
+                  settings.backdropBlurLevel,
+                ),
+                onChanged: (value) => onBackdropBlurLevelChanged(
+                  ShellBackdropBlurLevel.values[value.round()],
+                ),
               ),
-            ),
-            SettingsSection(
-              title: l10n.settingsCursorTitle,
-              child: _CursorSettings(
-                settings: settings,
-                themes: cursorThemes,
-                catalogLoading: cursorCatalogLoading,
-                onThemeChanged: onCursorThemeChanged,
-                onSizeChanged: onCursorSizeChanged,
-                onAllowClientCursorSurfacesChanged:
-                    onAllowClientCursorSurfacesChanged,
-                onImport: onImportCursorZip,
-                onRemove: onRemoveCursorTheme,
+              SettingsRow.slider(
+                sliderKey: settingsBackdropBlurOpacityThresholdKey,
+                leading: const Icon(Icons.opacity_rounded, size: 24),
+                title: l10n.settingsBackdropBlurOpacityThreshold,
+                value: settings.backdropBlurOpacityThreshold,
+                minimum: 0,
+                maximum: 1,
+                divisions: 100,
+                enabled: settings.backdropBlurEnabled,
+                valueLabel: l10n.settingsPercent(
+                  (settings.backdropBlurOpacityThreshold * 100).round(),
+                ),
+                onChanged: onBackdropBlurOpacityThresholdChanged,
               ),
-            ),
-            SettingsSection(
-              title: l10n.settingsFontsAndIconsTitle,
-              child: _FontsAndIconsSettings(
-                settings: settings,
-                onUiFontFamilyChanged: onUiFontFamilyChanged,
-                onIconThemeNameChanged: onIconThemeNameChanged,
+            ],
+          ),
+        ),
+
+        // 4. Card 4: Shape & Opacity
+        SettingsSectionContainer(
+          title: l10n.settingsShapeTitle,
+          child: SettingsCardGroup(
+            indentDividers: true,
+            children: [
+              SettingsRow.slider(
+                sliderKey: settingsCornerRoundnessSliderKey,
+                leading: const Icon(Icons.rounded_corner_rounded, size: 24),
+                title: l10n.settingsCornerRoundness,
+                value: settings.cornerRadiusScale,
+                minimum: ShellRoundness.minimum,
+                maximum: ShellRoundness.maximum,
+                divisions: 40,
+                valueLabel: l10n.settingsPercent(
+                  (settings.cornerRadiusScale * 100).round(),
+                ),
+                onChanged: onCornerRadiusScaleChanged,
               ),
-            ),
-            SettingsSection(
-              title: l10n.settingsWindowOpacityTitle,
-              child: Column(
-                children: [
-                  SettingsToggle(
-                    label: l10n.settingsFocusedWindowBorder,
-                    description: l10n.settingsFocusedWindowBorderDescription,
-                    value: settings.focusedWindowBorderEnabled,
-                    onChanged: onFocusedWindowBorderEnabledChanged,
-                  ),
-                  const SizedBox(height: 12),
-                  SettingsSlider(
-                    label: l10n.settingsFocusedWindows,
-                    value: settings.focusedWindowOpacity,
-                    minimum: 0.35,
-                    maximum: 1,
-                    divisions: 65,
-                    valueLabel: l10n.settingsPercent(
-                      (settings.focusedWindowOpacity * 100).round(),
+              SettingsRow.slider(
+                leading: const Icon(Icons.layers_outlined, size: 24),
+                title: l10n.settingsPanelOpacity,
+                value: settings.panelOpacity,
+                minimum: ShellOpacity.minimumPanel,
+                maximum: 1,
+                divisions: 95,
+                valueLabel: l10n.settingsPercent(
+                  (settings.panelOpacity * 100).round(),
+                ),
+                onChanged: onPanelOpacityChanged,
+              ),
+              SettingsRow.slider(
+                sliderKey: settingsCardOpacitySliderKey,
+                leading: const Icon(Icons.crop_portrait_rounded, size: 24),
+                title: l10n.settingsCardOpacity,
+                value: settings.cardOpacity,
+                minimum: ShellOpacity.minimumCard,
+                maximum: 1,
+                divisions: 95,
+                valueLabel: l10n.settingsPercent(
+                  (settings.cardOpacity * 100).round(),
+                ),
+                onChanged: onCardOpacityChanged,
+              ),
+            ],
+          ),
+        ),
+
+        // 5. Card 5: Mouse Cursor
+        SettingsSectionContainer(
+          title: l10n.settingsCursorTitle,
+          child: SettingsCardGroup(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: _CursorSettings(
+                  settings: settings,
+                  themes: cursorThemes,
+                  catalogLoading: cursorCatalogLoading,
+                  onThemeChanged: onCursorThemeChanged,
+                  onSizeChanged: onCursorSizeChanged,
+                  onAllowClientCursorSurfacesChanged:
+                      onAllowClientCursorSurfacesChanged,
+                  onImport: onImportCursorZip,
+                  onRemove: onRemoveCursorTheme,
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // 6. Card 6: Typography & Icons
+        SettingsSectionContainer(
+          title: l10n.settingsFontsAndIconsTitle,
+          child: SettingsCardGroup(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: _FontsAndIconsSettings(
+                  settings: settings,
+                  onUiFontFamilyChanged: onUiFontFamilyChanged,
+                  onIconThemeNameChanged: onIconThemeNameChanged,
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // 7. Card 7: Window Focus & Opacity
+        SettingsSectionContainer(
+          title: l10n.settingsWindowOpacityTitle,
+          child: SettingsCardGroup(
+            indentDividers: true,
+            children: [
+              SettingsRow.toggle(
+                leading: const Icon(Icons.filter_frames_outlined, size: 24),
+                title: l10n.settingsFocusedWindowBorder,
+                subtitle: l10n.settingsFocusedWindowBorderDescription,
+                value: settings.focusedWindowBorderEnabled,
+                onChanged: onFocusedWindowBorderEnabledChanged,
+              ),
+              SettingsRow.slider(
+                leading: const Icon(Icons.window_rounded, size: 24),
+                title: l10n.settingsFocusedWindows,
+                value: settings.focusedWindowOpacity,
+                minimum: 0.35,
+                maximum: 1,
+                divisions: 65,
+                valueLabel: l10n.settingsPercent(
+                  (settings.focusedWindowOpacity * 100).round(),
+                ),
+                onChanged: onFocusedOpacityChanged,
+              ),
+              SettingsRow.slider(
+                leading: const Icon(Icons.wb_twilight_rounded, size: 24),
+                title: l10n.settingsUnfocusedWindows,
+                value: settings.unfocusedWindowOpacity,
+                minimum: 0.2,
+                maximum: 1,
+                divisions: 80,
+                valueLabel: l10n.settingsPercent(
+                  (settings.unfocusedWindowOpacity * 100).round(),
+                ),
+                onChanged: onUnfocusedOpacityChanged,
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+final class _DynamicAccentKey {
+  const _DynamicAccentKey(this.colorValue, this.brightness);
+
+  final int colorValue;
+  final Brightness brightness;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is _DynamicAccentKey &&
+          other.colorValue == colorValue &&
+          other.brightness == brightness;
+
+  @override
+  int get hashCode => Object.hash(colorValue, brightness);
+}
+
+final _dynamicSwatchesCache = <_DynamicAccentKey, List<Color>>{};
+
+List<Color> _dynamicAccentSwatches(Color seed, Brightness brightness) {
+  final key = _DynamicAccentKey(seed.toARGB32(), brightness);
+  return _dynamicSwatchesCache.putIfAbsent(key, () {
+    final scheme = ColorScheme.fromSeed(
+      seedColor: seed.withValues(alpha: 1),
+      brightness: brightness,
+      dynamicSchemeVariant: DynamicSchemeVariant.expressive,
+    );
+    return [
+      seed.withValues(alpha: 1),
+      scheme.primary,
+      scheme.secondary,
+      scheme.tertiary,
+      scheme.primaryContainer,
+    ];
+  });
+}
+
+class _DynamicTonalSwatches extends StatefulWidget {
+  const _DynamicTonalSwatches({
+    required this.seedColor,
+    required this.selectedColor,
+  });
+
+  final Color seedColor;
+  final Color selectedColor;
+
+  @override
+  State<_DynamicTonalSwatches> createState() => _DynamicTonalSwatchesState();
+}
+
+class _DynamicTonalSwatchesState extends State<_DynamicTonalSwatches> {
+  int _selectedIndex = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.shellColors;
+    final theme = ShellTheme.of(context);
+    final swatches = _dynamicAccentSwatches(
+      widget.seedColor,
+      colors.brightness,
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          context.l10n.settingsShellAccentWallpaper,
+          style: ShellText.settingsRowSupport.copyWith(
+            color: colors.textSecondary,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 12,
+          runSpacing: 8,
+          children: [
+            for (var i = 0; i < swatches.length; i++)
+              Semantics(
+                button: true,
+                selected: _selectedIndex == i,
+                label: 'Accent tone ${i + 1}',
+                child: GestureDetector(
+                  onTap: () => setState(() => _selectedIndex = i),
+                  child: AnimatedContainer(
+                    duration: Motion.tile,
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: swatches[i],
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: _selectedIndex == i
+                            ? theme.accentPalette.primary
+                            : colors.panelHighlight.withValues(alpha: 0.6),
+                        width: _selectedIndex == i ? 2.5 : 1.0,
+                      ),
+                      boxShadow: _selectedIndex == i
+                          ? [
+                              BoxShadow(
+                                color: swatches[i].withValues(alpha: 0.4),
+                                blurRadius: 6,
+                              ),
+                            ]
+                          : null,
                     ),
-                    onChanged: onFocusedOpacityChanged,
+                    child: _selectedIndex == i
+                        ? Center(
+                            child: Icon(
+                              Icons.check_rounded,
+                              size: 16,
+                              color: swatches[i].computeLuminance() > 0.5
+                                  ? ShellMediaColors.darkness
+                                  : ShellMediaColors.contrastLight,
+                            ),
+                          )
+                        : null,
                   ),
-                  const SizedBox(height: 8),
-                  SettingsSlider(
-                    label: l10n.settingsUnfocusedWindows,
-                    value: settings.unfocusedWindowOpacity,
-                    minimum: 0.2,
-                    maximum: 1,
-                    divisions: 80,
-                    valueLabel: l10n.settingsPercent(
-                      (settings.unfocusedWindowOpacity * 100).round(),
-                    ),
-                    onChanged: onUnfocusedOpacityChanged,
-                  ),
-                ],
+                ),
               ),
-            ),
           ],
         ),
       ],
@@ -768,54 +965,6 @@ String _backdropBlurLevelLabel(
     ShellBackdropBlurLevel.good => l10n.settingsBackdropBlurLevelGood,
     ShellBackdropBlurLevel.best => l10n.settingsBackdropBlurLevelBest,
   };
-}
-
-class _WallpaperThumbnail extends StatelessWidget {
-  const _WallpaperThumbnail({
-    required this.wallpaper,
-    required this.semanticsLabel,
-  });
-
-  final WallpaperResource wallpaper;
-  final String semanticsLabel;
-
-  @override
-  Widget build(BuildContext context) {
-    final radius = context.shellTheme.borderRadius(ShellShapeScale.medium);
-    return Semantics(
-      image: true,
-      label: semanticsLabel,
-      child: Container(
-        width: 54,
-        height: 40,
-        foregroundDecoration: BoxDecoration(
-          borderRadius: radius,
-          border: Border.all(color: context.shellColors.hairline),
-        ),
-        child: ClipRRect(
-          borderRadius: radius,
-          child: Image(
-            image: wallpaperImageProvider(
-              wallpaper,
-              targetPixelSize:
-                  const Size(54, 40) * MediaQuery.devicePixelRatioOf(context),
-            ),
-            fit: BoxFit.cover,
-            filterQuality: FilterQuality.low,
-            excludeFromSemantics: true,
-            errorBuilder: (_, _, _) => ColoredBox(
-              color: context.shellColors.surfaceContainerHighest,
-              child: Icon(
-                Icons.wallpaper_rounded,
-                size: 20,
-                color: ShellTheme.of(context).accent,
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 class _ColorOrb extends StatelessWidget {

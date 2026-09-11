@@ -75,16 +75,21 @@ void main() {
         overrides: _isolatedOverrides(),
       );
 
-      // The new page header owns the page title at 28pt (§3.8); the old
-      // in-page eyebrow/title rows are gone.
-      final title = 'Make the desktop feel like yours.';
+      // The new page header owns the page title at 28pt and subtitle at 14pt (§3.8);
+      // the old in-page eyebrow/title rows are gone.
       final titleStyles = tester
-          .widgetList<Text>(find.text(title))
+          .widgetList<Text>(find.text('Appearance'))
           .map((text) => text.style?.fontSize)
           .toList();
       expect(titleStyles, contains(28));
 
-      expect(find.byType(SettingsCardGroup), findsWidgets);
+      final subtitleStyles = tester
+          .widgetList<Text>(find.text('Make the desktop feel like yours.'))
+          .map((text) => text.style?.fontSize)
+          .toList();
+      expect(subtitleStyles, contains(14));
+
+      expect(find.byType(SettingsCardGroup), findsNWidgets(7));
       expect(find.text('Colour scheme'), findsOneWidget);
       expect(find.text('Wallpaper'), findsOneWidget);
       expect(find.text('Shell accent'), findsOneWidget);

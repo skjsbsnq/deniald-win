@@ -33,6 +33,7 @@ class SettingsPageLayout extends StatelessWidget {
     required this.icon,
     required this.eyebrow,
     required this.title,
+    this.subtitle,
     required this.children,
     this.onReset,
     super.key,
@@ -41,6 +42,7 @@ class SettingsPageLayout extends StatelessWidget {
   final IconData icon;
   final String eyebrow;
   final String title;
+  final String? subtitle;
   final List<Widget> children;
   final VoidCallback? onReset;
 
@@ -67,6 +69,7 @@ class SettingsPageLayout extends StatelessWidget {
           delegate: SettingsPageHeaderDelegate(
             icon: icon,
             title: title,
+            subtitle: subtitle,
             trailing: trailing,
           ),
         ),
@@ -139,15 +142,27 @@ class SettingsSavedBadge extends StatelessWidget {
   }
 }
 
+/// Indent applied to card row dividers when indented to align with content text (§3.3).
+const double settingsRowDividerIndent = 56;
+
 class SettingsCardGroup extends StatelessWidget {
-  const SettingsCardGroup({required this.children, super.key});
+  const SettingsCardGroup({
+    required this.children,
+    this.dividerIndent,
+    this.indentDividers = false,
+    super.key,
+  });
 
   final List<Widget> children;
+  final double? dividerIndent;
+  final bool indentDividers;
 
   @override
   Widget build(BuildContext context) {
     final theme = ShellTheme.of(context);
     final radius = theme.borderRadius(ShellShapeScale.extraLarge);
+    final effectiveIndent =
+        dividerIndent ?? (indentDividers ? settingsRowDividerIndent : 0.0);
     return DecoratedBox(
       decoration: BoxDecoration(
         color: theme.cardColor(context.shellColors.surfaceContainerLow),
@@ -160,12 +175,59 @@ class SettingsCardGroup extends StatelessWidget {
           children: [
             for (var index = 0; index < children.length; index++) ...[
               if (index > 0)
-                Divider(height: 1, color: context.shellColors.hairlineSoft),
+                Divider(
+                  height: 1,
+                  indent: effectiveIndent,
+                  color: context.shellColors.hairlineSoft,
+                ),
               children[index],
             ],
           ],
         ),
       ),
+    );
+  }
+}
+
+/// External section header and card container (Android 16 tablet style, §3.1 / 2-A).
+class SettingsSectionContainer extends StatelessWidget {
+  const SettingsSectionContainer({
+    this.title,
+    this.trailing,
+    required this.child,
+    super.key,
+  });
+
+  final String? title;
+  final Widget? trailing;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    if (title == null) {
+      return child;
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 16, right: 16, bottom: 8),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title!,
+                  style: ShellText.settingsSectionHeader.copyWith(
+                    color: context.shellColors.textSecondary,
+                  ),
+                ),
+              ),
+              if (trailing case final trailing?) trailing,
+            ],
+          ),
+        ),
+        child,
+      ],
     );
   }
 }
@@ -520,6 +582,193 @@ const Key settingsToggleStateLayerKey = ValueKey<String>(
   'settings_toggle_state_layer',
 );
 
+/// Standalone M3E Switch component (`02-VISUAL-SPEC.md` §3.4).
+class SettingsSwitch extends StatefulWidget {
+  const SettingsSwitch({
+    required this.value,
+    required this.onChanged,
+    this.enabled = true,
+    this.pressed = false,
+    this.hovered = false,
+    this.focused = false,
+    this.trackKey = settingsToggleTrackKey,
+    this.stateLayerKey = settingsToggleStateLayerKey,
+    super.key,
+  });
+
+  final bool value;
+  final ValueChanged<bool>? onChanged;
+  final bool enabled;
+  final bool pressed;
+  final bool hovered;
+  final bool focused;
+  final Key? trackKey;
+  final Key? stateLayerKey;
+
+  @override
+  State<SettingsSwitch> createState() => _SettingsSwitchState();
+}
+
+class _SettingsSwitchState extends State<SettingsSwitch>
+    with TickerProviderStateMixin {
+  /// Track width / height (§3.4).
+  static const double _trackWidth = 52;
+  static const double _trackHeight = 32;
+  static const double _thumbOff = 16;
+  static const double _thumbOn = 24;
+  static const double _thumbPressed = 28;
+  static const double _stateLayerExtent = 40;
+
+  late final AnimationController _positionController;
+  late final AnimationController _colorController;
+
+  @override
+  void initState() {
+    super.initState();
+    _positionController = AnimationController.unbounded(
+      vsync: this,
+      value: widget.value ? 1.0 : 0.0,
+    );
+    _colorController = AnimationController(
+      vsync: this,
+      value: widget.value ? 1.0 : 0.0,
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant SettingsSwitch oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.value != widget.value) {
+      _animateTo(widget.value);
+    }
+  }
+
+  @override
+  void dispose() {
+    _positionController.dispose();
+    _colorController.dispose();
+    super.dispose();
+  }
+
+  void _animateTo(bool value) {
+    final target = value ? 1.0 : 0.0;
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _positionController.value = target;
+      _colorController.value = target;
+      return;
+    }
+    springTo(
+      _positionController,
+      target,
+      spring: Motion.expressiveSpatialFast,
+      telemetryLabel: 'settings_toggle_spatial',
+    );
+    springTo(
+      _colorController,
+      target,
+      spring: Motion.expressiveEffectsDefault,
+      telemetryLabel: 'settings_toggle_effects',
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = ShellTheme.of(context);
+    final colors = context.shellColors;
+    final palette = theme.accentPalette;
+    final enabled = widget.enabled;
+    final value = widget.value;
+    final position = _positionController.value;
+    final colorT = _colorController.value.clamp(0.0, 1.0);
+    final alignment =
+        Alignment.lerp(Alignment.centerLeft, Alignment.centerRight, position) ??
+        Alignment.centerLeft;
+    final baseThumb = _thumbOff + (_thumbOn - _thumbOff) * colorT;
+    final thumbSize = widget.pressed && enabled ? _thumbPressed : baseThumb;
+    final trackColor = Color.lerp(
+      colors.surfaceContainerHighest,
+      palette.primary,
+      colorT,
+    )!;
+    final borderColor = Color.lerp(colors.hairline, palette.primary, colorT)!;
+    final thumbColor = Color.lerp(colors.hairline, palette.onPrimary, colorT)!;
+    final iconColor = Color.lerp(
+      colors.surfaceContainerHighest,
+      palette.onContainer,
+      colorT,
+    )!;
+    final motionDuration = MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : Motion.tile;
+
+    return AnimatedBuilder(
+      animation: Listenable.merge([_positionController, _colorController]),
+      builder: (context, _) => SizedBox(
+        key: widget.trackKey,
+        width: _trackWidth,
+        height: _trackHeight,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Positioned.fill(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: trackColor,
+                  borderRadius: theme.borderRadius(ShellShapeScale.full),
+                  border: Border.all(color: borderColor, width: 2),
+                ),
+              ),
+            ),
+            Align(
+              alignment: alignment,
+              child: IgnorePointer(
+                child: AnimatedOpacity(
+                  key: widget.stateLayerKey,
+                  duration: motionDuration,
+                  opacity: widget.pressed || widget.hovered || widget.focused ? 1 : 0,
+                  child: SizedBox.square(
+                    dimension: _stateLayerExtent,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: palette.primary.withValues(
+                          alpha: widget.pressed ? 0.12 : 0.08,
+                        ),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(2),
+              child: Align(
+                alignment: alignment,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: thumbColor,
+                    borderRadius: theme.borderRadius(ShellShapeScale.full),
+                  ),
+                  child: SizedBox.square(
+                    dimension: thumbSize,
+                    child: Center(
+                      child: Icon(
+                        value ? Icons.check_rounded : Icons.close_rounded,
+                        size: 16,
+                        color: iconColor,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class SettingsToggle extends StatefulWidget {
   const SettingsToggle({
     required this.label,
@@ -550,11 +799,6 @@ class _SettingsToggleState extends State<SettingsToggle>
   static const double _thumbPressed = 28;
   static const double _stateLayerExtent = 40;
 
-  /// Spatial controller driving the thumb position.
-  ///
-  /// It is deliberately unbounded: [Motion.expressiveSpatialFast] has a 0.6
-  /// damping ratio, so the thumb is allowed to overshoot and settle instead of
-  /// being clamped mid-bounce.
   late final AnimationController _positionController;
   late final AnimationController _colorController;
   var _pressed = false;
@@ -776,6 +1020,445 @@ class _SettingsToggleState extends State<SettingsToggle>
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Standard row heights defined by M3E specifications (`02-VISUAL-SPEC.md` §3.3).
+const double settingsRowSingleLineHeight = 56;
+const double settingsRowTwoLineHeight = 72;
+const double settingsRowThreeLineHeight = 88;
+const double settingsRowHorizontalPadding = 16;
+
+/// M3E settings row family (`02-VISUAL-SPEC.md` §3.3).
+///
+/// Supports 56 (single-line), 72 (two-line) and 88dp (three-line/control) row heights,
+/// leading icon or glyph circle, title/subtitle, trailing controls, and full-row
+/// hover/press states with keyboard accessibility.
+class SettingsRow extends StatefulWidget {
+  const SettingsRow({
+    super.key,
+    this.leading,
+    required this.title,
+    this.subtitle,
+    this.trailing,
+    this.onTap,
+    this.enabled = true,
+    this.height,
+    this.padding,
+  });
+
+  final Widget? leading;
+  final Widget title;
+  final Widget? subtitle;
+  final Widget? trailing;
+  final VoidCallback? onTap;
+  final bool enabled;
+  final double? height;
+  final EdgeInsetsGeometry? padding;
+
+  /// Convenience constructor taking [String] texts with M3E typography roles.
+  factory SettingsRow.text({
+    Key? key,
+    Widget? leading,
+    required String title,
+    String? subtitle,
+    Widget? trailing,
+    VoidCallback? onTap,
+    bool enabled = true,
+    double? height,
+    EdgeInsetsGeometry? padding,
+  }) {
+    return SettingsRow(
+      key: key,
+      leading: leading,
+      title: Builder(
+        builder: (context) => Text(
+          title,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: ShellText.settingsRowTitle.copyWith(
+            color: context.shellColors.textPrimary,
+          ),
+        ),
+      ),
+      subtitle: subtitle != null
+          ? Builder(
+              builder: (context) => Text(
+                subtitle,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: ShellText.settingsRowSupport.copyWith(
+                  color: context.shellColors.textSecondary,
+                ),
+              ),
+            )
+          : null,
+      trailing: trailing,
+      onTap: onTap,
+      enabled: enabled,
+      height: height,
+      padding: padding,
+    );
+  }
+
+  /// Full-row interactive switch row. Whole row tapping triggers the toggle.
+  factory SettingsRow.toggle({
+    Key? key,
+    Widget? leading,
+    required String title,
+    String? subtitle,
+    required bool value,
+    required ValueChanged<bool>? onChanged,
+    Key? toggleKey,
+    bool enabled = true,
+    EdgeInsetsGeometry? padding,
+  }) {
+    final effectiveHeight = subtitle != null
+        ? settingsRowTwoLineHeight
+        : settingsRowSingleLineHeight;
+    return _SettingsToggleRow(
+      key: key,
+      leading: leading,
+      toggleTitle: title,
+      toggleSubtitle: subtitle,
+      toggleValue: value,
+      onToggleChanged: onChanged,
+      toggleKey: toggleKey,
+      enabled: enabled,
+      height: effectiveHeight,
+      padding: padding,
+    );
+  }
+
+  /// Embedded slider row (88dp height) conforming to §3.3 and §3.5.
+  factory SettingsRow.slider({
+    Key? key,
+    Widget? leading,
+    required String title,
+    String? subtitle,
+    required double value,
+    required ValueChanged<double>? onChanged,
+    double minimum = 0.0,
+    double maximum = 1.0,
+    int? divisions,
+    String? valueLabel,
+    Key? sliderKey,
+    bool enabled = true,
+    EdgeInsetsGeometry? padding,
+  }) {
+    return SettingsRow(
+      key: key,
+      leading: leading,
+      height: settingsRowThreeLineHeight,
+      title: SettingsSlider(
+        key: sliderKey,
+        label: title,
+        value: value,
+        minimum: minimum,
+        maximum: maximum,
+        divisions: divisions,
+        valueLabel: valueLabel,
+        enabled: enabled,
+        onChanged: onChanged ?? (_) {},
+      ),
+      subtitle: subtitle != null
+          ? Builder(
+              builder: (context) => Text(
+                subtitle,
+                style: ShellText.settingsRowSupport.copyWith(
+                  color: context.shellColors.textSecondary,
+                ),
+              ),
+            )
+          : null,
+      enabled: enabled,
+      padding: padding,
+    );
+  }
+
+  @override
+  State<SettingsRow> createState() => _SettingsRowState();
+}
+
+class _SettingsRowState extends State<SettingsRow> {
+  var _hovered = false;
+  var _focused = false;
+  var _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = ShellTheme.of(context);
+    final colors = context.shellColors;
+    final enabled = widget.enabled;
+    final isInteractive = enabled && widget.onTap != null;
+
+    final effectiveHeight = widget.height ??
+        (widget.subtitle != null
+            ? settingsRowTwoLineHeight
+            : settingsRowSingleLineHeight);
+
+    final Color backgroundColor;
+    if (_pressed && isInteractive) {
+      backgroundColor = theme.cardColor(colors.surfaceContainerHighest);
+    } else if ((_hovered || _focused) && isInteractive) {
+      backgroundColor = theme.cardColor(colors.surfaceContainerHigh);
+    } else {
+      backgroundColor = Colors.transparent;
+    }
+
+    final motionDuration = MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : Motion.pill;
+
+    Widget content = SizedBox(
+      height: effectiveHeight,
+      child: Padding(
+        padding: widget.padding ??
+            const EdgeInsets.symmetric(
+              horizontal: settingsRowHorizontalPadding,
+            ),
+        child: Row(
+          children: [
+            if (widget.leading case final leading?) ...[
+              leading,
+              const SizedBox(width: 16),
+            ],
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  DefaultTextStyle.merge(
+                    style: ShellText.settingsRowTitle.copyWith(
+                      color: colors.textPrimary,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    child: widget.title,
+                  ),
+                  if (widget.subtitle case final subtitle?) ...[
+                    const SizedBox(height: 2),
+                    DefaultTextStyle.merge(
+                      style: ShellText.settingsRowSupport.copyWith(
+                        color: colors.textSecondary,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      child: subtitle,
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            if (widget.trailing case final trailing?) ...[
+              const SizedBox(width: 16),
+              trailing,
+            ],
+          ],
+        ),
+      ),
+    );
+
+    return Semantics(
+      button: isInteractive,
+      enabled: enabled,
+      child: FocusableActionDetector(
+        enabled: isInteractive,
+        mouseCursor: isInteractive
+            ? ShellMouseCursors.link
+            : SystemMouseCursors.basic,
+        onShowHoverHighlight: (highlight) =>
+            setState(() => _hovered = highlight),
+        onShowFocusHighlight: (highlight) =>
+            setState(() => _focused = highlight),
+        shortcuts: const <ShortcutActivator, Intent>{
+          SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+          SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
+        },
+        actions: <Type, Action<Intent>>{
+          ActivateIntent: CallbackAction<ActivateIntent>(
+            onInvoke: (_) {
+              if (isInteractive) {
+                widget.onTap?.call();
+              }
+              return null;
+            },
+          ),
+        },
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTapDown: isInteractive ? (_) => setState(() => _pressed = true) : null,
+          onTapUp: isInteractive ? (_) => setState(() => _pressed = false) : null,
+          onTapCancel: isInteractive ? () => setState(() => _pressed = false) : null,
+          onTap: isInteractive ? widget.onTap : null,
+          child: AnimatedContainer(
+            duration: motionDuration,
+            color: backgroundColor,
+            child: content,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SettingsToggleRow extends SettingsRow {
+  const _SettingsToggleRow({
+    super.key,
+    super.leading,
+    required this.toggleTitle,
+    this.toggleSubtitle,
+    required this.toggleValue,
+    required this.onToggleChanged,
+    this.toggleKey,
+    super.enabled = true,
+    super.height,
+    super.padding,
+  }) : super(
+         title: const SizedBox.shrink(),
+       );
+
+  final String toggleTitle;
+  final String? toggleSubtitle;
+  final bool toggleValue;
+  final ValueChanged<bool>? onToggleChanged;
+  final Key? toggleKey;
+
+  @override
+  State<SettingsRow> createState() => _SettingsToggleRowState();
+}
+
+class _SettingsToggleRowState extends State<_SettingsToggleRow> {
+  var _hovered = false;
+  var _focused = false;
+  var _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = ShellTheme.of(context);
+    final colors = context.shellColors;
+    final enabled = widget.enabled;
+    final isInteractive = enabled && widget.onToggleChanged != null;
+
+    final effectiveHeight = widget.height ??
+        (widget.toggleSubtitle != null
+            ? settingsRowTwoLineHeight
+            : settingsRowSingleLineHeight);
+
+    final Color backgroundColor;
+    if (_pressed && isInteractive) {
+      backgroundColor = theme.cardColor(colors.surfaceContainerHighest);
+    } else if ((_hovered || _focused) && isInteractive) {
+      backgroundColor = theme.cardColor(colors.surfaceContainerHigh);
+    } else {
+      backgroundColor = Colors.transparent;
+    }
+
+    final motionDuration = MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : Motion.pill;
+
+    final trailingSwitch = SettingsSwitch(
+      key: widget.toggleKey,
+      value: widget.toggleValue,
+      onChanged: widget.onToggleChanged,
+      enabled: enabled,
+      pressed: _pressed,
+      hovered: _hovered,
+      focused: _focused,
+    );
+
+    Widget content = SizedBox(
+      height: effectiveHeight,
+      child: Padding(
+        padding: widget.padding ??
+            const EdgeInsets.symmetric(
+              horizontal: settingsRowHorizontalPadding,
+            ),
+        child: Row(
+          children: [
+            if (widget.leading case final leading?) ...[
+              leading,
+              const SizedBox(width: 16),
+            ],
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    widget.toggleTitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: ShellText.settingsRowTitle.copyWith(
+                      color: colors.textPrimary,
+                    ),
+                  ),
+                  if (widget.toggleSubtitle case final subtitle?) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: ShellText.settingsRowSupport.copyWith(
+                        color: colors.textSecondary,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(width: 16),
+            trailingSwitch,
+          ],
+        ),
+      ),
+    );
+
+    return Semantics(
+      button: true,
+      toggled: widget.toggleValue,
+      enabled: enabled,
+      label: widget.toggleTitle,
+      child: FocusableActionDetector(
+        enabled: isInteractive,
+        mouseCursor: isInteractive
+            ? ShellMouseCursors.link
+            : SystemMouseCursors.basic,
+        onShowHoverHighlight: (highlight) =>
+            setState(() => _hovered = highlight),
+        onShowFocusHighlight: (highlight) =>
+            setState(() => _focused = highlight),
+        shortcuts: const <ShortcutActivator, Intent>{
+          SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+          SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
+        },
+        actions: <Type, Action<Intent>>{
+          ActivateIntent: CallbackAction<ActivateIntent>(
+            onInvoke: (_) {
+              if (isInteractive) {
+                widget.onToggleChanged!(!widget.toggleValue);
+              }
+              return null;
+            },
+          ),
+        },
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTapDown: isInteractive ? (_) => setState(() => _pressed = true) : null,
+          onTapUp: isInteractive ? (_) => setState(() => _pressed = false) : null,
+          onTapCancel: isInteractive ? () => setState(() => _pressed = false) : null,
+          onTap: isInteractive
+              ? () => widget.onToggleChanged!(!widget.toggleValue)
+              : null,
+          child: AnimatedContainer(
+            duration: motionDuration,
+            color: backgroundColor,
+            child: content,
+          ),
+        ),
       ),
     );
   }

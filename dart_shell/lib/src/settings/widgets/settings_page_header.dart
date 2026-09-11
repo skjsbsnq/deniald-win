@@ -83,6 +83,7 @@ class SettingsPageHeader extends StatelessWidget {
   const SettingsPageHeader({
     required this.icon,
     required this.title,
+    this.subtitle,
     required this.collapse,
     required this.overlapsContent,
     this.trailing,
@@ -91,6 +92,7 @@ class SettingsPageHeader extends StatelessWidget {
 
   final IconData icon;
   final String title;
+  final String? subtitle;
   final double collapse;
 
   /// Whether the scrolling content currently passes behind the pinned header.
@@ -128,6 +130,7 @@ class SettingsPageHeader extends StatelessWidget {
             right: 0,
             bottom: bottomInset,
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: <Widget>[
                 if (onBack != null) ...<Widget>[
                   _SettingsBackButton(onPressed: onBack),
@@ -136,7 +139,11 @@ class SettingsPageHeader extends StatelessWidget {
                 _PageHeaderIcon(hue: hue, icon: icon),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: _PageHeaderTitle(title: title, collapse: t),
+                  child: _PageHeaderTitle(
+                    title: title,
+                    subtitle: subtitle,
+                    collapse: t,
+                  ),
                 ),
                 if (trailing case final trailing?) ...<Widget>[
                   const SizedBox(width: 12),
@@ -156,11 +163,13 @@ class SettingsPageHeaderDelegate extends SliverPersistentHeaderDelegate {
   const SettingsPageHeaderDelegate({
     required this.icon,
     required this.title,
+    this.subtitle,
     this.trailing,
   });
 
   final IconData icon;
   final String title;
+  final String? subtitle;
   final Widget? trailing;
 
   @override
@@ -185,6 +194,7 @@ class SettingsPageHeaderDelegate extends SliverPersistentHeaderDelegate {
     return SettingsPageHeader(
       icon: icon,
       title: title,
+      subtitle: subtitle,
       collapse: collapse,
       overlapsContent: overlapsContent,
       trailing: trailing,
@@ -195,6 +205,7 @@ class SettingsPageHeaderDelegate extends SliverPersistentHeaderDelegate {
   bool shouldRebuild(covariant SettingsPageHeaderDelegate oldDelegate) =>
       oldDelegate.icon != icon ||
       oldDelegate.title != title ||
+      oldDelegate.subtitle != subtitle ||
       oldDelegate.trailing != trailing;
 }
 
@@ -229,17 +240,23 @@ class _PageHeaderIcon extends StatelessWidget {
 }
 
 class _PageHeaderTitle extends StatelessWidget {
-  const _PageHeaderTitle({required this.title, required this.collapse});
+  const _PageHeaderTitle({
+    required this.title,
+    this.subtitle,
+    required this.collapse,
+  });
 
   final String title;
+  final String? subtitle;
   final double collapse;
 
   @override
   Widget build(BuildContext context) {
-    final color = context.shellColors.textPrimary;
+    final colors = context.shellColors;
+    final color = colors.textPrimary;
     // Both roles share the fixed row height, so cross-fading them cannot
     // reflow the header (constraint §D5 keeps letter spacing at zero).
-    return SizedBox(
+    final titleStack = SizedBox(
       height: settingsPageHeaderTitleRowHeight,
       child: Stack(
         alignment: Alignment.centerLeft,
@@ -265,6 +282,30 @@ class _PageHeaderTitle extends StatelessWidget {
         ],
       ),
     );
+
+    if (subtitle case final sub?) {
+      final subOpacity = (1.0 - collapse * 2.0).clamp(0.0, 1.0);
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          titleStack,
+          if (subOpacity > 0)
+            Opacity(
+              opacity: subOpacity,
+              child: Text(
+                sub,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: ShellText.settingsRowSupport.copyWith(
+                  color: colors.textSecondary,
+                ),
+              ),
+            ),
+        ],
+      );
+    }
+    return titleStack;
   }
 }
 
