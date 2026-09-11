@@ -526,6 +526,11 @@ pub(super) fn run_flutter_event_loop(
                     // Projection-only frames reuse Flutter's retained scene.
                     // No Dart vsync, external-texture advance or buffer
                     // allocation is needed before the late geometry handoff.
+                    // The animation only rotates the outputs whose transform
+                    // changed, but the runtime keeps that subset private;
+                    // reprojecting every powered output for the animation's
+                    // duration is the conservative choice which can never
+                    // strand a rotating view.
                     frame_scheduler.mark_all_dirty();
                 }
                 if advance.geometry_published {
@@ -569,6 +574,11 @@ pub(super) fn run_flutter_event_loop(
                                 // again on the next tick.
                                 warn!(%error, "frame raster authorization failed; retrying on the next frame tick");
                                 raster_failures = raster_failures.saturating_add(1);
+                                // The failed transaction's per-output
+                                // coverage is unknown. Bump every powered
+                                // output's serial so a frame produced before
+                                // the failure cannot retire damage it does
+                                // not carry.
                                 frame_scheduler.mark_all_dirty();
                                 continue 'iter;
                             }

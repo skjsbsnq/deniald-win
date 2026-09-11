@@ -147,6 +147,12 @@ impl FlutterRuntime {
         self.texture_output_membership.clear();
         let cursor_ids = self.cursor_texture_ids.clone();
         self.install_cursor_texture_membership(&cursor_ids);
+        // A geometry republication dirties every output unconditionally: an
+        // atlas or engine-scale change alters texture sampling on all of
+        // them, and a Scanout carries no scale field, so the frame
+        // scheduler's output signature cannot spot a scale-only change on
+        // its own. This loop is the fallback dirty source for scale and
+        // geometry changes.
         for output in &self.render_outputs {
             self.pending_output_updates
                 .entry(output.output_id)

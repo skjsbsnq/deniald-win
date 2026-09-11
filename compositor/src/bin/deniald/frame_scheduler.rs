@@ -15,8 +15,9 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::time::{Duration, Instant};
 
-use denial_core::topology::OutputId;
+use denial_core::topology::{OutputId, OutputTransform, PixelRect};
 use smithay::output::Mode as OutputMode;
+use smithay::reexports::drm::control::{Mode as DrmMode, connector, crtc};
 use tracing::info;
 
 use super::kms_state::Scanout;
@@ -58,10 +59,42 @@ struct DirtyOutput {
     texture_ids: BTreeSet<i64>,
 }
 
+/// Content-facing scanout state which can drift while an output's timeline
+/// source stays identical. A change means the retained projection may be
+/// stale even though the cadence did not restart.
+///
+/// Output scale is deliberately absent: a scanout never stores it, and the
+/// projection derives solely from mode, transform and source_rect
+/// (`OutputProjection::for_output`), so a scale change only matters through
+/// the fields already covered here.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct OutputSignature {
+    mode: DrmMode,
+    transform: OutputTransform,
+    source_rect: PixelRect,
+    connector: connector::Handle,
+    crtc: crtc::Handle,
+    vrr_enabled: bool,
+}
+
+impl OutputSignature {
+    fn of(scanout: &Scanout) -> Self {
+        Self {
+            mode: scanout.output.mode,
+            transform: scanout.output.transform,
+            source_rect: scanout.source_rect,
+            connector: scanout.output.connector,
+            crtc: scanout.output.crtc,
+            vrr_enabled: scanout.output.vrr_enabled,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub(super) struct FrameScheduler {
     outputs: OutputTimelines,
     configured_outputs: BTreeSet<OutputId>,
+    output_signatures: BTreeMap<OutputId, OutputSignature>,
     dirty_outputs: BTreeMap<OutputId, DirtyOutput>,
     render_requests: Vec<OutputFrameRequest>,
     render_texture_ids: BTreeSet<i64>,
@@ -131,9 +164,13 @@ impl FrameSchedulerAudit {
 
 impl FrameScheduler {
     pub(super) fn new(scanouts: &[Scanout], now: Instant) -> Self {
-        Self {
+        let mut scheduler = Self {
             outputs: OutputTimelines::new(scanouts, now),
             configured_outputs: scanouts.iter().map(|scanout| scanout.output.id).collect(),
+            output_signatures: scanouts
+                .iter()
+                .map(|scanout| (scanout.output.id, OutputSignature::of(scanout)))
+                .collect(),
             dirty_outputs: BTreeMap::new(),
             render_requests: Vec::with_capacity(scanouts.len()),
             render_texture_ids: BTreeSet::new(),
@@ -144,7 +181,15 @@ impl FrameScheduler {
             flutter_tick: None,
             last_flutter_target: None,
             audit: super::render_audit_enabled().then(FrameSchedulerAudit::new),
-        }
+        };
+        // A fresh scheduler inherits no dirty history from the generation it
+        // replaces; marks queued there are lost with it, and a rollback path
+        // may keep the existing engine without producing a frame. Authorize
+        // one projection per powered output so retained or rolled-back
+        // content can never stay stale merely because nothing schedules a
+        // new frame.
+        scheduler.mark_all_dirty();
+        scheduler
     }
 
     pub(super) fn reconfigure(&mut self, scanouts: &[Scanout], now: Instant) {
@@ -155,6 +200,27 @@ impl FrameScheduler {
             .map(timeline_source)
             .collect();
         self.reconfigure_sources(configured_outputs, powered_sources, now);
+
+        // A surviving timeline source only proves the output's cadence is
+        // unchanged. Content-facing state - mode, projection transform,
+        // atlas source region, connector or CRTC assignment - can move while
+        // the interval stays identical, as with resident geometry applies or
+        // a same-refresh mode switch. Force one fresh projection on any
+        // powered output whose signature drifted; callers which republish
+        // geometry through Flutter already dirty these outputs via texture
+        // updates, but the scheduler must not depend on that cooperation.
+        self.output_signatures
+            .retain(|output, _| self.configured_outputs.contains(output));
+        for scanout in scanouts {
+            let signature = OutputSignature::of(scanout);
+            let changed = self
+                .output_signatures
+                .insert(scanout.output.id, signature)
+                .is_none_or(|previous| previous != signature);
+            if changed && scanout.powered {
+                self.mark_output_dirty(scanout.output.id);
+            }
+        }
     }
 
     fn reconfigure_sources(
@@ -163,20 +229,33 @@ impl FrameScheduler {
         powered_sources: Vec<TimelineSource>,
         now: Instant,
     ) {
-        let activated_outputs = powered_sources
+        // A powered source is output-local state: only an output which
+        // joined the powered set or changed cadence owns a restarted
+        // timeline. Neighbours whose source is unchanged keep both their
+        // timeline phase and their clean marking.
+        let restarted_outputs = powered_sources
             .iter()
-            .filter(|source| !self.outputs.contains(source.output))
+            .filter(|source| {
+                self.outputs
+                    .timelines
+                    .iter()
+                    .find(|timeline| timeline.source.output == source.output)
+                    .is_none_or(|timeline| timeline.source != **source)
+            })
             .map(|source| source.output)
             .collect::<Vec<_>>();
         self.configured_outputs = configured_outputs;
         self.outputs.reconfigure(&powered_sources, now);
         self.dirty_outputs
             .retain(|output, _| self.configured_outputs.contains(output));
-        for output in activated_outputs {
+        for output in restarted_outputs {
             // The stable framebuffer restored by DPMS may predate a source
-            // already queued while this output was parked. Force one fresh
-            // projection even when no client submits another buffer after
-            // wake; any retained texture damage remains attached below.
+            // already queued while this output was parked, and a restarted
+            // timeline may replace one which served a different cadence or
+            // vsync regime.
+            // Force one fresh projection even when no client submits
+            // another buffer after wake; any retained texture damage
+            // remains attached below.
             self.mark_output_dirty(output);
         }
         if self.outputs.is_parked() {
@@ -207,6 +286,10 @@ impl FrameScheduler {
         self.mark_app_dirty(output, std::iter::empty());
     }
 
+    /// Dirties every powered output. Reserved for events whose per-output
+    /// coverage cannot be decided before raster - a new shared Dart scene,
+    /// or a failed transaction of unknown partial coverage. Output-local
+    /// changes must use `mark_output_dirty`/`mark_app_dirty` instead.
     pub(super) fn mark_all_dirty(&mut self) {
         for index in 0..self.outputs.timelines.len() {
             let output = self.outputs.timelines[index].source.output;
@@ -284,6 +367,11 @@ impl FrameScheduler {
                     .is_none_or(|target| tick.presentation_target > target)
         });
         if flutter_tick.is_some() && !self.flutter_outputs_dirty {
+            // One Dart scene serves every output, so a newly produced frame
+            // can alter any output's projection; the engine only reports
+            // per-view damage after raster. Authorizing every powered
+            // output is the only pre-raster decision which can never strand
+            // a changed region.
             self.mark_all_dirty();
             self.flutter_outputs_dirty = true;
         }
@@ -396,7 +484,29 @@ impl OutputTimelines {
         if sources_match {
             return;
         }
-        self.replace(sources, now);
+        // Timelines whose source survives keep their phase: resetting an
+        // unchanged output's next_tick on a neighbour's DPMS or hotplug
+        // event would retick its Wayland frame callbacks immediately and
+        // invite a redundant client redraw on an output whose picture did
+        // not change. Only new or retimed sources start a fresh timeline.
+        self.timelines
+            .retain(|timeline| sources.contains(&timeline.source));
+        for source in sources {
+            if !self
+                .timelines
+                .iter()
+                .any(|timeline| timeline.source == *source)
+            {
+                self.timelines.push(OutputTimeline::new(*source, now));
+            }
+        }
+        self.flutter_output = self
+            .timelines
+            .iter()
+            .map(|timeline| timeline.source)
+            .min_by_key(|source| (source.interval, source.output))
+            .map(|source| source.output);
+        self.ticks.clear();
     }
 
     fn replace(&mut self, sources: &[TimelineSource], now: Instant) {
@@ -441,12 +551,6 @@ impl OutputTimelines {
         self.timelines.is_empty()
     }
 
-    fn contains(&self, output: OutputId) -> bool {
-        self.timelines
-            .iter()
-            .any(|timeline| timeline.source.output == output)
-    }
-
     fn observe_presentation(
         &mut self,
         output: OutputId,
@@ -473,6 +577,10 @@ impl OutputTimelines {
 struct TimelineSource {
     output: OutputId,
     interval: Duration,
+    // A VRR toggle invalidates the fixed-interval phase-lock state the
+    // timeline accumulated, so it belongs to the timeline's identity and
+    // restarts the output rather than silently reusing its phase.
+    vrr_enabled: bool,
 }
 
 #[derive(Debug)]
@@ -577,6 +685,7 @@ fn timeline_source(scanout: &Scanout) -> TimelineSource {
     TimelineSource {
         output: scanout.output.id,
         interval: refresh_interval(scanout),
+        vrr_enabled: scanout.output.vrr_enabled,
     }
 }
 
