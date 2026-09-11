@@ -162,6 +162,20 @@ impl DamageRegion {
         output.extend(self.as_slice().iter().copied().map(DamageRect::as_flutter));
     }
 
+    /// Exports the region as KMS damage clips in framebuffer coordinates:
+    /// `[x1, y1, x2, y2]` with the lower-right corner exclusive. Fractional
+    /// coverage expands outward so the kernel can never under-fetch.
+    pub(crate) fn kms_clips(&self) -> impl Iterator<Item = [i32; 4]> + '_ {
+        self.as_slice().iter().map(|rect| {
+            [
+                rect.left.floor() as i32,
+                rect.top.floor() as i32,
+                rect.right.ceil() as i32,
+                rect.bottom.ceil() as i32,
+            ]
+        })
+    }
+
     pub(super) fn rect_count(&self) -> usize {
         self.len
     }

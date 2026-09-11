@@ -4,7 +4,9 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use denial_core::topology::{OutputId, OutputTransform, PixelRect, PixelSize, RenderViewId};
-use denial_core::volition::{self, CommitId, PlaneCommit, PlaneProperties, Submission, Volition};
+use denial_core::volition::{
+    self, CommitId, PlaneCommit, PlaneDamage, PlaneProperties, Submission, Volition,
+};
 use smithay::backend::drm::DrmDevice;
 use smithay::reexports::calloop::channel::SyncSender as EventSender;
 use tracing::{info, warn};
@@ -49,6 +51,10 @@ struct OutputFrame {
     screenshot_request_id: Option<u64>,
     request: OutputFrameRequest,
     submitted_at: Instant,
+    /// Buffer-coordinate raster damage reported by the embedder, in the
+    /// framebuffer space the steady-state plane commit samples (full-size
+    /// src, Normal transform).
+    damage: PlaneDamage,
     feedback: Vec<crate::surface_feedback::SurfaceFeedback>,
 }
 
@@ -314,6 +320,7 @@ fn plane_commit(scanout: &Scanout, size: PixelSize) -> Result<PlaneCommit, Box<d
             source_height: properties.source_height,
             rotation: scanout.rotation_property(OutputTransform::Normal)?,
             in_fence_fd: properties.in_fence_fd,
+            damage_clips: properties.damage_clips,
         },
         PixelRect {
             x: 0,
@@ -1053,7 +1060,7 @@ impl OutputScheduler {
             configuration_generation: _,
             index,
             fence,
-            damage: _,
+            damage,
             screenshot_request_id,
             rendered_at,
             request,
@@ -1082,6 +1089,7 @@ impl OutputScheduler {
                     screenshot_request_id,
                     request,
                     submitted_at: Instant::now(),
+                    damage: PlaneDamage::new(damage.kms_clips()),
                     feedback,
                 })
                 .expect("prevalidated output Ready slot changed during publication");
@@ -1310,6 +1318,7 @@ impl OutputScheduler {
                 commit,
                 &pipeline.request,
                 framebuffer,
+                Some(frame.damage),
                 presentation_target,
             )?;
             if submission == Submission::Queued {

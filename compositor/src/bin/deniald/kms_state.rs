@@ -285,6 +285,10 @@ pub(super) struct AtlasPlaneProperties {
     pub(super) source_height: property::Handle,
     pub(super) rotation: Option<property::Handle>,
     pub(super) in_fence_fd: Option<property::Handle>,
+    /// Optional per-plane `FB_DAMAGE_CLIPS` handle. Steady-state Volition
+    /// commits attach per-frame damage through it; drivers without the
+    /// property keep the commit identical to before.
+    pub(super) damage_clips: Option<property::Handle>,
     pub(super) smithay_opaque_alpha: f32,
 }
 
@@ -314,6 +318,7 @@ impl AtlasPlaneProperties {
             source_height: named_property(drm, plane, "SRC_H")?,
             rotation: optional_named_property(drm, plane, "rotation")?,
             in_fence_fd: optional_named_property(drm, plane, "IN_FENCE_FD")?,
+            damage_clips: optional_named_property(drm, plane, "FB_DAMAGE_CLIPS")?,
             smithay_opaque_alpha,
         })
     }

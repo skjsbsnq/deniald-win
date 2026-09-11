@@ -23,14 +23,27 @@ use std::sync::mpsc::{
 use std::thread;
 use std::time::{Duration, Instant};
 
+use drm_ffi::drm_mode_rect;
 use drm_ffi::mode as drm_mode;
 use smithay::reexports::drm::control::{
     AtomicCommitFlags, RawResourceHandle, framebuffer, plane, property,
 };
+use tracing::warn;
 
 use crate::topology::PixelRect;
 
-const MAX_ATOMIC_PLANE_PROPERTIES: usize = 7;
+const MAX_ATOMIC_PLANE_PROPERTIES: usize = 8;
+/// Bounded `FB_DAMAGE_CLIPS` storage attached to one plane commit, matching
+/// the compositor's own damage cap. Longer clip lists collapse to their
+/// bounding rectangle instead of dropping coverage.
+const MAX_PLANE_DAMAGE_CLIPS: usize = 32;
+/// A degenerate `drm_mode_rect` covers no framebuffer pixels.
+const EMPTY_CLIP: drm_mode_rect = drm_mode_rect {
+    x1: 0,
+    y1: 0,
+    x2: 0,
+    y2: 0,
+};
 /// Submit far enough ahead of the target for the driver to latch the atomic
 /// state for that edge.  The ioctl itself is cheap, but several DRM drivers
 /// close their scanout latch materially earlier than the physical vblank.
@@ -55,6 +68,113 @@ fn next_instance() -> u64 {
     }
 }
 
+/// Framebuffer-coordinate damage clips attached to one plane commit.
+///
+/// `FB_DAMAGE_CLIPS` is a fetch hint only: the commit still flips the plane
+/// to its new framebuffer, but the kernel may restrict which regions it
+/// samples. `None` damage means the caller could not describe the frame —
+/// Volition writes the NULL blob, which the kernel treats as fully damaged,
+/// identical to a driver without the property. An empty clip set instead
+/// positively asserts that the framebuffer content did not change.
+#[derive(Clone, Copy, Debug)]
+pub struct PlaneDamage {
+    clips: [drm_mode_rect; MAX_PLANE_DAMAGE_CLIPS],
+    len: usize,
+}
+
+impl PlaneDamage {
+    /// Collects `[x1, y1, x2, y2]` framebuffer-coordinate clips, lower-right
+    /// exclusive. Degenerate entries carry no coverage and are dropped.
+    pub fn new(clips: impl IntoIterator<Item = [i32; 4]>) -> Self {
+        let mut clips = clips
+            .into_iter()
+            .filter(|clip| clip[0] < clip[2] && clip[1] < clip[3]);
+        let mut damage = Self {
+            clips: [EMPTY_CLIP; MAX_PLANE_DAMAGE_CLIPS],
+            len: 0,
+        };
+        for clip in clips.by_ref().take(MAX_PLANE_DAMAGE_CLIPS) {
+            damage.clips[damage.len] = mode_rect(clip);
+            damage.len += 1;
+        }
+        if let Some(clip) = clips.next() {
+            let mut bounds = damage.clips[..damage.len]
+                .iter()
+                .copied()
+                .fold(mode_rect(clip), bounding_clip);
+            for clip in clips {
+                bounds = bounding_clip(bounds, mode_rect(clip));
+            }
+            damage.clips[0] = bounds;
+            damage.len = 1;
+        }
+        damage
+    }
+
+    /// Serializes the clip set as an `FB_DAMAGE_CLIPS` property blob.
+    ///
+    /// The kernel rejects zero-length blobs, so a positively-empty clip set
+    /// is encoded as one degenerate rectangle: drivers intersecting the
+    /// clips against the plane source see zero coverage, which is the "no
+    /// update" assertion a zero-rectangle blob would carry.
+    fn create_blob(&self, drm: BorrowedFd<'_>) -> io::Result<u32> {
+        let clips = if self.len == 0 {
+            std::slice::from_ref(&EMPTY_CLIP)
+        } else {
+            &self.clips[..self.len]
+        };
+        let mut data = Vec::with_capacity(std::mem::size_of_val(clips));
+        for clip in clips {
+            for field in [clip.x1, clip.y1, clip.x2, clip.y2] {
+                data.extend_from_slice(&field.to_ne_bytes());
+            }
+        }
+        Ok(drm_mode::create_property_blob(drm, &mut data)?.blob_id)
+    }
+}
+
+fn mode_rect(clip: [i32; 4]) -> drm_mode_rect {
+    drm_mode_rect {
+        x1: clip[0],
+        y1: clip[1],
+        x2: clip[2],
+        y2: clip[3],
+    }
+}
+
+fn bounding_clip(a: drm_mode_rect, b: drm_mode_rect) -> drm_mode_rect {
+    drm_mode_rect {
+        x1: a.x1.min(b.x1),
+        y1: a.y1.min(b.y1),
+        x2: a.x2.max(b.x2),
+        y2: a.y2.max(b.y2),
+    }
+}
+
+/// Blob ioctls are not expected to fail in steady state. When they do, the
+/// commit continues with the NULL blob, so report once instead of logging
+/// per frame.
+fn log_damage_blob_failure(operation: &'static str, error: &io::Error) {
+    static LOGGED: AtomicBool = AtomicBool::new(false);
+    if !LOGGED.swap(true, Ordering::Relaxed) {
+        warn!(
+            operation = operation,
+            %error,
+            "FB_DAMAGE_CLIPS blob management failed; commits degrade to full damage"
+        );
+    }
+}
+
+/// A commit without tracked damage is not an error — the NULL blob keeps
+/// the kernel's full-damage default — but losing the tracking benefit is
+/// worth one diagnostic instead of a per-frame log.
+fn log_untracked_damage() {
+    static LOGGED: AtomicBool = AtomicBool::new(false);
+    if !LOGGED.swap(true, Ordering::Relaxed) {
+        warn!("a commit arrived without tracked damage; FB_DAMAGE_CLIPS degrades to full");
+    }
+}
+
 /// Atomic properties required to move one primary plane to a framebuffer.
 #[derive(Clone, Copy, Debug)]
 pub struct PlaneProperties {
@@ -65,6 +185,7 @@ pub struct PlaneProperties {
     pub source_height: property::Handle,
     pub rotation: Option<(property::Handle, u64)>,
     pub in_fence_fd: Option<property::Handle>,
+    pub damage_clips: Option<property::Handle>,
 }
 
 /// Reusable atomic state for one output plane.
@@ -79,6 +200,7 @@ pub struct PlaneCommit {
     values: [u64; MAX_ATOMIC_PLANE_PROPERTIES],
     property_count: usize,
     fence_index: Option<usize>,
+    damage_index: Option<usize>,
 }
 
 impl PlaneCommit {
@@ -91,6 +213,7 @@ impl PlaneCommit {
             values: [0; MAX_ATOMIC_PLANE_PROPERTIES],
             property_count: 0,
             fence_index: None,
+            damage_index: None,
         };
         request.push(properties.framebuffer, 0);
         request.push(properties.source_x, u64::from(source.x) << 16);
@@ -104,6 +227,14 @@ impl PlaneCommit {
             request.fence_index = Some(request.property_count);
             request.push(property, u64::MAX);
         }
+        if let Some(property) = properties.damage_clips {
+            // The slot always carries an explicit value so commits can never
+            // inherit a stale blob id from an earlier plane state. The NULL
+            // blob keeps the kernel's full-damage default until `submit`
+            // writes a per-commit clip blob.
+            request.damage_index = Some(request.property_count);
+            request.push(property, 0);
+        }
         request.property_counts[0] =
             u32::try_from(request.property_count).expect("atomic plane property count fits u32");
         request
@@ -116,19 +247,53 @@ impl PlaneCommit {
         self.property_count += 1;
     }
 
-    fn submit(&mut self, drm: BorrowedFd<'_>, framebuffer: framebuffer::Handle) -> io::Result<()> {
+    fn submit(
+        &mut self,
+        drm: BorrowedFd<'_>,
+        framebuffer: framebuffer::Handle,
+        damage: Option<PlaneDamage>,
+    ) -> io::Result<()> {
         self.values[0] = u64::from(u32::from(framebuffer));
         if let Some(index) = self.fence_index {
             self.values[index] = u64::MAX;
         }
-        drm_mode::atomic_commit(
+        let mut damage_blob = 0_u32;
+        if let Some(index) = self.damage_index {
+            self.values[index] = match damage.map(|damage| damage.create_blob(drm)) {
+                Some(Ok(blob)) => {
+                    damage_blob = blob;
+                    u64::from(blob)
+                }
+                // Blob creation failing is not a commit failure: the NULL
+                // blob keeps this commit at full-damage semantics, which is
+                // what a driver without FB_DAMAGE_CLIPS sees every commit.
+                Some(Err(error)) => {
+                    log_damage_blob_failure("create", &error);
+                    0
+                }
+                None => {
+                    log_untracked_damage();
+                    0
+                }
+            };
+        }
+        let result = drm_mode::atomic_commit(
             drm,
             commit_flags().bits(),
             &mut self.objects,
             &mut self.property_counts,
             &mut self.properties[..self.property_count],
             &mut self.values[..self.property_count],
-        )
+        );
+        if damage_blob != 0 {
+            // A committed plane state holds its own blob reference, and a
+            // rejected commit never took one: either way the returned id is
+            // released here, so retries create a fresh blob per attempt.
+            if let Err(error) = drm_mode::destroy_property_blob(drm, damage_blob) {
+                log_damage_blob_failure("destroy", &error);
+            }
+        }
+        result
     }
 }
 
@@ -220,6 +385,7 @@ struct CommitJob {
     commit: CommitId,
     request: PlaneCommit,
     framebuffer: framebuffer::Handle,
+    damage: Option<PlaneDamage>,
     not_before: Instant,
 }
 
@@ -446,11 +612,11 @@ fn run_scheduler(
         let expires_at = *scheduled
             .expires_at
             .get_or_insert(attempted_at + LOOKAHEAD_MAX_WAIT);
-        match scheduled
-            .job
-            .request
-            .submit(drm.as_fd(), scheduled.job.framebuffer)
-        {
+        match scheduled.job.request.submit(
+            drm.as_fd(),
+            scheduled.job.framebuffer,
+            scheduled.job.damage,
+        ) {
             Ok(()) => finish_job(
                 pending,
                 report_event,
@@ -581,11 +747,17 @@ impl Volition {
     /// busy output cannot hold another output behind it. This preserves
     /// edge-adjacent submission without allowing a kernel wait to pin the
     /// compositor during shutdown.
+    ///
+    /// `damage` is the framebuffer-coordinate clip set the driver may use to
+    /// reduce plane fetches; `None` reports unknown damage, which the kernel
+    /// reads as a fully changed framebuffer. Neither case alters the commit
+    /// or fence retirement flow.
     pub fn submit_for_target(
         &mut self,
         commit: CommitId,
         request: &PlaneCommit,
         framebuffer: framebuffer::Handle,
+        damage: Option<PlaneDamage>,
         presentation_target: Instant,
     ) -> io::Result<Submission> {
         let not_before = lookahead_not_before(presentation_target, Instant::now());
@@ -594,6 +766,7 @@ impl Volition {
             commit,
             request: request.clone(),
             framebuffer,
+            damage,
             not_before,
         })
     }
