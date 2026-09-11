@@ -216,21 +216,20 @@ impl WaylandFrontend {
         debug_assert!(self.seat.get_pointer().is_some());
         debug_assert!(self.seat.get_touch().is_some());
         let elapsed = self.start_time.elapsed();
-        let windows = self
-            .space
-            .elements()
-            .map(|window| {
-                // A frame callback is one-shot even when the atlas spans several
-                // CRTCs. Attribute it to the physical output owning this window
-                // instead of sending once per output (or hardcoding output zero).
-                let frame_output = self
-                    .output_for_geometry(self.window_geometry_target(window))
-                    .map(|entry| entry.output.clone())
-                    .unwrap_or_else(|| self.atlas_output.clone());
-                (window.clone(), frame_output)
-            })
-            .collect::<Vec<_>>();
-        self.presentation.submitted(windows, elapsed);
+        let mut windows = std::mem::take(&mut self.frame_submitted_windows_scratch);
+        windows.clear();
+        windows.extend(self.space.elements().map(|window| {
+            // A frame callback is one-shot even when the atlas spans several
+            // CRTCs. Attribute it to the physical output owning this window
+            // instead of sending once per output (or hardcoding output zero).
+            let frame_output = self
+                .output_for_geometry(self.window_geometry_target(window))
+                .map(|entry| entry.output.clone())
+                .unwrap_or_else(|| self.atlas_output.clone());
+            (window.clone(), frame_output)
+        }));
+        self.presentation.submitted(windows.drain(..), elapsed);
+        self.frame_submitted_windows_scratch = windows;
         self.display_handle.flush_clients()?;
         Ok(())
     }

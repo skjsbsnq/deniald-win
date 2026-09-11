@@ -388,6 +388,7 @@ impl WaylandFrontend {
             #[cfg(feature = "flutter")]
             scene_complex_windows_scratch: HashSet::new(),
             window_membership_scratch: Vec::new(),
+            frame_submitted_windows_scratch: Vec::new(),
             #[cfg(feature = "flutter")]
             output_window_membership: OutputWindowMembership::default(),
             #[cfg(feature = "flutter")]

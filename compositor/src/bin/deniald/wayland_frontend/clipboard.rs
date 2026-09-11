@@ -1,7 +1,9 @@
+use std::cell::Cell;
 use std::fs::File;
 use std::io::Write;
 use std::os::fd::{AsFd, OwnedFd};
 use std::os::unix::net::UnixStream;
+use std::rc::Rc;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::thread;
@@ -441,6 +443,12 @@ fn install_nonblocking_writer(
     fcntl_setfl(&fd, flags | OFlags::NONBLOCK)?;
     let completed = Arc::new(AtomicBool::new(false));
     let writer_completed = Arc::clone(&completed);
+    // The timeout registers after the writer, so its token reaches the writer
+    // callback through a shared slot; the loop cannot dispatch the writer
+    // before the slot is filled below.
+    let timeout_token = Rc::new(Cell::new(None));
+    let writer_timeout_token = Rc::clone(&timeout_token);
+    let writer_handle = handle.clone();
     let mut offset = 0usize;
     let writer_token = handle.insert_source(
         Generic::new(fd, Interest::WRITE, Mode::Level),
@@ -452,22 +460,26 @@ fn install_nonblocking_writer(
                     Err(Errno::AGAIN) => return Ok(PostAction::Continue),
                     Err(error) => {
                         debug!(%error, "retained clipboard write failed");
-                        writer_completed.store(true, Ordering::Release);
-                        return Ok(PostAction::Remove);
+                        break;
                     }
                 }
             }
             writer_completed.store(true, Ordering::Release);
+            if let Some(token) = writer_timeout_token.get() {
+                writer_handle.remove(token);
+            }
             Ok(PostAction::Remove)
         },
     )?;
     let timeout_handle = handle.clone();
-    handle.insert_source(Timer::from_duration(SEND_TIMEOUT), move |_, _, _| {
-        if !completed.swap(true, Ordering::AcqRel) {
-            timeout_handle.remove(writer_token);
-        }
-        TimeoutAction::Drop
-    })?;
+    let timer_token =
+        handle.insert_source(Timer::from_duration(SEND_TIMEOUT), move |_, _, _| {
+            if !completed.swap(true, Ordering::AcqRel) {
+                timeout_handle.remove(writer_token);
+            }
+            TimeoutAction::Drop
+        })?;
+    timeout_token.set(Some(timer_token));
     Ok(())
 }
 

@@ -422,6 +422,7 @@ pub(super) struct WaylandFrontend {
     #[cfg(feature = "flutter")]
     scene_complex_windows_scratch: HashSet<u64>,
     window_membership_scratch: Vec<Window>,
+    frame_submitted_windows_scratch: Vec<(Window, Output)>,
     #[cfg(feature = "flutter")]
     output_window_membership: OutputWindowMembership<ObjectId, Window>,
     #[cfg(feature = "flutter")]
