@@ -344,20 +344,36 @@ impl OutputBufferBroker {
             let slot = &mut pool.slots[index];
             slot.state = BufferState::Pending;
             slot.ready_transaction = 0;
-            let request = slot
-                .request
-                .take()
-                .expect("a ready output must retain its timeline request");
+            let (Some(request), Some(damage)) = (slot.request.take(), slot.ready_damage.take())
+            else {
+                // A Ready slot always carries the producing transaction's
+                // request and raster damage; losing either means the frame
+                // can no longer be published, so recycle the slot instead of
+                // panicking the compositor.
+                debug_assert!(
+                    false,
+                    "a ready output must retain its timeline request and raster damage"
+                );
+                warn!(
+                    output = ?pool.output_id,
+                    slot = index,
+                    "dropping a ready Flutter output frame missing its request or raster damage"
+                );
+                slot.state = BufferState::Free;
+                slot.damage.invalidate();
+                slot.fence = None;
+                slot.rendered_at = None;
+                slot.screenshot_request_id = None;
+                slot.feedback.clear();
+                continue;
+            };
             outputs.push(ReadyOutputFrame {
                 output_id: pool.output_id,
                 render_view_id: pool.render_view_id,
                 configuration_generation: pool.configuration_generation,
                 index,
                 fence: slot.fence.take(),
-                damage: slot
-                    .ready_damage
-                    .take()
-                    .expect("a ready output must retain its raster damage"),
+                damage,
                 screenshot_request_id: slot.screenshot_request_id.take(),
                 rendered_at: slot.rendered_at.take(),
                 request,

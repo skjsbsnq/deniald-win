@@ -178,13 +178,18 @@ impl<K: Eq, V: Clone> RecencyCache<K, V> {
             }
             return None;
         };
+        let Some(entry) = self.entries.remove(index) else {
+            // `position` above guarantees this entry exists.
+            debug_assert!(false, "located recency entry disappeared");
+            warn!(index, "located recency entry disappeared during lookup");
+            if cfg!(test) {
+                self.stats.misses = self.stats.misses.saturating_add(1);
+            }
+            return None;
+        };
         if cfg!(test) {
             self.stats.hits = self.stats.hits.saturating_add(1);
         }
-        let entry = self
-            .entries
-            .remove(index)
-            .expect("located recency entry disappeared");
         let value = entry.value.clone();
         // Entries are stored oldest-to-newest, avoiding a wrapping/saturating
         // logical clock entirely.
@@ -194,27 +199,31 @@ impl<K: Eq, V: Clone> RecencyCache<K, V> {
 
     pub(in crate::flutter_runtime) fn insert(&mut self, key: K, value: V) -> Option<V> {
         if let Some(index) = self.entries.iter().position(|entry| entry.key == key) {
-            let mut entry = self
-                .entries
-                .remove(index)
-                .expect("located recency entry disappeared");
-            let previous = mem::replace(&mut entry.value, value);
-            self.entries.push_back(entry);
-            return Some(previous);
+            if let Some(mut entry) = self.entries.remove(index) {
+                let previous = mem::replace(&mut entry.value, value);
+                self.entries.push_back(entry);
+                return Some(previous);
+            }
+            // `position` above guarantees this entry exists; fall through and
+            // insert as new rather than dropping the supplied value.
+            debug_assert!(false, "located recency entry disappeared");
+            warn!(index, "located recency entry disappeared during refresh");
         }
         self.entries.push_back(RecencyEntry { key, value });
         if self.entries.len() <= self.capacity {
             return None;
         }
+        let Some(oldest) = self.entries.pop_front() else {
+            // `len() > capacity` above guarantees a front entry; report no
+            // eviction instead of panicking.
+            debug_assert!(false, "over-capacity recency cache is empty");
+            warn!("over-capacity recency cache had no eviction candidate");
+            return None;
+        };
         if cfg!(test) {
             self.stats.capacity_evictions = self.stats.capacity_evictions.saturating_add(1);
         }
-        Some(
-            self.entries
-                .pop_front()
-                .expect("over-capacity recency cache is non-empty")
-                .value,
-        )
+        Some(oldest.value)
     }
 
     pub(in crate::flutter_runtime) fn remove_where(
@@ -225,12 +234,13 @@ impl<K: Eq, V: Clone> RecencyCache<K, V> {
         let mut index = 0;
         while index < self.entries.len() {
             if predicate(&self.entries[index].key) {
-                removed.push(
-                    self.entries
-                        .remove(index)
-                        .expect("indexed recency entry disappeared")
-                        .value,
-                );
+                let Some(entry) = self.entries.remove(index) else {
+                    // The loop bound guarantees this entry exists.
+                    debug_assert!(false, "indexed recency entry disappeared");
+                    warn!(index, "indexed recency entry disappeared during removal");
+                    break;
+                };
+                removed.push(entry.value);
             } else {
                 index += 1;
             }
@@ -362,17 +372,17 @@ impl ShmSnapshotPool {
 }
 
 struct ShmPixelStorage {
-    pixels: Option<Vec<u8>>,
+    // A plain Vec keeps "a live frame always owns its pixels" as a type-level
+    // invariant; only Drop moves the allocation out for recycling.
+    pixels: Vec<u8>,
     pool: Weak<ShmSnapshotPool>,
 }
 
 impl Drop for ShmPixelStorage {
     fn drop(&mut self) {
-        let Some(pixels) = self.pixels.take() else {
-            return;
-        };
+        // `recycle` itself rejects zero-capacity buffers.
         if let Some(pool) = self.pool.upgrade() {
-            pool.recycle(pixels);
+            pool.recycle(mem::take(&mut self.pixels));
         }
     }
 }
@@ -419,18 +429,12 @@ impl ShmTextureFrame {
             feedback: None,
             // Keep the snapshot's Vec allocation intact. Converting Vec<u8>
             // into Arc<[u8]> may copy the complete client frame.
-            rgba: Arc::new(ShmPixelStorage {
-                pixels: Some(rgba),
-                pool,
-            }),
+            rgba: Arc::new(ShmPixelStorage { pixels: rgba, pool }),
         })
     }
 
     pub(in crate::flutter_runtime) fn pixels(&self) -> &[u8] {
-        self.rgba
-            .pixels
-            .as_deref()
-            .expect("live SHM frame lost its pixel storage")
+        &self.rgba.pixels
     }
 
     pub(crate) fn width(&self) -> u32 {
