@@ -14,22 +14,32 @@ import '../services/power_status_service.dart';
 
 final batteryServiceProvider = Provider<BatteryService>((ref) {
   return const BatteryService();
-});
+}, isAutoDispose: true);
 
 final clockLocaleProvider = Provider<String>((ref) {
   return ShellClockInfo.localeFromEnvironment(
     ref.watch(startupEnvironmentProvider).values,
   );
-});
+}, isAutoDispose: true);
 
 /// Emits immediately and then exactly at minute boundaries. Every clock in the
 /// shell renders only `HH:mm`, so a per-second rebuild would be invisible work.
-final clockProvider = StreamProvider<DateTime>((ref) => _minuteClock());
+/// The minute timer parks when the last listener leaves and restarts with a
+/// fresh emission on resume; an async* generator would instead leave a pending
+/// suspension alive until its in-flight delay resolved.
+final clockProvider = StreamProvider<DateTime>((ref) {
+  final controller = StreamController<DateTime>();
+  Timer? timer;
 
-Stream<DateTime> _minuteClock() async* {
-  while (true) {
+  void emit() {
+    if (!controller.isClosed) {
+      controller.add(DateTime.now());
+    }
+  }
+
+  void scheduleNextMinute() {
+    timer?.cancel();
     final now = DateTime.now();
-    yield now;
     final nextMinute = DateTime(
       now.year,
       now.month,
@@ -38,11 +48,34 @@ Stream<DateTime> _minuteClock() async* {
       now.minute + 1,
     );
     final delay = nextMinute.difference(DateTime.now());
-    await Future<void>.delayed(
+    timer = Timer(
       delay.isNegative ? const Duration(milliseconds: 20) : delay,
+      () {
+        emit();
+        scheduleNextMinute();
+      },
     );
   }
-}
+
+  controller.onListen = () {
+    emit();
+    scheduleNextMinute();
+  };
+  ref.onCancel(() {
+    timer?.cancel();
+    timer = null;
+  });
+  ref.onResume(() {
+    emit();
+    scheduleNextMinute();
+  });
+  ref.onDispose(() {
+    timer?.cancel();
+    timer = null;
+    unawaited(controller.close());
+  });
+  return controller.stream;
+}, isAutoDispose: true);
 
 final batteryProvider = NotifierProvider<BatteryController, BatteryStatus>(
   BatteryController.new,
@@ -88,6 +121,7 @@ final gpuUsageProvider = Provider<List<GpuLoad>>(
 mixin _PeriodicRefresh<StateT> on Notifier<StateT> {
   int _refreshGeneration = 0;
   bool _refreshing = false;
+  Timer? _refreshTimer;
 
   void startPeriodicRefresh(
     Duration interval,
@@ -95,6 +129,10 @@ mixin _PeriodicRefresh<StateT> on Notifier<StateT> {
   ) {
     final generation = ++_refreshGeneration;
     _refreshing = false;
+    // Defensive: a previous build's timer is already dead via its onDispose,
+    // but keeping the field reachable guarantees the cancel path.
+    _refreshTimer?.cancel();
+    _refreshTimer = null;
 
     Future<void> run() async {
       if (!isRefreshActive(generation) || _refreshing) {
@@ -111,9 +149,27 @@ mixin _PeriodicRefresh<StateT> on Notifier<StateT> {
     }
 
     scheduleMicrotask(() => unawaited(run()));
-    final timer = Timer.periodic(interval, (_) => unawaited(run()));
+    _refreshTimer = Timer.periodic(interval, (_) => unawaited(run()));
+    ref.onCancel(() {
+      // The last listener left but the provider stayed alive (paused inside a
+      // TickerMode-disabled subtree, for example): park the timer until a
+      // listener returns. autoDispose providers continue on to onDispose.
+      _refreshTimer?.cancel();
+      _refreshTimer = null;
+    });
+    ref.onResume(() {
+      // Lifecycle callbacks stay registered on the element across rebuilds;
+      // a callback captured by a superseded build must not resurrect its own
+      // sampler ahead of (or instead of) the current generation's.
+      if (!isRefreshActive(generation)) {
+        return;
+      }
+      _refreshTimer ??= Timer.periodic(interval, (_) => unawaited(run()));
+      unawaited(run());
+    });
     ref.onDispose(() {
-      timer.cancel();
+      _refreshTimer?.cancel();
+      _refreshTimer = null;
       if (generation == _refreshGeneration) {
         _refreshGeneration++;
         _refreshing = false;
@@ -122,7 +178,7 @@ mixin _PeriodicRefresh<StateT> on Notifier<StateT> {
   }
 
   bool isRefreshActive(int generation) =>
-      ref.mounted && generation == _refreshGeneration;
+      ref.mounted && !ref.isPaused && generation == _refreshGeneration;
 }
 
 /// Polls the battery on a fixed interval.

@@ -78,34 +78,55 @@ final timerToolProvider = NotifierProvider<TimerToolController, TimerToolState>(
 /// Deliberately not autoDispose: a countdown is expected to outlive the panel
 /// that started it. The last watcher unsubscribes whenever the dashboard
 /// closes, and autoDispose would cancel the ticker and silently drop the
-/// elapsed time. The ticker only runs while [running], so an idle timer costs
-/// nothing.
+/// elapsed time. The ticker only runs while [running] and a listener exists —
+/// losing the last listener suspends it on a wall-clock anchor, so an idle or
+/// hidden timer costs nothing.
 class TimerToolController extends Notifier<TimerToolState>
     with NotifierLifecycle<TimerToolState> {
   Timer? _timer;
 
+  /// Wall-clock instant the ticker was suspended because the provider lost its
+  /// last listener. While set, [TimerToolState.elapsed] trails real time and
+  /// is caught up from this anchor when a listener returns, so a countdown
+  /// hidden with the dashboard still ends on schedule.
+  DateTime? _suspendedAt;
+
+  /// Injectable wall clock for the suspend/resume catch-up; tests substitute a
+  /// controllable source because FakeAsync does not fake [DateTime.now].
+  @visibleForTesting
+  DateTime Function() now = DateTime.now;
+
   @override
   TimerToolState build() {
     beginBuildGeneration();
+    _suspendedAt = null;
+    ref.onCancel(_suspendTicker);
+    // Lifecycle callbacks may not touch state; the catch-up and ticker
+    // restart run in a microtask once the callback returns.
+    ref.onResume(() => scheduleMicrotask(_resumeTicker));
     ref.onDispose(() {
       _timer?.cancel();
       _timer = null;
+      _suspendedAt = null;
     });
     return const TimerToolState();
   }
+
+  @visibleForTesting
+  bool get debugTickerActive => _timer != null;
 
   void start() {
     if (state.running) {
       return;
     }
-    final generation = currentBuildGeneration;
     state = state.copyWith(running: true);
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (!isBuildGenerationActive(generation)) {
-        return;
-      }
-      _tick();
-    });
+    if (ref.isPaused) {
+      // Started while no listener can observe the ticker: count the span on
+      // the next resume instead of running a timer nobody sees.
+      _suspendedAt = now();
+      return;
+    }
+    _startTicker(currentBuildGeneration);
   }
 
   void pause() {
@@ -114,18 +135,21 @@ class TimerToolController extends Notifier<TimerToolState>
     }
     _timer?.cancel();
     _timer = null;
+    _materializeSuspendedElapsed();
     state = state.copyWith(running: false);
   }
 
   void reset() {
     _timer?.cancel();
     _timer = null;
+    _suspendedAt = null;
     state = TimerToolState(mode: state.mode, target: state.target);
   }
 
   void switchMode(TimerMode mode) {
     _timer?.cancel();
     _timer = null;
+    _suspendedAt = null;
     final target = switch (mode) {
       TimerMode.pomodoroFocus => TimerToolState._focusDuration,
       TimerMode.pomodoroBreak => TimerToolState._breakDuration,
@@ -137,6 +161,12 @@ class TimerToolController extends Notifier<TimerToolState>
   void lap() {
     if (state.mode != TimerMode.stopwatch || !state.running) {
       return;
+    }
+    _materializeSuspendedElapsed();
+    // Materializing cleared the suspension anchor; re-anchor so the span
+    // between this lap and the next resume still counts while unlistened.
+    if (ref.isPaused) {
+      _suspendedAt = now();
     }
     // Record the split since the previous lap, not the cumulative elapsed:
     // the lap list feeds the per-row display directly. The anchor derives
@@ -155,18 +185,67 @@ class TimerToolController extends Notifier<TimerToolState>
     state = state.copyWith(laps: List<Duration>.unmodifiable(next));
   }
 
+  void _startTicker(int generation) {
+    _timer?.cancel();
+    _timer = null;
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!isBuildGenerationActive(generation)) {
+        return;
+      }
+      _tick();
+    });
+  }
+
+  /// Parks the 1 Hz ticker while no listener can observe it. The provider is
+  /// deliberately not autoDispose — a countdown must outlive the panel that
+  /// started it — so elapsed time is anchored to the wall clock and caught up
+  /// by [_resumeTicker] instead of being dropped. The anchor is kept (not
+  /// re-stamped) when already suspended, so a transient listener that resumes
+  /// and immediately cancels again does not truncate the hidden span.
+  void _suspendTicker() {
+    _timer?.cancel();
+    _timer = null;
+    _suspendedAt ??= now();
+  }
+
+  void _resumeTicker() {
+    _materializeSuspendedElapsed();
+    if (!ref.mounted || !state.running || _timer != null) {
+      return;
+    }
+    if (ref.isPaused) {
+      // The listener that triggered the resume is already gone (a bare read
+      // subscribes and closes synchronously): stay suspended on a fresh anchor.
+      _suspendedAt = now();
+      return;
+    }
+    _startTicker(currentBuildGeneration);
+  }
+
+  /// Folds the time spent suspended into [TimerToolState.elapsed]; a pomodoro
+  /// that crossed its target while hidden completes instead of overrunning.
+  void _materializeSuspendedElapsed() {
+    final suspendedAt = _suspendedAt;
+    _suspendedAt = null;
+    if (suspendedAt == null || !state.running) {
+      return;
+    }
+    _advance(state.elapsed + now().difference(suspendedAt));
+  }
+
   void _tick() {
+    _advance(state.elapsed + const Duration(seconds: 1));
+  }
+
+  void _advance(Duration next) {
     if (!state.running) {
       return;
     }
     switch (state.mode) {
       case TimerMode.stopwatch:
-        state = state.copyWith(
-          elapsed: state.elapsed + const Duration(seconds: 1),
-        );
+        state = state.copyWith(elapsed: next);
       case TimerMode.pomodoroFocus:
       case TimerMode.pomodoroBreak:
-        final next = state.elapsed + const Duration(seconds: 1);
         if (next >= state.target) {
           _timer?.cancel();
           _timer = null;

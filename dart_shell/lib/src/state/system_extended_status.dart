@@ -40,6 +40,7 @@ class SystemExtendedStatusController extends Notifier<SystemExtendedStatus>
   static const int _storageRefreshPeriod = 30;
 
   Timer? _timer;
+  bool _refreshing = false;
   int _samplingGeneration = 0;
   int _sampleCount = 0;
   int _nextStorageSample = 0;
@@ -60,7 +61,29 @@ class SystemExtendedStatusController extends Notifier<SystemExtendedStatus>
     final service = ref.watch(systemHardwareServiceProvider);
     final generation = currentBuildGeneration;
     scheduleMicrotask(() => unawaited(_refresh(service, generation)));
+    // Defensive: a previous build's timer is already dead via its onDispose,
+    // but cancel explicitly before overwriting the field.
+    _timer?.cancel();
     _timer = Timer.periodic(_interval, (_) {
+      unawaited(_refresh(service, generation));
+    });
+    ref.onCancel(() {
+      // The last listener left but the provider stayed alive (paused inside a
+      // TickerMode-disabled subtree, for example): park the timer until a
+      // listener returns. autoDispose providers continue on to onDispose.
+      _timer?.cancel();
+      _timer = null;
+    });
+    ref.onResume(() {
+      // Lifecycle callbacks stay registered on the element across rebuilds;
+      // a callback captured by a superseded build must not resurrect its own
+      // sampler ahead of (or instead of) the current generation's.
+      if (!isBuildGenerationActive(generation)) {
+        return;
+      }
+      _timer ??= Timer.periodic(_interval, (_) {
+        unawaited(_refresh(service, generation));
+      });
       unawaited(_refresh(service, generation));
     });
     ref.onDispose(() {
@@ -73,62 +96,77 @@ class SystemExtendedStatusController extends Notifier<SystemExtendedStatus>
 
   Future<void> _refresh(SystemHardwareService service, int generation) async {
     // Serialise refreshes: rate math depends on strictly ordered counter
-    // pairs, so overlapping samples would corrupt the deltas.
-    final sample = ++_samplingGeneration;
-    final storageDue = _sampleCount >= _nextStorageSample;
-    final results = await Future.wait<Object?>(<Future<Object?>>[
-      service.readMemory(),
-      service.readNetworkCounters(),
-      if (storageDue) service.readRootStorage(),
-    ]);
-    if (!isBuildGenerationActive(generation) || sample != _samplingGeneration) {
+    // pairs, so overlapping samples would corrupt the deltas — and each one
+    // really spawns the reads (including a `df` subprocess when storage is
+    // due), so a call arriving while another is in flight is dropped here
+    // rather than after the await. Skipped calls never touch the sampling
+    // counters, so a catch-up after resume is not swallowed by a stale
+    // in-flight refresh.
+    if (_refreshing || !isBuildGenerationActive(generation) || ref.isPaused) {
       return;
     }
-    _sampleCount++;
-    if (storageDue) {
-      // Advance the schedule even when the reading fails: a host without
-      // `df` would otherwise spawn the subprocess again on every tick.
-      _nextStorageSample = _sampleCount + _storageRefreshPeriod;
-    }
-    final memory = results[0] as MemoryUsage?;
-    final counters = results[1] as NetworkCounters?;
-    final storage = storageDue ? results[2] as StorageUsage? : null;
-
-    double? download;
-    double? upload;
-    final previous = _lastCounters;
-    final previousTime = _lastCounterTime;
-    final now = DateTime.now();
-    if (previous != null &&
-        previousTime != null &&
-        counters != null &&
-        _sampleCount > 1) {
-      final elapsed = now.difference(previousTime).inMilliseconds / 1000.0;
-      if (elapsed > 0.5) {
-        download = ((counters.rxBytes - previous.rxBytes) / elapsed)
-            .clamp(0.0, double.infinity)
-            .toDouble();
-        upload = ((counters.txBytes - previous.txBytes) / elapsed)
-            .clamp(0.0, double.infinity)
-            .toDouble();
+    _refreshing = true;
+    try {
+      final sample = ++_samplingGeneration;
+      final storageDue = _sampleCount >= _nextStorageSample;
+      final results = await Future.wait<Object?>(<Future<Object?>>[
+        service.readMemory(),
+        service.readNetworkCounters(),
+        if (storageDue) service.readRootStorage(),
+      ]);
+      if (ref.isPaused ||
+          !isBuildGenerationActive(generation) ||
+          sample != _samplingGeneration) {
+        return;
       }
-    }
-    if (counters != null) {
-      _lastCounters = counters;
-      _lastCounterTime = now;
-    }
+      _sampleCount++;
+      if (storageDue) {
+        // Advance the schedule even when the reading fails: a host without
+        // `df` would otherwise spawn the subprocess again on every tick.
+        _nextStorageSample = _sampleCount + _storageRefreshPeriod;
+      }
+      final memory = results[0] as MemoryUsage?;
+      final counters = results[1] as NetworkCounters?;
+      final storage = storageDue ? results[2] as StorageUsage? : null;
 
-    // Keep the last good storage reading on ticks that skipped or failed it.
-    final effectiveStorage = storage ?? state.storage;
-    if (memory == null && counters == null && effectiveStorage == null) {
-      return;
+      double? download;
+      double? upload;
+      final previous = _lastCounters;
+      final previousTime = _lastCounterTime;
+      final now = DateTime.now();
+      if (previous != null &&
+          previousTime != null &&
+          counters != null &&
+          _sampleCount > 1) {
+        final elapsed = now.difference(previousTime).inMilliseconds / 1000.0;
+        if (elapsed > 0.5) {
+          download = ((counters.rxBytes - previous.rxBytes) / elapsed)
+              .clamp(0.0, double.infinity)
+              .toDouble();
+          upload = ((counters.txBytes - previous.txBytes) / elapsed)
+              .clamp(0.0, double.infinity)
+              .toDouble();
+        }
+      }
+      if (counters != null) {
+        _lastCounters = counters;
+        _lastCounterTime = now;
+      }
+
+      // Keep the last good storage reading on ticks that skipped or failed it.
+      final effectiveStorage = storage ?? state.storage;
+      if (memory == null && counters == null && effectiveStorage == null) {
+        return;
+      }
+      state = SystemExtendedStatus(
+        memory: memory ?? state.memory,
+        downloadBytesPerSecond: download,
+        uploadBytesPerSecond: upload,
+        storage: effectiveStorage,
+      );
+    } finally {
+      _refreshing = false;
     }
-    state = SystemExtendedStatus(
-      memory: memory ?? state.memory,
-      downloadBytesPerSecond: download,
-      uploadBytesPerSecond: upload,
-      storage: effectiveStorage,
-    );
   }
 }
 
