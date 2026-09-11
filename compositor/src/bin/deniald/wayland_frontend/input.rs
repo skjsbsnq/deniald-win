@@ -283,7 +283,10 @@ fn inject_shell_key_transition(
     let keycode = Keycode::new(stroke.evdev_keycode + XKB_KEYCODE_OFFSET);
     let seat_pressed = keyboard.pressed_keys().contains(&keycode);
     let accepted = {
-        let frontend = state.wayland.as_mut().expect("missing Wayland frontend");
+        let Some(frontend) = state.wayland.as_mut() else {
+            warn!("missing Wayland frontend; dropping shell key transition");
+            return false;
+        };
         route_shell_key_transition(
             &mut frontend.shell_keyboard_keys,
             keycode.raw(),
@@ -305,11 +308,15 @@ pub(crate) fn dispatch_shell_keyboard(
     command: &super::super::wire::KeyboardCommand,
 ) -> bool {
     let (keyboard, time) = {
-        let frontend = state.wayland.as_ref().expect("missing Wayland frontend");
-        (
-            frontend.seat.get_keyboard().expect("seat has no keyboard"),
-            frontend.start_time.elapsed().as_millis() as u32,
-        )
+        let Some(frontend) = state.wayland.as_ref() else {
+            warn!("missing Wayland frontend; dropping shell keyboard command");
+            return false;
+        };
+        let Some(keyboard) = frontend.seat.get_keyboard() else {
+            warn!("seat has no keyboard; dropping shell keyboard command");
+            return false;
+        };
+        (keyboard, frontend.start_time.elapsed().as_millis() as u32)
     };
     // Do not gate the shared router on Wayland seat focus. Secure lock
     // deliberately clears client focus, and process_keyboard_transition()
@@ -1371,7 +1378,10 @@ pub(in super::super) fn install_keyboard_settings(
         i32::try_from(settings.repeat_delay_ms)?,
     );
     {
-        let frontend = state.wayland.as_mut().expect("missing Wayland frontend");
+        let Some(frontend) = state.wayland.as_mut() else {
+            warn!("missing Wayland frontend; keyboard layout state not recorded");
+            return Ok(layout_names);
+        };
         #[cfg(feature = "flutter")]
         if let Some(compose) = frontend.flutter_compose.as_mut() {
             compose.reset();
@@ -1658,11 +1668,11 @@ fn start_flutter_repeat(state: &mut RuntimeState, keycode: u32) {
         TimeoutAction::ToDuration(interval)
     }) {
         Ok(token) => {
-            state
-                .wayland
-                .as_mut()
-                .expect("missing Wayland frontend")
-                .flutter_repeat_token = Some(token);
+            if let Some(frontend) = state.wayland.as_mut() {
+                frontend.flutter_repeat_token = Some(token);
+            } else {
+                warn!("missing Wayland frontend; Flutter repeat token not stored");
+            }
         }
         Err(error) => {
             warn!(%error, "could not schedule Flutter keyboard repeat");
@@ -1698,7 +1708,10 @@ fn dispatch_flutter_repeat(state: &mut RuntimeState, keycode: u32) -> bool {
     });
     let modifiers = keyboard.modifier_state();
     let unicode = {
-        let frontend = state.wayland.as_mut().expect("missing Wayland frontend");
+        let Some(frontend) = state.wayland.as_mut() else {
+            warn!("missing Wayland frontend; dropping Flutter repeat");
+            return false;
+        };
         flutter_unicode_for_keysym(frontend.flutter_compose.as_mut(), keysym)
     };
     state.flutter_input.handle_keyboard_with_unicode(
@@ -1727,7 +1740,10 @@ pub(super) fn dispatch_input_method_key_to_flutter(
     virtual_modifiers: Option<smithay::input::keyboard::ModifiersState>,
 ) -> bool {
     let disposition = {
-        let frontend = state.wayland.as_mut().expect("missing Wayland frontend");
+        let Some(frontend) = state.wayland.as_mut() else {
+            warn!("missing Wayland frontend; dropping input-method key");
+            return false;
+        };
         route_input_method_key_transition(
             &mut frontend.flutter_input_method_keys,
             &mut frontend.retired_input_method_keys,
@@ -1750,7 +1766,10 @@ pub(super) fn dispatch_input_method_key_to_flutter(
     });
     let modifiers = virtual_modifiers.unwrap_or_else(|| keyboard.modifier_state());
     let unicode = if matches!(key_state, KeyState::Pressed) {
-        let frontend = state.wayland.as_mut().expect("missing Wayland frontend");
+        let Some(frontend) = state.wayland.as_mut() else {
+            warn!("missing Wayland frontend; dropping input-method key");
+            return false;
+        };
         flutter_unicode_for_keysym(frontend.flutter_compose.as_mut(), keysym)
     } else {
         keysym.key_char().map(u32::from).unwrap_or(0)
@@ -2162,7 +2181,10 @@ fn release_pointer_to_shell(state: &mut RuntimeState) {
     });
 
     let (mut pressed_buttons, time) = {
-        let frontend = state.wayland.as_mut().expect("missing Wayland frontend");
+        let Some(frontend) = state.wayland.as_mut() else {
+            warn!("missing Wayland frontend; pointer release state not updated");
+            return;
+        };
         if let Some(window_id) = released_window_id {
             frontend.pointer_constraint_escape.release_window(window_id);
         }
@@ -2201,12 +2223,10 @@ fn release_pointer_to_shell(state: &mut RuntimeState) {
         pointer.unset_grab(state, SERIAL_COUNTER.next_serial(), time);
     }
     if had_grab
-        || !state
+        || state
             .wayland
             .as_ref()
-            .expect("missing Wayland frontend")
-            .retired_pointer_buttons
-            .is_empty()
+            .is_some_and(|frontend| !frontend.retired_pointer_buttons.is_empty())
     {
         pointer.frame(state);
     }
@@ -2294,16 +2314,20 @@ fn process_flutter_keyboard_transition(
 ) -> bool {
     let secure_locked = state.secure_session_locked();
     let raw_keycode = keycode.raw();
-    let keyboard = state
-        .wayland
-        .as_ref()
-        .expect("missing Wayland frontend")
-        .seat
-        .get_keyboard()
-        .expect("seat has no keyboard");
+    let Some(frontend) = state.wayland.as_ref() else {
+        warn!("missing Wayland frontend; dropping Flutter keyboard transition");
+        return false;
+    };
+    let Some(keyboard) = frontend.seat.get_keyboard() else {
+        warn!("seat has no keyboard; dropping Flutter keyboard transition");
+        return false;
+    };
     let keyboard_grabbed = keyboard.is_grabbed();
     let disposition = {
-        let frontend = state.wayland.as_mut().expect("missing Wayland frontend");
+        let Some(frontend) = state.wayland.as_mut() else {
+            warn!("missing Wayland frontend; dropping Flutter keyboard transition");
+            return false;
+        };
         let capture_new_press = matches!(key_state, KeyState::Pressed)
             && (secure_locked
                 || (frontend.text_input.shell_captures_keyboard() && !keyboard_grabbed));
@@ -2326,7 +2350,10 @@ fn process_flutter_keyboard_transition(
                 let repeatable =
                     matches!(key_state, KeyState::Pressed) && flutter_key_repeats(&key);
                 let unicode = if matches!(key_state, KeyState::Pressed) {
-                    let frontend = state.wayland.as_mut().expect("missing Wayland frontend");
+                    let Some(frontend) = state.wayland.as_mut() else {
+                        warn!("missing Wayland frontend; dropping Flutter key dispatch");
+                        return FilterResult::Intercept(());
+                    };
                     flutter_unicode_for_keysym(
                         frontend.flutter_compose.as_mut(),
                         key.modified_sym(),

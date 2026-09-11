@@ -138,7 +138,10 @@ pub(super) fn synchronize_settings(
                     result
                 };
                 let (revision, document) = {
-                    let frontend = events.wayland.as_mut().expect("missing Wayland frontend");
+                    let frontend = events
+                        .wayland
+                        .as_mut()
+                        .ok_or("settings request has no Wayland frontend")?;
                     if result.is_ok() {
                         // The native-owned values are unchanged, but their
                         // revision token advanced with the shared document.
@@ -192,7 +195,7 @@ pub(super) fn synchronize_settings(
                         let previous = events
                             .wayland
                             .as_ref()
-                            .expect("missing Wayland frontend")
+                            .ok_or("keyboard update has no Wayland frontend")?
                             .settings
                             .keyboard()
                             .clone();
@@ -202,7 +205,7 @@ pub(super) fn synchronize_settings(
                                 let commit = events
                                     .wayland
                                     .as_mut()
-                                    .expect("missing Wayland frontend")
+                                    .ok_or("keyboard update has no Wayland frontend")?
                                     .settings
                                     .commit(prepared);
                                 if let Err(error) = commit {
@@ -218,13 +221,14 @@ pub(super) fn synchronize_settings(
                                     }
                                     Err(error)
                                 } else {
+                                    let revision = events
+                                        .wayland
+                                        .as_ref()
+                                        .ok_or("keyboard update has no Wayland frontend")?
+                                        .settings
+                                        .revision();
                                     info!(
-                                        revision = events
-                                            .wayland
-                                            .as_ref()
-                                            .expect("missing Wayland frontend")
-                                            .settings
-                                            .revision(),
+                                        revision,
                                         layouts = next.layouts.len(),
                                         repeat_rate_hz = next.repeat_rate_hz,
                                         repeat_delay_ms = next.repeat_delay_ms,
@@ -280,7 +284,7 @@ pub(super) fn synchronize_settings(
                         let previous = events
                             .wayland
                             .as_ref()
-                            .expect("missing Wayland frontend")
+                            .ok_or("touchpad update has no Wayland frontend")?
                             .settings
                             .touchpad()
                             .clone();
@@ -290,7 +294,7 @@ pub(super) fn synchronize_settings(
                                 let commit = events
                                     .wayland
                                     .as_mut()
-                                    .expect("missing Wayland frontend")
+                                    .ok_or("touchpad update has no Wayland frontend")?
                                     .settings
                                     .commit(prepared);
                                 if let Err(error) = commit {
@@ -306,13 +310,14 @@ pub(super) fn synchronize_settings(
                                     }
                                     Err(error)
                                 } else {
+                                    let revision = events
+                                        .wayland
+                                        .as_ref()
+                                        .ok_or("touchpad update has no Wayland frontend")?
+                                        .settings
+                                        .revision();
                                     info!(
-                                        revision = events
-                                            .wayland
-                                            .as_ref()
-                                            .expect("missing Wayland frontend")
-                                            .settings
-                                            .revision(),
+                                        revision,
                                         tap_to_click = next.tap_to_click_enabled,
                                         natural_scroll = next.natural_scroll_enabled,
                                         scroll_speed_factor = next.scroll_speed_factor,
@@ -374,7 +379,7 @@ pub(super) fn synchronize_settings(
                         let previous = events
                             .wayland
                             .as_ref()
-                            .expect("missing Wayland frontend")
+                            .ok_or("mouse update has no Wayland frontend")?
                             .settings
                             .mouse()
                             .clone();
@@ -384,7 +389,7 @@ pub(super) fn synchronize_settings(
                                 let commit = events
                                     .wayland
                                     .as_mut()
-                                    .expect("missing Wayland frontend")
+                                    .ok_or("mouse update has no Wayland frontend")?
                                     .settings
                                     .commit(prepared);
                                 if let Err(error) = commit {
@@ -398,13 +403,14 @@ pub(super) fn synchronize_settings(
                                     }
                                     Err(error)
                                 } else {
+                                    let revision = events
+                                        .wayland
+                                        .as_ref()
+                                        .ok_or("mouse update has no Wayland frontend")?
+                                        .settings
+                                        .revision();
                                     info!(
-                                        revision = events
-                                            .wayland
-                                            .as_ref()
-                                            .expect("missing Wayland frontend")
-                                            .settings
-                                            .revision(),
+                                        revision,
                                         speed = next.speed,
                                         "applied persistent mouse settings"
                                     );
@@ -843,7 +849,7 @@ fn apply_control_keyboard(
     let previous = events
         .wayland
         .as_ref()
-        .expect("missing Wayland frontend")
+        .ok_or_else(|| control_unavailable("keyboard update"))?
         .settings
         .keyboard()
         .clone();
@@ -852,7 +858,7 @@ fn apply_control_keyboard(
     if let Err(error) = events
         .wayland
         .as_mut()
-        .expect("missing Wayland frontend")
+        .ok_or_else(|| control_unavailable("keyboard update"))?
         .settings
         .commit(prepared)
     {
@@ -879,7 +885,7 @@ fn apply_control_touchpad(
     let previous = events
         .wayland
         .as_ref()
-        .expect("missing Wayland frontend")
+        .ok_or_else(|| control_unavailable("touchpad update"))?
         .settings
         .touchpad()
         .clone();
@@ -888,7 +894,7 @@ fn apply_control_touchpad(
     if let Err(error) = events
         .wayland
         .as_mut()
-        .expect("missing Wayland frontend")
+        .ok_or_else(|| control_unavailable("touchpad update"))?
         .settings
         .commit(prepared)
     {
@@ -917,7 +923,7 @@ fn apply_control_mouse(
     let previous = events
         .wayland
         .as_ref()
-        .expect("missing Wayland frontend")
+        .ok_or_else(|| control_unavailable("mouse update"))?
         .settings
         .mouse()
         .clone();
@@ -926,7 +932,7 @@ fn apply_control_mouse(
     if let Err(error) = events
         .wayland
         .as_mut()
-        .expect("missing Wayland frontend")
+        .ok_or_else(|| control_unavailable("mouse update"))?
         .settings
         .commit(prepared)
     {
@@ -1063,15 +1069,13 @@ pub(super) fn apply_shortcut_update(
             if result.is_err() {
                 events.native_escape_shortcut = previous_engine;
             } else {
-                info!(
-                    revision = events
-                        .wayland
-                        .as_ref()
-                        .expect("missing Wayland frontend")
-                        .shortcuts
-                        .revision(),
-                    "applied persistent shortcut configuration"
-                );
+                let revision = events
+                    .wayland
+                    .as_ref()
+                    .ok_or("shortcut commit has no Wayland frontend")?
+                    .shortcuts
+                    .revision();
+                info!(revision, "applied persistent shortcut configuration");
             }
             result
         }

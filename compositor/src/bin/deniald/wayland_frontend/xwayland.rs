@@ -197,11 +197,11 @@ fn reassert_exact_x11_geometry(state: &mut RuntimeState, surface: &X11Surface) -
     {
         warn!(%error, window = surface.window_id(), "could not clear exact X11 maximized state");
     }
-    state
-        .wayland
-        .as_mut()
-        .expect("missing Wayland frontend")
-        .set_window_geometry_target(&window, exact);
+    let Some(frontend) = state.wayland.as_mut() else {
+        warn!("missing Wayland frontend; cannot reassert X11 geometry");
+        return false;
+    };
+    frontend.set_window_geometry_target(&window, exact);
     state.scene_sync.mark_dirty();
     true
 }
@@ -303,7 +303,10 @@ fn map_x11_window(state: &mut RuntimeState, surface: X11Surface, override_redire
     let geometry = surface.last_configure();
     let window = Window::new_x11_window(surface.clone());
     let (configured, restored_record) = {
-        let frontend = state.wayland.as_mut().expect("missing Wayland frontend");
+        let Some(frontend) = state.wayland.as_mut() else {
+            warn!("missing Wayland frontend; skipping X11 window map");
+            return;
+        };
         let (configured, restored_record) = if override_redirect {
             (geometry, None)
         } else {
@@ -405,16 +408,10 @@ fn map_x11_window(state: &mut RuntimeState, surface: X11Surface, override_redire
         // first buffer may still have virtual-desktop dimensions until it
         // handles ConfigureNotify; exposing that stale size to Flutter makes
         // the window span both monitors for at least one scene generation.
-        state
-            .wayland
-            .as_mut()
-            .expect("missing Wayland frontend")
-            .set_window_geometry_target(&window, configured);
-        state
-            .wayland
-            .as_mut()
-            .expect("missing Wayland frontend")
-            .reconcile_window_layout(&window);
+        if let Some(frontend) = state.wayland.as_mut() {
+            frontend.set_window_geometry_target(&window, configured);
+            frontend.reconcile_window_layout(&window);
+        }
         #[cfg(feature = "flutter")]
         if let Some((_, restored)) = restored_record {
             queue_restored_window_state(state, &window, restored, configured);
@@ -422,13 +419,14 @@ fn map_x11_window(state: &mut RuntimeState, surface: X11Surface, override_redire
     }
 
     if !override_redirect {
-        let keyboard = state
+        let Some(keyboard) = state
             .wayland
             .as_ref()
-            .expect("missing Wayland frontend")
-            .seat
-            .get_keyboard()
-            .expect("seat has no keyboard");
+            .and_then(|frontend| frontend.seat.get_keyboard())
+        else {
+            warn!("missing Wayland frontend or seat keyboard; skipping X11 focus");
+            return;
+        };
         keyboard.set_focus(
             state,
             Some(KeyboardFocusTarget::X11(surface.clone())),
@@ -459,19 +457,23 @@ fn unmap_x11_window(state: &mut RuntimeState, surface: &X11Surface) {
     let Some(window) = window_for_x11(state, surface) else {
         return;
     };
-    let keyboard = state
+    let Some(keyboard) = state
         .wayland
         .as_ref()
-        .expect("missing Wayland frontend")
-        .seat
-        .get_keyboard()
-        .expect("seat has no keyboard");
+        .and_then(|frontend| frontend.seat.get_keyboard())
+    else {
+        warn!("missing Wayland frontend or seat keyboard; skipping X11 unmap");
+        return;
+    };
     let was_focused = matches!(
         keyboard.current_focus(),
         Some(KeyboardFocusTarget::X11(ref focused)) if focused == surface
     );
     let next_focus = {
-        let frontend = state.wayland.as_mut().expect("missing Wayland frontend");
+        let Some(frontend) = state.wayland.as_mut() else {
+            warn!("missing Wayland frontend; skipping X11 unmap");
+            return;
+        };
         #[cfg(feature = "flutter")]
         frontend.invalidate_window_input_routes(&window);
         let was_layout_managed = frontend.window_is_layout_managed(&window);
@@ -540,7 +542,10 @@ pub(super) fn configure_x11_for_output(
         return;
     };
     let target = if enabled {
-        let frontend = state.wayland.as_ref().expect("missing Wayland frontend");
+        let Some(frontend) = state.wayland.as_ref() else {
+            warn!("missing Wayland frontend; skipping X11 configure");
+            return;
+        };
         let geometry = frontend.window_geometry_target(&window);
         // `Space` also contains `denial-atlas`, the rendering-only Flutter
         // canvas. X11 clients must only ever receive a physical monitor's
@@ -561,8 +566,7 @@ pub(super) fn configure_x11_for_output(
         root_surface_for_x11(surface).and_then(|root| {
             state
                 .wayland
-                .as_mut()
-                .expect("missing Wayland frontend")
+                .as_mut()?
                 .restore_window_geometries
                 .remove(&root.id())
         })
@@ -572,12 +576,18 @@ pub(super) fn configure_x11_for_output(
     };
 
     let restore_to_publish = if enabled && let Some(root) = root_surface_for_x11(surface) {
-        let current = state
+        let Some(current) = state
             .wayland
             .as_ref()
-            .expect("missing Wayland frontend")
-            .window_geometry_target(&window);
-        let frontend = state.wayland.as_mut().expect("missing Wayland frontend");
+            .map(|frontend| frontend.window_geometry_target(&window))
+        else {
+            warn!("missing Wayland frontend; skipping X11 configure");
+            return;
+        };
+        let Some(frontend) = state.wayland.as_mut() else {
+            warn!("missing Wayland frontend; skipping X11 configure");
+            return;
+        };
         match frontend.restore_window_geometries.entry(root.id()) {
             std::collections::hash_map::Entry::Vacant(entry) => {
                 entry.insert(current);
@@ -588,11 +598,11 @@ pub(super) fn configure_x11_for_output(
     } else {
         None
     };
-    state
-        .wayland
-        .as_mut()
-        .expect("missing Wayland frontend")
-        .set_window_geometry_target(&window, target);
+    let Some(frontend) = state.wayland.as_mut() else {
+        warn!("missing Wayland frontend; skipping X11 configure");
+        return;
+    };
+    frontend.set_window_geometry_target(&window, target);
     #[cfg(feature = "flutter")]
     if let Some(restore) = restore_to_publish {
         queue_window_placement_for_monitor(
@@ -606,11 +616,9 @@ pub(super) fn configure_x11_for_output(
     }
     #[cfg(not(feature = "flutter"))]
     let _ = restore_to_publish;
-    state
-        .wayland
-        .as_mut()
-        .expect("missing Wayland frontend")
-        .remember_window_placement(&window);
+    if let Some(frontend) = state.wayland.as_mut() {
+        frontend.remember_window_placement(&window);
+    }
     state.scene_sync.mark_dirty();
 }
 
@@ -624,7 +632,10 @@ impl XWaylandShellHandler for RuntimeState {
     }
 
     fn surface_associated(&mut self, _xwm: XwmId, wl_surface: WlSurface, surface: X11Surface) {
-        let frontend = self.wayland.as_mut().expect("missing Wayland frontend");
+        let Some(frontend) = self.wayland.as_mut() else {
+            warn!("missing Wayland frontend; skipping X11 surface association");
+            return;
+        };
         let stable_id = frontend.register_surface(&wl_surface);
         let mapped_window = {
             frontend
@@ -704,11 +715,10 @@ impl XwmHandler for RuntimeState {
 
     fn destroyed_window(&mut self, _xwm: XwmId, window: X11Surface) {
         unmap_x11_window(self, &window);
-        if let Some(root) = root_surface_for_x11(&window) {
-            self.wayland
-                .as_mut()
-                .expect("missing Wayland frontend")
-                .remove_surface_state(&root, false);
+        if let Some(root) = root_surface_for_x11(&window)
+            && let Some(frontend) = self.wayland.as_mut()
+        {
+            frontend.remove_surface_state(&root, false);
         }
     }
 
@@ -727,32 +737,29 @@ impl XwmHandler for RuntimeState {
         let shell_geometry_locked = element.as_ref().is_some_and(|element| {
             self.wayland
                 .as_ref()
-                .expect("missing Wayland frontend")
-                .window_geometry_locked(element)
+                .is_some_and(|frontend| frontend.window_geometry_locked(element))
         });
         #[cfg(not(feature = "flutter"))]
         let shell_geometry_locked = false;
         let mut geometry = element.as_ref().map_or_else(
             || window.last_configure(),
             |element| {
-                self.wayland
-                    .as_ref()
-                    .expect("missing Wayland frontend")
-                    .window_geometry_target(element)
+                self.wayland.as_ref().map_or_else(
+                    || window.last_configure(),
+                    |frontend| frontend.window_geometry_target(element),
+                )
             },
         );
         let layout_managed = element.as_ref().is_some_and(|element| {
             self.wayland
                 .as_ref()
-                .expect("missing Wayland frontend")
-                .window_is_layout_managed(element)
+                .is_some_and(|frontend| frontend.window_is_layout_managed(element))
         });
         if shell_geometry_locked || layout_managed {
-            if let Some(element) = element {
-                self.wayland
-                    .as_mut()
-                    .expect("missing Wayland frontend")
-                    .set_window_geometry_target(&element, geometry);
+            if let Some(element) = element
+                && let Some(frontend) = self.wayland.as_mut()
+            {
+                frontend.set_window_geometry_target(&element, geometry);
             }
             self.scene_sync.mark_dirty();
             return;
@@ -765,7 +772,10 @@ impl XwmHandler for RuntimeState {
         }
         if let Some(element) = element {
             let output_geometry = {
-                let frontend = self.wayland.as_ref().expect("missing Wayland frontend");
+                let Some(frontend) = self.wayland.as_ref() else {
+                    warn!("missing Wayland frontend; dropping X11 configure request");
+                    return;
+                };
                 x11_monitor_geometry(
                     frontend.window_geometry_target(&element),
                     frontend.outputs.iter().map(|entry| entry.logical_geometry),
@@ -778,10 +788,9 @@ impl XwmHandler for RuntimeState {
                     geometry = constrain_x11_size_to_output(geometry, output_geometry);
                 }
             }
-            self.wayland
-                .as_mut()
-                .expect("missing Wayland frontend")
-                .set_window_geometry_target(&element, geometry);
+            if let Some(frontend) = self.wayland.as_mut() {
+                frontend.set_window_geometry_target(&element, geometry);
+            }
         } else if let Err(error) = window.configure(geometry) {
             warn!(%error, window = window.window_id(), "could not grant unmapped X11 configure request");
         }
@@ -798,7 +807,10 @@ impl XwmHandler for RuntimeState {
         let Some(element) = window_for_x11(self, &window) else {
             return;
         };
-        let frontend = self.wayland.as_mut().expect("missing Wayland frontend");
+        let Some(frontend) = self.wayland.as_mut() else {
+            warn!("missing Wayland frontend; dropping X11 configure notify");
+            return;
+        };
         if window.is_override_redirect() {
             // Override-redirect geometry belongs to the client. Menus, combo
             // boxes and other popup surfaces must follow it exactly.
@@ -825,11 +837,9 @@ impl XwmHandler for RuntimeState {
                 | WmWindowProperty::TransientFor
                 | WmWindowProperty::WindowType
         ) && let Some(element) = window_for_x11(self, &window)
+            && let Some(frontend) = self.wayland.as_mut()
         {
-            self.wayland
-                .as_mut()
-                .expect("missing Wayland frontend")
-                .reconcile_window_layout(&element);
+            frontend.reconcile_window_layout(&element);
         }
         self.scene_sync.mark_dirty();
     }
@@ -842,13 +852,11 @@ impl XwmHandler for RuntimeState {
         if window_for_x11(self, &window).is_some_and(|element| {
             self.wayland
                 .as_ref()
-                .expect("missing Wayland frontend")
-                .window_is_layout_managed(&element)
+                .is_some_and(|frontend| frontend.window_is_layout_managed(&element))
         }) {
-            self.wayland
-                .as_mut()
-                .expect("missing Wayland frontend")
-                .arrange_layout_windows();
+            if let Some(frontend) = self.wayland.as_mut() {
+                frontend.arrange_layout_windows();
+            }
             self.scene_sync.mark_dirty();
             return;
         }
@@ -899,10 +907,9 @@ impl XwmHandler for RuntimeState {
             return;
         }
         configure_x11_for_output(self, &window, false, false);
-        self.wayland
-            .as_mut()
-            .expect("missing Wayland frontend")
-            .arrange_layout_windows();
+        if let Some(frontend) = self.wayland.as_mut() {
+            frontend.arrange_layout_windows();
+        }
         #[cfg(feature = "flutter")]
         if !shell_geometry_locked {
             queue_x11_action(self, &window, WindowAction::Restore);
@@ -961,10 +968,9 @@ impl XwmHandler for RuntimeState {
             return;
         }
         configure_x11_for_output(self, &window, false, false);
-        self.wayland
-            .as_mut()
-            .expect("missing Wayland frontend")
-            .arrange_layout_windows();
+        if let Some(frontend) = self.wayland.as_mut() {
+            frontend.arrange_layout_windows();
+        }
         #[cfg(feature = "flutter")]
         if !shell_geometry_locked {
             queue_x11_action(self, &window, WindowAction::ToggleFullscreen);
@@ -975,18 +981,16 @@ impl XwmHandler for RuntimeState {
         #[cfg(feature = "flutter")]
         let window = window_for_x11(self, &_window);
         #[cfg(feature = "flutter")]
-        if let Some(root) = root_surface_for_x11(&_window) {
-            self.wayland
-                .as_mut()
-                .expect("missing Wayland frontend")
-                .set_surface_minimized(root.id(), true);
+        if let Some(root) = root_surface_for_x11(&_window)
+            && let Some(frontend) = self.wayland.as_mut()
+        {
+            frontend.set_surface_minimized(root.id(), true);
         }
         #[cfg(feature = "flutter")]
         if let Some(window) = window.as_ref() {
-            self.wayland
-                .as_mut()
-                .expect("missing Wayland frontend")
-                .remove_window_from_layout(window, false);
+            if let Some(frontend) = self.wayland.as_mut() {
+                frontend.remove_window_from_layout(window, false);
+            }
             release_window_focus(self, window);
         }
         #[cfg(feature = "flutter")]
@@ -999,17 +1003,15 @@ impl XwmHandler for RuntimeState {
             warn!(%error, window = window.window_id(), "could not restore X11 window");
         }
         #[cfg(feature = "flutter")]
-        if let Some(root) = root_surface_for_x11(&window) {
-            self.wayland
-                .as_mut()
-                .expect("missing Wayland frontend")
-                .set_surface_minimized(root.id(), false);
+        if let Some(root) = root_surface_for_x11(&window)
+            && let Some(frontend) = self.wayland.as_mut()
+        {
+            frontend.set_surface_minimized(root.id(), false);
         }
-        if let Some(element) = window_for_x11(self, &window) {
-            self.wayland
-                .as_mut()
-                .expect("missing Wayland frontend")
-                .reconcile_window_layout(&element);
+        if let Some(element) = window_for_x11(self, &window)
+            && let Some(frontend) = self.wayland.as_mut()
+        {
+            frontend.reconcile_window_layout(&element);
         }
         #[cfg(feature = "flutter")]
         // Leaving IconicState is a visibility change only; Restore would be
@@ -1027,13 +1029,14 @@ impl XwmHandler for RuntimeState {
         if x11_shell_geometry_locked(self, &window) {
             return;
         }
-        let pointer = self
+        let Some(pointer) = self
             .wayland
             .as_ref()
-            .expect("missing Wayland frontend")
-            .seat
-            .get_pointer()
-            .expect("seat has no pointer");
+            .and_then(|frontend| frontend.seat.get_pointer())
+        else {
+            warn!("missing Wayland frontend or seat pointer; dropping X11 resize request");
+            return;
+        };
         let Some(start_data) = pointer.grab_start_data() else {
             debug!(
                 window = window.window_id(),
@@ -1047,16 +1050,18 @@ impl XwmHandler for RuntimeState {
         if self
             .wayland
             .as_ref()
-            .expect("missing Wayland frontend")
-            .window_is_layout_managed(&element)
+            .is_some_and(|frontend| frontend.window_is_layout_managed(&element))
         {
             return;
         }
-        let geometry = self
+        let Some(geometry) = self
             .wayland
             .as_ref()
-            .expect("missing Wayland frontend")
-            .window_geometry_target(&element);
+            .map(|frontend| frontend.window_geometry_target(&element))
+        else {
+            warn!("missing Wayland frontend; dropping X11 resize request");
+            return;
+        };
         pointer.set_grab(
             self,
             X11ResizeSurfaceGrab::new(
@@ -1079,13 +1084,14 @@ impl XwmHandler for RuntimeState {
         if x11_shell_geometry_locked(self, &window) {
             return;
         }
-        let pointer = self
+        let Some(pointer) = self
             .wayland
             .as_ref()
-            .expect("missing Wayland frontend")
-            .seat
-            .get_pointer()
-            .expect("seat has no pointer");
+            .and_then(|frontend| frontend.seat.get_pointer())
+        else {
+            warn!("missing Wayland frontend or seat pointer; dropping X11 move request");
+            return;
+        };
         let Some(start_data) = pointer.grab_start_data() else {
             debug!(
                 window = window.window_id(),
@@ -1099,18 +1105,19 @@ impl XwmHandler for RuntimeState {
         if self
             .wayland
             .as_ref()
-            .expect("missing Wayland frontend")
-            .window_is_layout_managed(&element)
+            .is_some_and(|frontend| frontend.window_is_layout_managed(&element))
         {
             return;
         }
-        let initial_location = self
-            .wayland
-            .as_ref()
-            .expect("missing Wayland frontend")
-            .space
-            .element_location(&element)
-            .unwrap_or_default();
+        let Some(initial_location) = self.wayland.as_ref().map(|frontend| {
+            frontend
+                .space
+                .element_location(&element)
+                .unwrap_or_default()
+        }) else {
+            warn!("missing Wayland frontend; dropping X11 move request");
+            return;
+        };
         pointer.set_grab(
             self,
             MoveSurfaceGrab::new(start_data, element, initial_location),
@@ -1178,27 +1185,21 @@ impl XwmHandler for RuntimeState {
         if selection != SelectionTarget::Clipboard {
             return;
         }
-        let retained_item_id = current_data_device_selection_userdata(
-            &self
-                .wayland
-                .as_ref()
-                .expect("missing Wayland frontend")
-                .seat,
-        )
-        .and_then(|selection| selection.history_item_id());
+        let Some(frontend) = self.wayland.as_ref() else {
+            warn!("missing Wayland frontend; dropping X11 selection send");
+            return;
+        };
+        let retained_item_id = current_data_device_selection_userdata(&frontend.seat)
+            .and_then(|selection| selection.history_item_id());
         if let Some(item_id) = retained_item_id {
             super::clipboard_io::send_retained_selection(self, item_id, &mime_type, fd);
             return;
         }
-        if let Err(error) = request_data_device_client_selection(
-            &self
-                .wayland
-                .as_ref()
-                .expect("missing Wayland frontend")
-                .seat,
-            mime_type,
-            fd,
-        ) {
+        let Some(frontend) = self.wayland.as_ref() else {
+            warn!("missing Wayland frontend; dropping X11 selection send");
+            return;
+        };
+        if let Err(error) = request_data_device_client_selection(&frontend.seat, mime_type, fd) {
             error!(%error, "could not send Wayland clipboard data to Xwayland");
         }
     }
@@ -1216,7 +1217,10 @@ impl XwmHandler for RuntimeState {
             super::clipboard_io::CaptureOwner::Xwayland,
             &mime_types,
         );
-        let frontend = self.wayland.as_ref().expect("missing Wayland frontend");
+        let Some(frontend) = self.wayland.as_ref() else {
+            warn!("missing Wayland frontend; dropping X11 selection publish");
+            return;
+        };
         set_data_device_selection(
             &frontend.display_handle,
             &frontend.seat,
@@ -1244,7 +1248,10 @@ impl XwmHandler for RuntimeState {
                 super::clipboard_io::CaptureOwner::Xwayland,
                 &[],
             );
-            let frontend = self.wayland.as_ref().expect("missing Wayland frontend");
+            let Some(frontend) = self.wayland.as_ref() else {
+                warn!("missing Wayland frontend; dropping X11 selection clear");
+                return;
+            };
             clear_data_device_selection(&frontend.display_handle, &frontend.seat);
         }
     }

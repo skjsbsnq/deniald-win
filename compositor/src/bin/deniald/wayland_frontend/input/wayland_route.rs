@@ -19,17 +19,21 @@ pub(super) fn process_wayland_input_event(
         ),
         InputEvent::PointerMotion { event, .. } => {
             let (position, under) = {
-                let frontend = state.wayland.as_mut().expect("missing Wayland frontend");
+                let Some(frontend) = state.wayland.as_mut() else {
+                    warn!("missing Wayland frontend; dropping pointer motion");
+                    return;
+                };
                 let position = frontend.clamp_pointer(frontend.pointer_location + event.delta());
                 (position, frontend.surface_under(position))
             };
-            let pointer = state
+            let Some(pointer) = state
                 .wayland
                 .as_ref()
-                .expect("missing Wayland frontend")
-                .seat
-                .get_pointer()
-                .expect("seat has no pointer");
+                .and_then(|frontend| frontend.seat.get_pointer())
+            else {
+                warn!("missing Wayland frontend or seat pointer; dropping pointer motion");
+                return;
+            };
             let blocked = pointer_constraint_blocks_motion(
                 &pointer,
                 &under,
@@ -55,11 +59,11 @@ pub(super) fn process_wayland_input_event(
                 pointer.frame(state);
                 return;
             }
-            state
-                .wayland
-                .as_mut()
-                .expect("missing Wayland frontend")
-                .pointer_location = position;
+            let Some(frontend) = state.wayland.as_mut() else {
+                warn!("missing Wayland frontend; dropping pointer motion");
+                return;
+            };
+            frontend.pointer_location = position;
             pointer.motion(
                 state,
                 under,
@@ -73,18 +77,22 @@ pub(super) fn process_wayland_input_event(
         }
         InputEvent::PointerMotionAbsolute { event, .. } => {
             let (position, under) = {
-                let frontend = state.wayland.as_mut().expect("missing Wayland frontend");
+                let Some(frontend) = state.wayland.as_mut() else {
+                    warn!("missing Wayland frontend; dropping pointer motion");
+                    return;
+                };
                 let local = event.position_transformed(frontend.desktop_bounds.size);
                 let position = frontend.clamp_pointer(local + frontend.desktop_bounds.loc.to_f64());
                 (position, frontend.surface_under(position))
             };
-            let pointer = state
+            let Some(pointer) = state
                 .wayland
                 .as_ref()
-                .expect("missing Wayland frontend")
-                .seat
-                .get_pointer()
-                .expect("seat has no pointer");
+                .and_then(|frontend| frontend.seat.get_pointer())
+            else {
+                warn!("missing Wayland frontend or seat pointer; dropping pointer motion");
+                return;
+            };
             if pointer_constraint_blocks_motion(
                 &pointer,
                 &under,
@@ -94,11 +102,11 @@ pub(super) fn process_wayland_input_event(
                 pointer.frame(state);
                 return;
             }
-            state
-                .wayland
-                .as_mut()
-                .expect("missing Wayland frontend")
-                .pointer_location = position;
+            let Some(frontend) = state.wayland.as_mut() else {
+                warn!("missing Wayland frontend; dropping pointer motion");
+                return;
+            };
+            frontend.pointer_location = position;
             pointer.motion(
                 state,
                 under,
@@ -113,70 +121,65 @@ pub(super) fn process_wayland_input_event(
         InputEvent::PointerButton { event, .. } => {
             let serial = SERIAL_COUNTER.next_serial();
             #[cfg(feature = "flutter")]
-            if retired_pointer_button_consumes_transition(
-                &mut state
-                    .wayland
-                    .as_mut()
-                    .expect("missing Wayland frontend")
-                    .retired_pointer_buttons,
-                event.button_code(),
-                event.state(),
-            ) {
+            if state.wayland.as_mut().is_some_and(|frontend| {
+                retired_pointer_button_consumes_transition(
+                    &mut frontend.retired_pointer_buttons,
+                    event.button_code(),
+                    event.state(),
+                )
+            }) {
                 return;
             }
-            let pointer = state
+            let Some(pointer) = state
                 .wayland
                 .as_ref()
-                .expect("missing Wayland frontend")
-                .seat
-                .get_pointer()
-                .expect("seat has no pointer");
-            let keyboard = state
+                .and_then(|frontend| frontend.seat.get_pointer())
+            else {
+                warn!("missing Wayland frontend or seat pointer; dropping pointer button event");
+                return;
+            };
+            let Some(keyboard) = state
                 .wayland
                 .as_ref()
-                .expect("missing Wayland frontend")
-                .seat
-                .get_keyboard()
-                .expect("seat has no keyboard");
+                .and_then(|frontend| frontend.seat.get_keyboard())
+            else {
+                warn!("missing Wayland frontend or seat keyboard; dropping pointer button event");
+                return;
+            };
 
             if event.state() == ButtonState::Pressed && !pointer.is_grabbed() {
-                let window = state
-                    .wayland
-                    .as_ref()
-                    .expect("missing Wayland frontend")
-                    .space
-                    .element_under(pointer.current_location())
-                    .map(|(window, _)| window.clone());
+                let window = state.wayland.as_ref().and_then(|frontend| {
+                    frontend
+                        .space
+                        .element_under(pointer.current_location())
+                        .map(|(window, _)| window.clone())
+                });
                 if let Some(window) = window {
                     #[cfg(feature = "flutter")]
                     {
-                        let window_id = state
-                            .wayland
-                            .as_ref()
-                            .expect("missing Wayland frontend")
-                            .window_root_surface(&window)
-                            .and_then(|surface| {
-                                state
-                                    .wayland
-                                    .as_ref()
-                                    .expect("missing Wayland frontend")
-                                    .surface_id(&surface)
-                            });
-                        if let Some(window_id) = window_id {
-                            state
-                                .wayland
-                                .as_mut()
-                                .expect("missing Wayland frontend")
-                                .pointer_constraint_escape
-                                .resume_window(window_id);
+                        let window_id = state.wayland.as_ref().and_then(|frontend| {
+                            frontend
+                                .window_root_surface(&window)
+                                .and_then(|surface| frontend.surface_id(&surface))
+                        });
+                        if let Some(window_id) = window_id
+                            && let Some(frontend) = state.wayland.as_mut()
+                        {
+                            frontend.pointer_constraint_escape.resume_window(window_id);
                         }
                     }
-                    let focus = state
+                    let Some(focus) = state
                         .wayland
                         .as_ref()
-                        .expect("missing Wayland frontend")
-                        .keyboard_focus_for_window(&window);
-                    let frontend = state.wayland.as_mut().expect("missing Wayland frontend");
+                        .map(|frontend| frontend.keyboard_focus_for_window(&window))
+                    else {
+                        warn!("missing Wayland frontend; dropping pointer button event");
+                        return;
+                    };
+                    let Some(frontend) = state.wayland.as_mut() else {
+                        warn!("missing Wayland frontend; dropping pointer button event");
+                        return;
+                    };
                     frontend.raise_window(&window, true);
                     for candidate in frontend.space.elements() {
                         let changed = candidate.set_activated(candidate == &window);
@@ -194,12 +197,12 @@ pub(super) fn process_wayland_input_event(
                 }
             }
 
+            let Some(frontend) = state.wayland.as_mut() else {
+                warn!("missing Wayland frontend; dropping pointer button event");
+                return;
+            };
             update_pressed_buttons(
-                &mut state
-                    .wayland
-                    .as_mut()
-                    .expect("missing Wayland frontend")
-                    .wayland_pointer_buttons,
+                &mut frontend.wayland_pointer_buttons,
                 event.button_code(),
                 event.state(),
             );
@@ -219,7 +222,10 @@ pub(super) fn process_wayland_input_event(
         InputEvent::TouchDown { event, .. } => {
             let serial = SERIAL_COUNTER.next_serial();
             let (position, window) = {
-                let frontend = state.wayland.as_ref().expect("missing Wayland frontend");
+                let Some(frontend) = state.wayland.as_ref() else {
+                    warn!("missing Wayland frontend; dropping touch down event");
+                    return;
+                };
                 let position = output_bound_absolute_position(
                     &event,
                     frontend.touch_bounds,
@@ -231,21 +237,26 @@ pub(super) fn process_wayland_input_event(
                     .map(|(window, _)| window.clone());
                 (position, window)
             };
-            let (touch, keyboard) = {
-                let frontend = state.wayland.as_ref().expect("missing Wayland frontend");
-                (
-                    frontend.seat.get_touch().expect("seat has no touch"),
-                    frontend.seat.get_keyboard().expect("seat has no keyboard"),
-                )
+            let Some((touch, keyboard)) = state.wayland.as_ref().and_then(|frontend| {
+                Some((frontend.seat.get_touch()?, frontend.seat.get_keyboard()?))
+            }) else {
+                warn!("missing Wayland frontend or seat device; dropping touch down event");
+                return;
             };
 
             if let Some(window) = window {
-                let focus = state
+                let Some(focus) = state
                     .wayland
                     .as_ref()
-                    .expect("missing Wayland frontend")
-                    .keyboard_focus_for_window(&window);
-                let frontend = state.wayland.as_mut().expect("missing Wayland frontend");
+                    .map(|frontend| frontend.keyboard_focus_for_window(&window))
+                else {
+                    warn!("missing Wayland frontend; dropping touch down event");
+                    return;
+                };
+                let Some(frontend) = state.wayland.as_mut() else {
+                    warn!("missing Wayland frontend; dropping touch down event");
+                    return;
+                };
                 frontend.raise_window(&window, true);
                 for candidate in frontend.space.elements() {
                     let changed = candidate.set_activated(candidate == &window);
@@ -265,8 +276,7 @@ pub(super) fn process_wayland_input_event(
             let under = state
                 .wayland
                 .as_ref()
-                .expect("missing Wayland frontend")
-                .surface_under(position);
+                .and_then(|frontend| frontend.surface_under(position));
             touch.down(
                 state,
                 under,
@@ -281,7 +291,10 @@ pub(super) fn process_wayland_input_event(
         }
         InputEvent::TouchMotion { event, .. } => {
             let (position, under) = {
-                let frontend = state.wayland.as_ref().expect("missing Wayland frontend");
+                let Some(frontend) = state.wayland.as_ref() else {
+                    warn!("missing Wayland frontend; dropping touch motion event");
+                    return;
+                };
                 let position = output_bound_absolute_position(
                     &event,
                     frontend.touch_bounds,
@@ -289,13 +302,14 @@ pub(super) fn process_wayland_input_event(
                 );
                 (position, frontend.surface_under(position))
             };
-            let touch = state
+            let Some(touch) = state
                 .wayland
                 .as_ref()
-                .expect("missing Wayland frontend")
-                .seat
-                .get_touch()
-                .expect("seat has no touch");
+                .and_then(|frontend| frontend.seat.get_touch())
+            else {
+                warn!("missing Wayland frontend or seat touch; dropping touch motion");
+                return;
+            };
             touch.motion(
                 state,
                 under,
@@ -307,13 +321,14 @@ pub(super) fn process_wayland_input_event(
             );
         }
         InputEvent::TouchUp { event, .. } => {
-            let touch = state
+            let Some(touch) = state
                 .wayland
                 .as_ref()
-                .expect("missing Wayland frontend")
-                .seat
-                .get_touch()
-                .expect("seat has no touch");
+                .and_then(|frontend| frontend.seat.get_touch())
+            else {
+                warn!("missing Wayland frontend or seat touch; dropping touch up");
+                return;
+            };
             touch.up(
                 state,
                 &UpEvent {
@@ -324,23 +339,25 @@ pub(super) fn process_wayland_input_event(
             );
         }
         InputEvent::TouchFrame { .. } => {
-            let touch = state
+            let Some(touch) = state
                 .wayland
                 .as_ref()
-                .expect("missing Wayland frontend")
-                .seat
-                .get_touch()
-                .expect("seat has no touch");
+                .and_then(|frontend| frontend.seat.get_touch())
+            else {
+                warn!("missing Wayland frontend or seat touch; dropping touch frame");
+                return;
+            };
             touch.frame(state);
         }
         InputEvent::TouchCancel { .. } => {
-            let touch = state
+            let Some(touch) = state
                 .wayland
                 .as_ref()
-                .expect("missing Wayland frontend")
-                .seat
-                .get_touch()
-                .expect("seat has no touch");
+                .and_then(|frontend| frontend.seat.get_touch())
+            else {
+                warn!("missing Wayland frontend or seat touch; dropping touch cancel");
+                return;
+            };
             touch.cancel(state);
         }
         _ => {}

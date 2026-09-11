@@ -19,6 +19,7 @@ use super::super::native_shortcut::ShortcutGesture;
 use super::super::window_grab::constrain_dimension;
 use super::super::wire::{WindowGeometry, WindowPlacementChange, WindowPlacementPhase};
 use super::window_management;
+use tracing::warn;
 
 /// The invisible gesture affordance at the bottom of a normal window.
 pub(super) const WINDOW_TOUCH_STRIP_HEIGHT: f64 = 48.0;
@@ -904,11 +905,11 @@ fn apply_placement(
             window_management::activate_local_flutter_window(state, window_id);
         }
         let geometry = constrain_local_geometry(geometry, change);
-        state
-            .wayland
-            .as_mut()
-            .expect("missing Wayland frontend")
-            .set_local_flutter_window_global_geometry(window_id, geometry);
+        let Some(frontend) = state.wayland.as_mut() else {
+            warn!("missing Wayland frontend; skipping local window geometry update");
+            return;
+        };
+        frontend.set_local_flutter_window_global_geometry(window_id, geometry);
         window_management::queue_local_flutter_window_placement(state, window_id, phase, change);
         if phase == WindowPlacementPhase::End {
             state.scene_sync.mark_dirty();
@@ -939,11 +940,11 @@ fn apply_placement(
     if change == WindowPlacementChange::Resize {
         configure_client_resize(&window, geometry.size, phase);
     }
-    state
-        .wayland
-        .as_mut()
-        .expect("missing Wayland frontend")
-        .set_window_geometry_target(&window, geometry);
+    let Some(frontend) = state.wayland.as_mut() else {
+        warn!("missing Wayland frontend; skipping window geometry update");
+        return;
+    };
+    frontend.set_window_geometry_target(&window, geometry);
     window_management::queue_window_placement(state, &window, geometry, phase, change);
     if phase == WindowPlacementPhase::End {
         state.scene_sync.mark_dirty();
@@ -959,7 +960,10 @@ fn release_geometry_constraints(state: &mut RuntimeState, window: &Window) -> bo
     let Some(root) = root else {
         return client_cleared;
     };
-    let frontend = state.wayland.as_mut().expect("missing Wayland frontend");
+    let Some(frontend) = state.wayland.as_mut() else {
+        warn!("missing Wayland frontend; skipping shell geometry constraint release");
+        return client_cleared;
+    };
     let surface_id = root.id();
     let shell_maximized = frontend
         .shell_maximize_restore_geometries

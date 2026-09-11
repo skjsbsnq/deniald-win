@@ -269,14 +269,16 @@ impl<K: Clone + Eq + Hash, V> OutputWindowMembership<K, V> {
 
     fn remove(&mut self, key: &K) -> Option<V> {
         let output = self.output_by_window.remove(key)?;
-        let windows = self
-            .windows_by_output
-            .get_mut(&output)
-            .expect("window output index lost its output bucket");
-        let index = windows
-            .iter()
-            .position(|(candidate, _)| candidate == key)
-            .expect("window output index lost its window entry");
+        let Some(windows) = self.windows_by_output.get_mut(&output) else {
+            warn!("window output index lost its output bucket");
+            debug_assert!(false, "window output index lost its output bucket");
+            return None;
+        };
+        let Some(index) = windows.iter().position(|(candidate, _)| candidate == key) else {
+            warn!("window output index lost its window entry");
+            debug_assert!(false, "window output index lost its window entry");
+            return None;
+        };
         let (_, value) = windows.swap_remove(index);
         if windows.is_empty() {
             self.windows_by_output.remove(&output);

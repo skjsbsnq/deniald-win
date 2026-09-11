@@ -19,7 +19,7 @@ use std::collections::HashSet;
 use std::os::fd::OwnedFd;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
-use tracing::debug;
+use tracing::{debug, warn};
 
 pub(super) const MAX_WAYLAND_CLIENTS: usize = 128;
 const MAX_SURFACES_PER_CLIENT: usize = 1_024;
@@ -422,12 +422,14 @@ fn install_surface_readiness_hook(surface: &WlSurface) {
         // LoopHandle is deliberately fetched at invocation time: Smithay's
         // surface hooks are Send + Sync, while calloop handles are confined to
         // the compositor thread that executes this hook.
-        let loop_handle = state
+        let Some(loop_handle) = state
             .wayland
             .as_ref()
-            .expect("missing Wayland frontend")
-            .loop_handle
-            .clone();
+            .map(|frontend| frontend.loop_handle.clone())
+        else {
+            warn!("missing Wayland frontend; skipping surface readiness tracking");
+            return;
+        };
         let (acquire_point, dmabuf) = with_states(surface, |states| {
             let mut syncobj = states.cached_state.get::<DrmSyncobjCachedState>();
             let acquire_point = syncobj.pending().acquire_point.clone();
@@ -473,12 +475,14 @@ fn install_surface_readiness_hook(surface: &WlSurface) {
                 Ok((blocker, source)) => {
                     let source_client = client.clone();
                     match loop_handle.insert_source(source, move |_, _, state| {
-                        let display_handle = state
+                        let Some(display_handle) = state
                             .wayland
                             .as_ref()
-                            .expect("missing Wayland frontend")
-                            .display_handle
-                            .clone();
+                            .map(|frontend| frontend.display_handle.clone())
+                        else {
+                            warn!("missing Wayland frontend; dropping DMA-BUF fence release");
+                            return Ok(());
+                        };
                         state
                             .client_compositor_state(&source_client)
                             .blocker_cleared(state, &display_handle);
@@ -520,12 +524,14 @@ fn install_surface_readiness_hook(surface: &WlSurface) {
         };
         let source_client = client.clone();
         match loop_handle.insert_source(source, move |_, _, state| {
-            let display_handle = state
+            let Some(display_handle) = state
                 .wayland
                 .as_ref()
-                .expect("missing Wayland frontend")
-                .display_handle
-                .clone();
+                .map(|frontend| frontend.display_handle.clone())
+            else {
+                warn!("missing Wayland frontend; dropping DMA-BUF fence release");
+                return Ok(());
+            };
             state
                 .client_compositor_state(&source_client)
                 .blocker_cleared(state, &display_handle);
@@ -565,7 +571,10 @@ impl CompositorHandler for RuntimeState {
 
     fn new_surface(&mut self, surface: &WlSurface) {
         let (display_handle, client) = {
-            let frontend = self.wayland.as_ref().expect("missing Wayland frontend");
+            let Some(frontend) = self.wayland.as_ref() else {
+                warn!("missing Wayland frontend; ignoring new surface");
+                return;
+            };
             let display_handle = frontend.display_handle.clone();
             let client = display_handle.get_client(surface.id());
             (display_handle, client)
@@ -613,10 +622,11 @@ impl CompositorHandler for RuntimeState {
                 .data_map
                 .insert_if_missing_threadsafe(|| DenialSurfaceOwner(client.id()));
         });
-        self.wayland
-            .as_mut()
-            .expect("missing Wayland frontend")
-            .register_surface(surface);
+        let Some(frontend) = self.wayland.as_mut() else {
+            warn!("missing Wayland frontend; skipping surface registration");
+            return;
+        };
+        frontend.register_surface(surface);
     }
 
     fn commit(&mut self, surface: &WlSurface) {
@@ -666,7 +676,10 @@ impl CompositorHandler for RuntimeState {
         });
         #[cfg(feature = "flutter")]
         let (first_buffer, buffer_attached, buffer_removed) = {
-            let frontend = self.wayland.as_ref().expect("missing Wayland frontend");
+            let Some(frontend) = self.wayland.as_ref() else {
+                warn!("missing Wayland frontend; skipping surface commit");
+                return;
+            };
             (
                 buffer_update.as_ref().is_some_and(Option::is_some)
                     && !frontend.surface_buffers.contains_key(&surface.id()),
@@ -675,7 +688,10 @@ impl CompositorHandler for RuntimeState {
             )
         };
         if let Some(buffer) = buffer_update {
-            let frontend = self.wayland.as_mut().expect("missing Wayland frontend");
+            let Some(frontend) = self.wayland.as_mut() else {
+                warn!("missing Wayland frontend; skipping surface commit");
+                return;
+            };
             if let Some(buffer) = buffer {
                 #[cfg(feature = "flutter")]
                 if get_dmabuf(&buffer).is_ok() {
@@ -692,13 +708,12 @@ impl CompositorHandler for RuntimeState {
         }
         on_commit_buffer_handler::<Self>(surface);
         #[cfg(feature = "flutter")]
-        if matches!(
-            self.wayland
-                .as_ref()
-                .expect("missing Wayland frontend")
-                .cursor_status,
-            CursorImageStatus::Surface(ref cursor_surface) if cursor_surface == surface
-        ) {
+        if self.wayland.as_ref().is_some_and(|frontend| {
+            matches!(
+                frontend.cursor_status,
+                CursorImageStatus::Surface(ref cursor_surface) if cursor_surface == surface
+            )
+        }) {
             with_states(surface, |states| {
                 let buffer_delta = states
                     .cached_state
@@ -719,7 +734,10 @@ impl CompositorHandler for RuntimeState {
             });
         }
         let input_method_changed = {
-            let frontend = self.wayland.as_mut().expect("missing Wayland frontend");
+            let Some(frontend) = self.wayland.as_mut() else {
+                warn!("missing Wayland frontend; skipping surface commit");
+                return;
+            };
             frontend.text_input.surface_committed(surface);
             frontend.synchronize_input_method()
         };
@@ -732,7 +750,10 @@ impl CompositorHandler for RuntimeState {
         let mut client_sized_window_state = None;
         #[cfg(feature = "flutter")]
         let mut committed_window_metadata_changed = false;
-        let frontend = self.wayland.as_mut().expect("missing Wayland frontend");
+        let Some(frontend) = self.wayland.as_mut() else {
+            warn!("missing Wayland frontend; skipping surface commit");
+            return;
+        };
         #[cfg(feature = "flutter")]
         let sampling_changed = previous_sampling
             != with_renderer_surface_state(surface, |state| {
@@ -912,10 +933,11 @@ impl CompositorHandler for RuntimeState {
                         .mark_surfaces_dirty(published.buffer_surface_ids.iter().copied());
                 }
             }
-            self.wayland
-                .as_mut()
-                .expect("missing Wayland frontend")
-                .recycle_published_surface_ids(published.buffer_surface_ids);
+            let Some(frontend) = self.wayland.as_mut() else {
+                warn!("missing Wayland frontend; skipping published-id recycle");
+                return;
+            };
+            frontend.recycle_published_surface_ids(published.buffer_surface_ids);
         }
         #[cfg(not(feature = "flutter"))]
         self.scene_sync.mark_dirty();
@@ -942,7 +964,10 @@ impl CompositorHandler for RuntimeState {
         {
             client_state.unregister_surface(&surface.id());
         }
-        let frontend = self.wayland.as_mut().expect("missing Wayland frontend");
+        let Some(frontend) = self.wayland.as_mut() else {
+            warn!("missing Wayland frontend; skipping surface teardown");
+            return;
+        };
         frontend.remove_surface_state(surface, true);
         self.scene_sync.mark_dirty();
     }
@@ -950,7 +975,10 @@ impl CompositorHandler for RuntimeState {
 
 impl BufferHandler for RuntimeState {
     fn buffer_destroyed(&mut self, buffer: &wl_buffer::WlBuffer) {
-        let frontend = self.wayland.as_mut().expect("missing Wayland frontend");
+        let Some(frontend) = self.wayland.as_mut() else {
+            warn!("missing Wayland frontend; skipping buffer cleanup");
+            return;
+        };
         frontend
             .surface_buffers
             .retain(|_, current| current != buffer);
@@ -962,9 +990,7 @@ impl DrmSyncobjHandler for RuntimeState {
     fn drm_syncobj_state(&mut self) -> Option<&mut DrmSyncobjState> {
         self.wayland
             .as_mut()
-            .expect("missing Wayland frontend")
-            .drm_syncobj_state
-            .as_mut()
+            .and_then(|frontend| frontend.drm_syncobj_state.as_mut())
     }
 }
 
@@ -993,10 +1019,11 @@ impl DmabufHandler for RuntimeState {
         dmabuf: Dmabuf,
         notifier: ImportNotifier,
     ) {
-        self.wayland
-            .as_mut()
-            .expect("missing Wayland frontend")
-            .queue_dmabuf_import(dmabuf, notifier);
+        let Some(frontend) = self.wayland.as_mut() else {
+            warn!("missing Wayland frontend; dropping DMA-BUF import");
+            return;
+        };
+        frontend.queue_dmabuf_import(dmabuf, notifier);
     }
 }
 
@@ -1004,10 +1031,11 @@ impl OutputHandler for RuntimeState {}
 
 impl smithay::wayland::fractional_scale::FractionalScaleHandler for RuntimeState {
     fn new_fractional_scale(&mut self, surface: WlSurface) {
-        self.wayland
-            .as_ref()
-            .expect("missing Wayland frontend")
-            .update_surface_fractional_scale(&surface);
+        let Some(frontend) = self.wayland.as_ref() else {
+            warn!("missing Wayland frontend; skipping fractional-scale update");
+            return;
+        };
+        frontend.update_surface_fractional_scale(&surface);
     }
 }
 
@@ -1025,7 +1053,10 @@ impl SeatHandler for RuntimeState {
     }
 
     fn cursor_image(&mut self, _seat: &Seat<Self>, image: CursorImageStatus) {
-        let frontend = self.wayland.as_mut().expect("missing Wayland frontend");
+        let Some(frontend) = self.wayland.as_mut() else {
+            warn!("missing Wayland frontend; dropping cursor image update");
+            return;
+        };
         #[cfg(feature = "flutter")]
         frontend.update_tablet_cursor_image(image);
         #[cfg(not(feature = "flutter"))]
@@ -1047,18 +1078,19 @@ impl SeatHandler for RuntimeState {
 
     fn focus_changed(&mut self, seat: &Seat<Self>, focused: Option<&KeyboardFocusTarget>) {
         #[cfg(feature = "flutter")]
-        if focused.is_some() {
-            self.wayland
-                .as_mut()
-                .expect("missing Wayland frontend")
-                .clear_local_flutter_focus();
+        if focused.is_some()
+            && let Some(frontend) = self.wayland.as_mut()
+        {
+            frontend.clear_local_flutter_focus();
         }
-        let display_handle = self
+        let Some(display_handle) = self
             .wayland
             .as_ref()
-            .expect("missing Wayland frontend")
-            .display_handle
-            .clone();
+            .map(|frontend| frontend.display_handle.clone())
+        else {
+            warn!("missing Wayland frontend; skipping focus change bookkeeping");
+            return;
+        };
         let client = focused
             .and_then(WaylandFocus::wl_surface)
             .and_then(|surface| display_handle.get_client(surface.id()).ok());
@@ -1071,7 +1103,10 @@ impl SeatHandler for RuntimeState {
             None => super::SeatFocusKind::None,
         };
         let input_method_changed = {
-            let frontend = self.wayland.as_mut().expect("missing Wayland frontend");
+            let Some(frontend) = self.wayland.as_mut() else {
+                warn!("missing Wayland frontend; skipping focus change bookkeeping");
+                return;
+            };
             frontend.text_input.set_keyboard_focus(
                 &display_handle,
                 focused_surface.clone(),
@@ -1099,7 +1134,10 @@ impl TabletSeatHandler for RuntimeState {
         _tool: &smithay::backend::input::TabletToolDescriptor,
         image: CursorImageStatus,
     ) {
-        let frontend = self.wayland.as_mut().expect("missing Wayland frontend");
+        let Some(frontend) = self.wayland.as_mut() else {
+            warn!("missing Wayland frontend; dropping tablet cursor update");
+            return;
+        };
         #[cfg(feature = "flutter")]
         frontend.update_cursor_image(image);
         #[cfg(not(feature = "flutter"))]
@@ -1171,9 +1209,7 @@ impl SelectionHandler for RuntimeState {
         if let Some(xwm) = self
             .wayland
             .as_mut()
-            .expect("missing Wayland frontend")
-            .xwm
-            .as_mut()
+            .and_then(|frontend| frontend.xwm.as_mut())
             && let Err(error) = xwm.new_selection(selection, source.map(|_| mime_types))
         {
             warn!(%error, "could not publish Wayland clipboard to Xwayland");
@@ -1202,9 +1238,7 @@ impl SelectionHandler for RuntimeState {
         if let Some(xwm) = self
             .wayland
             .as_mut()
-            .expect("missing Wayland frontend")
-            .xwm
-            .as_mut()
+            .and_then(|frontend| frontend.xwm.as_mut())
             && let Err(error) = xwm.send_selection(selection, mime_type, fd)
         {
             warn!(%error, "could not transfer Xwayland clipboard data to Wayland");
@@ -1250,12 +1284,15 @@ impl WaylandDndGrabHandler for RuntimeState {
                     source.cancel();
                     return;
                 };
-                let display_handle = self
+                let Some(display_handle) = self
                     .wayland
                     .as_ref()
-                    .expect("missing Wayland frontend")
-                    .display_handle
-                    .clone();
+                    .map(|frontend| frontend.display_handle.clone())
+                else {
+                    warn!("missing Wayland frontend; cancelled pointer DND request");
+                    source.cancel();
+                    return;
+                };
                 let grab = DnDGrab::new_pointer(&display_handle, start_data, source, seat);
                 pointer.set_grab(self, grab, serial, Focus::Keep);
             }
@@ -1275,15 +1312,19 @@ impl XdgShellHandler for RuntimeState {
 
     fn new_toplevel(&mut self, surface: ToplevelSurface) {
         let focus = surface.wl_surface().clone();
-        let keyboard = self
-            .wayland
-            .as_ref()
-            .expect("missing Wayland frontend")
-            .seat
-            .get_keyboard()
-            .expect("seat has no keyboard");
+        let Some(frontend) = self.wayland.as_ref() else {
+            warn!("missing Wayland frontend; ignoring new toplevel");
+            return;
+        };
+        let Some(keyboard) = frontend.seat.get_keyboard() else {
+            warn!("seat has no keyboard; ignoring new toplevel focus update");
+            return;
+        };
         let initial_activation = {
-            let frontend = self.wayland.as_mut().expect("missing Wayland frontend");
+            let Some(frontend) = self.wayland.as_mut() else {
+                warn!("missing Wayland frontend; ignoring new toplevel");
+                return;
+            };
             let window = Window::new_wayland_window(surface);
             let offset = frontend.next_window_offset;
             frontend.next_window_offset = (frontend.next_window_offset + 48).min(384);
@@ -1319,7 +1360,10 @@ impl XdgShellHandler for RuntimeState {
     }
 
     fn new_popup(&mut self, surface: PopupSurface, _positioner: PositionerState) {
-        let frontend = self.wayland.as_mut().expect("missing Wayland frontend");
+        let Some(frontend) = self.wayland.as_mut() else {
+            warn!("missing Wayland frontend; ignoring new popup");
+            return;
+        };
         frontend.unconstrain_popup(&surface);
         let wl_surface = surface.wl_surface().clone();
         let _ = frontend.popups.track_popup(PopupKind::Xdg(surface));
@@ -1345,10 +1389,9 @@ impl XdgShellHandler for RuntimeState {
             state.geometry = positioner.get_geometry();
             state.positioner = positioner;
         });
-        self.wayland
-            .as_ref()
-            .expect("missing Wayland frontend")
-            .unconstrain_popup(&surface);
+        if let Some(frontend) = self.wayland.as_ref() {
+            frontend.unconstrain_popup(&surface);
+        }
         surface.send_repositioned(token);
         self.scene_sync.mark_dirty();
     }
@@ -1364,12 +1407,15 @@ impl XdgShellHandler for RuntimeState {
             return;
         };
         #[cfg(feature = "flutter")]
-        let start_data = self
-            .wayland
-            .as_mut()
-            .expect("missing Wayland frontend")
-            .take_client_pointer_press(surface.wl_surface(), serial)
-            .or_else(|| checked_pointer_grab(&seat, surface.wl_surface(), serial));
+        let start_data = match self.wayland.as_mut() {
+            Some(frontend) => frontend
+                .take_client_pointer_press(surface.wl_surface(), serial)
+                .or_else(|| checked_pointer_grab(&seat, surface.wl_surface(), serial)),
+            None => {
+                warn!("missing Wayland frontend; ignoring XDG move request");
+                return;
+            }
+        };
         #[cfg(not(feature = "flutter"))]
         let start_data = checked_pointer_grab(&seat, surface.wl_surface(), serial);
         let Some(start_data) = start_data else {
@@ -1396,26 +1442,29 @@ impl XdgShellHandler for RuntimeState {
         if self
             .wayland
             .as_ref()
-            .expect("missing Wayland frontend")
-            .window_is_layout_managed(&window)
+            .is_some_and(|frontend| frontend.window_is_layout_managed(&window))
         {
             warn!("ignored XDG move for a layout-managed toplevel");
             return;
         }
-        let initial_location = self
+        let Some(initial_location) = self
             .wayland
             .as_ref()
-            .expect("missing Wayland frontend")
-            .space
-            .element_location(&window)
-            .unwrap_or_default();
+            .map(|frontend| frontend.space.element_location(&window).unwrap_or_default())
+        else {
+            warn!("missing Wayland frontend; ignoring XDG move request");
+            return;
+        };
         #[cfg(feature = "flutter")]
         {
-            let geometry = self
+            let Some(geometry) = self
                 .wayland
                 .as_ref()
-                .expect("missing Wayland frontend")
-                .window_geometry_target(&window);
+                .map(|frontend| frontend.window_geometry_target(&window))
+            else {
+                warn!("missing Wayland frontend; ignoring XDG move request");
+                return;
+            };
             queue_window_placement(
                 self,
                 &window,
@@ -1454,12 +1503,15 @@ impl XdgShellHandler for RuntimeState {
             return;
         };
         #[cfg(feature = "flutter")]
-        let start_data = self
-            .wayland
-            .as_mut()
-            .expect("missing Wayland frontend")
-            .take_client_pointer_press(surface.wl_surface(), serial)
-            .or_else(|| checked_pointer_grab(&seat, surface.wl_surface(), serial));
+        let start_data = match self.wayland.as_mut() {
+            Some(frontend) => frontend
+                .take_client_pointer_press(surface.wl_surface(), serial)
+                .or_else(|| checked_pointer_grab(&seat, surface.wl_surface(), serial)),
+            None => {
+                warn!("missing Wayland frontend; ignoring XDG resize request");
+                return;
+            }
+        };
         #[cfg(not(feature = "flutter"))]
         let start_data = checked_pointer_grab(&seat, surface.wl_surface(), serial);
         let Some(start_data) = start_data else {
@@ -1486,14 +1538,16 @@ impl XdgShellHandler for RuntimeState {
         if self
             .wayland
             .as_ref()
-            .expect("missing Wayland frontend")
-            .window_is_layout_managed(&window)
+            .is_some_and(|frontend| frontend.window_is_layout_managed(&window))
         {
             warn!("ignored XDG resize for a layout-managed toplevel");
             return;
         }
         let (initial_location, initial_size) = {
-            let frontend = self.wayland.as_ref().expect("missing Wayland frontend");
+            let Some(frontend) = self.wayland.as_ref() else {
+                warn!("missing Wayland frontend; ignoring XDG resize request");
+                return;
+            };
             (
                 frontend.space.element_location(&window).unwrap_or_default(),
                 frontend.window_geometry_target(&window).size,
@@ -1501,11 +1555,14 @@ impl XdgShellHandler for RuntimeState {
         };
         #[cfg(feature = "flutter")]
         {
-            let geometry = self
+            let Some(geometry) = self
                 .wayland
                 .as_ref()
-                .expect("missing Wayland frontend")
-                .window_geometry_target(&window);
+                .map(|frontend| frontend.window_geometry_target(&window))
+            else {
+                warn!("missing Wayland frontend; ignoring XDG resize request");
+                return;
+            };
             queue_window_placement(
                 self,
                 &window,
@@ -1546,21 +1603,20 @@ impl XdgShellHandler for RuntimeState {
             .is_some_and(|window| {
                 self.wayland
                     .as_ref()
-                    .expect("missing Wayland frontend")
-                    .window_is_layout_managed(&window)
+                    .is_some_and(|frontend| frontend.window_is_layout_managed(&window))
             });
         if layout_managed {
-            self.wayland
-                .as_mut()
-                .expect("missing Wayland frontend")
-                .arrange_layout_windows();
+            if let Some(frontend) = self.wayland.as_mut() {
+                frontend.arrange_layout_windows();
+            }
             self.scene_sync.mark_dirty();
             return;
         }
-        self.wayland
-            .as_mut()
-            .expect("missing Wayland frontend")
-            .mark_client_geometry_state_request(surface.wl_surface());
+        let Some(frontend) = self.wayland.as_mut() else {
+            warn!("missing Wayland frontend; ignoring maximize request");
+            return;
+        };
+        frontend.mark_client_geometry_state_request(surface.wl_surface());
         #[cfg(feature = "flutter")]
         let was_fullscreen = toplevel_has_state(&surface, xdg_toplevel::State::Fullscreen);
         #[cfg(feature = "flutter")]
@@ -1582,10 +1638,11 @@ impl XdgShellHandler for RuntimeState {
         if reassert_exact_toplevel_geometry(self, &surface) {
             return;
         }
-        self.wayland
-            .as_mut()
-            .expect("missing Wayland frontend")
-            .mark_client_geometry_state_request(surface.wl_surface());
+        let Some(frontend) = self.wayland.as_mut() else {
+            warn!("missing Wayland frontend; ignoring unmaximize request");
+            return;
+        };
+        frontend.mark_client_geometry_state_request(surface.wl_surface());
         #[cfg(feature = "flutter")]
         let shell_geometry_locked = toplevel_shell_geometry_locked(self, &surface);
         let changed = clear_toplevel_state(self, &surface, xdg_toplevel::State::Maximized);
@@ -1606,10 +1663,11 @@ impl XdgShellHandler for RuntimeState {
         if reassert_exact_toplevel_geometry(self, &surface) {
             return;
         }
-        self.wayland
-            .as_mut()
-            .expect("missing Wayland frontend")
-            .mark_client_geometry_state_request(surface.wl_surface());
+        let Some(frontend) = self.wayland.as_mut() else {
+            warn!("missing Wayland frontend; ignoring fullscreen request");
+            return;
+        };
+        frontend.mark_client_geometry_state_request(surface.wl_surface());
         #[cfg(feature = "flutter")]
         let was_maximized = toplevel_has_state(&surface, xdg_toplevel::State::Maximized);
         #[cfg(feature = "flutter")]
@@ -1635,10 +1693,11 @@ impl XdgShellHandler for RuntimeState {
         if reassert_exact_toplevel_geometry(self, &surface) {
             return;
         }
-        self.wayland
-            .as_mut()
-            .expect("missing Wayland frontend")
-            .mark_client_geometry_state_request(surface.wl_surface());
+        let Some(frontend) = self.wayland.as_mut() else {
+            warn!("missing Wayland frontend; ignoring unfullscreen request");
+            return;
+        };
+        frontend.mark_client_geometry_state_request(surface.wl_surface());
         #[cfg(feature = "flutter")]
         let shell_geometry_locked = toplevel_shell_geometry_locked(self, &surface);
         let changed = clear_toplevel_state(self, &surface, xdg_toplevel::State::Fullscreen);
@@ -1658,18 +1717,18 @@ impl XdgShellHandler for RuntimeState {
                 .wayland
                 .as_ref()
                 .and_then(|frontend| frontend.window_for_root_surface(_surface.wl_surface()));
-            self.wayland
-                .as_mut()
-                .expect("missing Wayland frontend")
-                .set_surface_minimized(_surface.wl_surface().id(), true);
+            let Some(frontend) = self.wayland.as_mut() else {
+                warn!("missing Wayland frontend; ignoring minimize request");
+                return;
+            };
+            frontend.set_surface_minimized(_surface.wl_surface().id(), true);
             if set_toplevel_suspended(&_surface, true) {
                 _surface.send_pending_configure();
             }
             if let Some(window) = window.as_ref() {
-                self.wayland
-                    .as_mut()
-                    .expect("missing Wayland frontend")
-                    .remove_window_from_layout(window, false);
+                if let Some(frontend) = self.wayland.as_mut() {
+                    frontend.remove_window_from_layout(window, false);
+                }
                 release_window_focus(self, window);
             }
             queue_window_action(self, &_surface, WindowAction::Minimize);
@@ -1686,7 +1745,10 @@ impl XdgShellHandler for RuntimeState {
             return;
         };
         let mut grab = {
-            let frontend = self.wayland.as_mut().expect("missing Wayland frontend");
+            let Some(frontend) = self.wayland.as_mut() else {
+                warn!("missing Wayland frontend; ignoring XDG popup grab");
+                return;
+            };
             let tracked_root = frontend.space.elements().any(|window| {
                 window
                     .toplevel()
@@ -1712,7 +1774,10 @@ impl XdgShellHandler for RuntimeState {
 
         #[cfg(feature = "flutter")]
         {
-            let frontend = self.wayland.as_mut().expect("missing Wayland frontend");
+            let Some(frontend) = self.wayland.as_mut() else {
+                warn!("missing Wayland frontend; skipping popup grab cleanup");
+                return;
+            };
             frontend.client_pointer_capture = None;
             frontend.client_pointer_buttons.clear();
             frontend.client_pointer_presses.clear();
@@ -1749,18 +1814,21 @@ impl XdgShellHandler for RuntimeState {
     }
 
     fn toplevel_destroyed(&mut self, surface: ToplevelSurface) {
-        let window = self
-            .wayland
-            .as_ref()
-            .expect("missing Wayland frontend")
-            .space
-            .elements()
-            .find(|window| {
-                window
-                    .toplevel()
-                    .is_some_and(|toplevel| toplevel.wl_surface() == surface.wl_surface())
-            })
-            .cloned();
+        let window = self.wayland.as_ref().and_then(|frontend| {
+            frontend
+                .space
+                .elements()
+                .find(|window| {
+                    window
+                        .toplevel()
+                        .is_some_and(|toplevel| toplevel.wl_surface() == surface.wl_surface())
+                })
+                .cloned()
+        });
+        if self.wayland.is_none() {
+            warn!("missing Wayland frontend; skipping toplevel teardown");
+            return;
+        }
         let was_focused = window
             .as_ref()
             .is_some_and(|window| release_window_focus(self, window));
@@ -1771,7 +1839,10 @@ impl XdgShellHandler for RuntimeState {
         // Cleanup remains unconditional because role destruction can arrive
         // after Space has already lost the window.
         {
-            let frontend = self.wayland.as_mut().expect("missing Wayland frontend");
+            let Some(frontend) = self.wayland.as_mut() else {
+                warn!("missing Wayland frontend; skipping toplevel teardown");
+                return;
+            };
             if let Some(window) = window.as_ref() {
                 frontend.remove_window_from_layout(window, true);
             }
@@ -1787,7 +1858,10 @@ impl XdgShellHandler for RuntimeState {
     }
 
     fn popup_destroyed(&mut self, surface: PopupSurface) {
-        let frontend = self.wayland.as_mut().expect("missing Wayland frontend");
+        let Some(frontend) = self.wayland.as_mut() else {
+            warn!("missing Wayland frontend; skipping popup teardown");
+            return;
+        };
         frontend.remove_surface_state(surface.wl_surface(), false);
         // The Flutter path does not call WaylandFrontend::render(), where
         // PopupManager cleanup normally lives. Reap dead popup trees and grabs
@@ -1816,7 +1890,10 @@ impl XdgActivationHandler for RuntimeState {
             // construction through create_external_token.
             return false;
         };
-        let frontend = self.wayland.as_ref().expect("missing Wayland frontend");
+        let Some(frontend) = self.wayland.as_ref() else {
+            warn!("missing Wayland frontend; rejecting activation token");
+            return false;
+        };
         Seat::from_resource(&seat_resource) == Some(frontend.seat.clone())
             && frontend
                 .seat
@@ -1901,19 +1978,28 @@ fn handle_xdg_commit(popups: &mut PopupManager, space: &Space<Window>, surface: 
         .cloned()
     {
         let initial_configure_sent = with_states(surface, |states| {
-            states
-                .data_map
-                .get::<XdgToplevelSurfaceData>()
-                .expect("missing XDG toplevel state")
-                .lock()
-                .expect("poisoned XDG toplevel state")
-                .initial_configure_sent
+            let Some(data) = states.data_map.get::<XdgToplevelSurfaceData>() else {
+                // The surface already matched a mapped toplevel, so a missing
+                // role state means the client committed at a role teardown
+                // boundary; skip the initial configure instead of panicking.
+                warn!("XDG commit on surface without toplevel state");
+                return true;
+            };
+            match data.lock() {
+                Ok(data) => data.initial_configure_sent,
+                Err(_) => {
+                    warn!("poisoned XDG toplevel state");
+                    true
+                }
+            }
         });
         if !initial_configure_sent {
-            window
-                .toplevel()
-                .expect("XDG window without toplevel")
-                .send_configure();
+            match window.toplevel() {
+                Some(toplevel) => {
+                    toplevel.send_configure();
+                }
+                None => warn!("XDG window without toplevel"),
+            }
         }
     }
 
