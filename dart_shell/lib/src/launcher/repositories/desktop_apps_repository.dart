@@ -8,8 +8,8 @@ import '../models/desktop_app.dart';
 
 class DesktopAppsRepository {
   DesktopAppsRepository({required RuntimePaths paths, this.iconThemeName = ''})
-      // Private field; expose any future reads through a public getter.
-      : _paths = paths;
+    // Private field; expose any future reads through a public getter.
+    : _paths = paths;
 
   final RuntimePaths _paths;
 
@@ -71,6 +71,30 @@ class DesktopAppsRepository {
   }
 
   Future<List<DesktopApp>> loadApplications() async {
+    return _parseDesktopFiles(await _listDesktopFiles());
+  }
+
+  /// Scans the .desktop file set and re-parses it only when it differs from
+  /// [knownFingerprint], a value previously returned inside
+  /// [DesktopAppsLoadResult.fingerprint]. When the fingerprint still matches,
+  /// [DesktopAppsLoadResult.apps] is null and the caller keeps its existing
+  /// list — parsing entries and resolving icons dominate the scan cost, so
+  /// unchanged scans stay cheap.
+  Future<DesktopAppsLoadResult> loadApplicationsIfChanged(
+    String? knownFingerprint,
+  ) async {
+    final filesById = await _listDesktopFiles();
+    final fingerprint = await _desktopFilesFingerprint(filesById);
+    if (fingerprint == knownFingerprint) {
+      return DesktopAppsLoadResult.unchanged(fingerprint);
+    }
+    return DesktopAppsLoadResult.refreshed(
+      fingerprint,
+      await _parseDesktopFiles(filesById),
+    );
+  }
+
+  Future<Map<String, File>> _listDesktopFiles() async {
     final filesById = <String, File>{};
     for (final dir in _paths.desktopApplicationDirs()) {
       if (!await dir.exists()) {
@@ -97,7 +121,34 @@ class DesktopAppsRepository {
         filesById.putIfAbsent(desktopFileId, () => File(entity.path));
       }
     }
+    return filesById;
+  }
 
+  /// Fingerprint over the effective .desktop file set: the winning file's
+  /// path, size, mtime and ctime per desktop id. Any add, edit, removal or
+  /// shadowing change alters it without parsing a single entry; ctime
+  /// catches rewrites that preserve mtime (e.g. `cp -p`).
+  Future<String> _desktopFilesFingerprint(Map<String, File> filesById) async {
+    final parts = <String>[];
+    for (final entry in filesById.entries) {
+      try {
+        final stat = await entry.value.stat();
+        parts.add(
+          '${entry.key}=${entry.value.path}:${stat.size}:'
+          '${stat.modified.microsecondsSinceEpoch}:'
+          '${stat.changed.microsecondsSinceEpoch}',
+        );
+      } on FileSystemException {
+        parts.add('${entry.key}=gone');
+      }
+    }
+    parts.sort();
+    return parts.join(';');
+  }
+
+  Future<List<DesktopApp>> _parseDesktopFiles(
+    Map<String, File> filesById,
+  ) async {
     final iconCache = <String, String?>{};
     final apps = <DesktopApp>[];
     for (final entry in filesById.entries) {
@@ -477,6 +528,21 @@ class DesktopAppsRepository {
     }
     return null;
   }
+}
+
+/// Outcome of [DesktopAppsRepository.loadApplicationsIfChanged]: the
+/// fingerprint of the .desktop files that were scanned, plus the parsed
+/// applications when it differed from the caller's known fingerprint.
+class DesktopAppsLoadResult {
+  const DesktopAppsLoadResult.unchanged(this.fingerprint) : apps = null;
+
+  const DesktopAppsLoadResult.refreshed(this.fingerprint, this.apps);
+
+  final String fingerprint;
+
+  /// Null when the scan matched the caller's fingerprint and nothing was
+  /// re-parsed.
+  final List<DesktopApp>? apps;
 }
 
 class DesktopAppsWatcher {

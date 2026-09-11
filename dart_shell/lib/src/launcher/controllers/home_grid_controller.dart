@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:isolate';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../local_apps/local_flutter_application.dart';
@@ -114,16 +115,14 @@ class HomeGridState {
 
 class HomeGridController extends AsyncNotifier<HomeGridState> {
   static const Duration _periodicRefreshInterval = Duration(minutes: 5);
-  static const Duration _visibleRefreshMinInterval = Duration(seconds: 45);
   static const Duration _filesystemRefreshDebounce = Duration(
     milliseconds: 200,
   );
 
   Timer? _desktopRefreshTimer;
-  Timer? _activationRefreshTimer;
   Timer? _filesystemRefreshTimer;
   DesktopAppsWatcher? _desktopAppsWatcher;
-  DateTime? _lastDesktopRefresh;
+  String? _desktopAppsFingerprint;
   bool _desktopRefreshInFlight = false;
   bool _desktopRefreshTriggersStarted = false;
   bool _desktopAppsDirty = false;
@@ -133,21 +132,29 @@ class HomeGridController extends AsyncNotifier<HomeGridState> {
   @override
   Future<HomeGridState> build() async {
     final generation = ++_buildGeneration;
+    // The previous generation's onDispose has already released these, but a
+    // rebuild reuses this notifier instance — cancel defensively like the
+    // sibling controllers so a skipped disposal can never leak a timer or
+    // watch into the new generation.
+    _desktopRefreshTimer?.cancel();
     _desktopRefreshTimer = null;
-    _activationRefreshTimer = null;
+    _filesystemRefreshTimer?.cancel();
     _filesystemRefreshTimer = null;
+    unawaited(_desktopAppsWatcher?.dispose());
     _desktopAppsWatcher = null;
-    _lastDesktopRefresh = null;
+    _desktopAppsFingerprint = null;
     _desktopRefreshInFlight = false;
     _desktopRefreshTriggersStarted = false;
     _desktopAppsDirty = false;
-    _launcherActive = true;
+    // _launcherActive intentionally keeps its last known value across
+    // dependency-driven rebuilds: Riverpod reuses this notifier instance and
+    // HomeSurface only re-syncs on actual visibility changes, so resetting it
+    // here would silently revive the periodic scan while the launcher is
+    // still hidden.
     ref.onDispose(() {
       if (_buildGeneration == generation) {
         _buildGeneration++;
       }
-      _activationRefreshTimer?.cancel();
-      _activationRefreshTimer = null;
       _desktopRefreshTimer?.cancel();
       _desktopRefreshTimer = null;
       _filesystemRefreshTimer?.cancel();
@@ -162,8 +169,18 @@ class HomeGridController extends AsyncNotifier<HomeGridState> {
         .watch(localFlutterApplicationRegistryProvider)
         .applications
         .toList(growable: false);
+    // On seamless rebuilds state still holds the previous AsyncData, so a
+    // refreshDesktopApps call would otherwise slip past its guards and race
+    // this isolate load. Hold the in-flight flag for the whole load; skipped
+    // refreshes lose nothing because this result writes the newest data.
+    _desktopRefreshInFlight = true;
     try {
-      final apps = await _loadApplications(appsRepository, reason: 'initial');
+      final loadResult = await _loadApplications(
+        appsRepository,
+        reason: 'initial',
+      );
+      // The fingerprint starts null, so the initial scan always parses.
+      final apps = loadResult.apps!;
       final savedLayout = await layoutRepository.readSavedLayout();
       final slots = HomeGridLayout.initialSlotsForApps(
         apps,
@@ -173,7 +190,7 @@ class HomeGridController extends AsyncNotifier<HomeGridState> {
       if (!_isBuildActive(generation)) {
         return HomeGridState(slots: slots);
       }
-      _lastDesktopRefresh = DateTime.now();
+      _desktopAppsFingerprint = loadResult.fingerprint;
       if (_savedLayoutNeedsRefresh(apps, localApps, savedLayout, slots)) {
         unawaited(layoutRepository.saveLayout(slots));
       }
@@ -181,6 +198,13 @@ class HomeGridController extends AsyncNotifier<HomeGridState> {
       return HomeGridState(slots: slots);
     } on Object catch (error, stackTrace) {
       Error.throwWithStackTrace(error, stackTrace);
+    } finally {
+      if (_isBuildActive(generation)) {
+        _desktopRefreshInFlight = false;
+        if (_desktopAppsDirty && _launcherActive) {
+          _scheduleFilesystemRefresh();
+        }
+      }
     }
   }
 
@@ -193,14 +217,14 @@ class HomeGridController extends AsyncNotifier<HomeGridState> {
       return;
     }
 
-    final lastRefresh = _lastDesktopRefresh;
-    if (reason == 'launcher-visible' &&
-        lastRefresh != null &&
-        DateTime.now().difference(lastRefresh) < _visibleRefreshMinInterval) {
-      return;
-    }
-
     if (_desktopRefreshInFlight) {
+      // Periodic ticks are droppable — the in-flight load supersedes them.
+      // Other triggers (activation, manual, filesystem) must not be lost:
+      // mark the set dirty so the in-flight side schedules a follow-up once
+      // it finishes instead of silently dropping the refresh request.
+      if (reason != 'timer') {
+        _desktopAppsDirty = true;
+      }
       return;
     }
 
@@ -208,14 +232,26 @@ class HomeGridController extends AsyncNotifier<HomeGridState> {
     _desktopAppsDirty = false;
     _desktopRefreshInFlight = true;
     try {
-      final apps = await _loadApplications(
+      final loadResult = await _loadApplications(
         ref.read(desktopAppsRepositoryProvider),
         reason: reason,
       );
       if (!_isBuildActive(generation)) {
         return;
       }
-      _lastDesktopRefresh = DateTime.now();
+      if (!_launcherActive && reason != 'manual') {
+        // The launcher hid while the scan was in flight: drop the result
+        // rather than write state nobody can see. The immediate refresh on
+        // the next activation picks the change back up.
+        return;
+      }
+      final apps = loadResult.apps;
+      if (apps == null) {
+        // The .desktop fingerprint still matches; the parsed list and the
+        // layout derived from it remain current.
+        return;
+      }
+      _desktopAppsFingerprint = loadResult.fingerprint;
       final current = state.asData?.value;
       if (current == null) {
         return;
@@ -254,6 +290,15 @@ class HomeGridController extends AsyncNotifier<HomeGridState> {
       );
       state = AsyncData(current.copyWith(slots: slots));
       unawaited(ref.read(homeLayoutRepositoryProvider).saveLayout(slots));
+    } on Object catch (error) {
+      // A failed scan keeps the previous grid and fingerprint. One debounced
+      // retry is queued via the dirty flag unless this was already the
+      // filesystem follow-up, in which case the next watcher event or
+      // periodic tick retries — a persistent failure must not hot-loop.
+      debugPrint('Desktop applications refresh failed: $error');
+      if (reason != 'filesystem') {
+        _desktopAppsDirty = true;
+      }
     } finally {
       if (_isBuildActive(generation)) {
         _desktopRefreshInFlight = false;
@@ -270,22 +315,23 @@ class HomeGridController extends AsyncNotifier<HomeGridState> {
     }
 
     _launcherActive = active;
-    _activationRefreshTimer?.cancel();
-    _activationRefreshTimer = null;
-    if (active) {
-      if (_desktopAppsDirty) {
-        _scheduleFilesystemRefresh();
-        return;
-      }
-      final generation = _buildGeneration;
-      _activationRefreshTimer = Timer(const Duration(milliseconds: 750), () {
-        if (!_isBuildActive(generation)) {
-          return;
-        }
-        _activationRefreshTimer = null;
-        unawaited(refreshDesktopApps(reason: 'launcher-visible'));
-      });
+    if (!active) {
+      // While the launcher is hidden the periodic scan stops entirely; the
+      // watcher keeps marking _desktopAppsDirty so the next activation knows
+      // whether anything changed underneath.
+      _desktopRefreshTimer?.cancel();
+      _desktopRefreshTimer = null;
+      _filesystemRefreshTimer?.cancel();
+      _filesystemRefreshTimer = null;
+      return;
     }
+    _restartDesktopRefreshTimer();
+    // Becoming visible refreshes immediately: the fingerprint check keeps an
+    // unchanged scan cheap and the in-flight gate deduplicates rapid
+    // hide/show toggles. A pending filesystem debounce is superseded by it.
+    _filesystemRefreshTimer?.cancel();
+    _filesystemRefreshTimer = null;
+    unawaited(refreshDesktopApps(reason: 'launcher-visible'));
   }
 
   Future<void> _startDesktopRefreshTriggers(
@@ -293,36 +339,58 @@ class HomeGridController extends AsyncNotifier<HomeGridState> {
     DesktopAppsRepository repository,
   ) async {
     try {
-      if (_desktopRefreshTriggersStarted) {
+      // The generation check guards against a stale call: an invalidated
+      // build must never mark triggers started or a newer build would
+      // return early and lose its timer and watcher.
+      if (_desktopRefreshTriggersStarted || !_isBuildActive(generation)) {
         return;
       }
-      _desktopRefreshTriggersStarted = true;
-      _desktopRefreshTimer = Timer.periodic(_periodicRefreshInterval, (_) {
-        if (!_isBuildActive(generation) || !_launcherActive) {
-          return;
-        }
-        unawaited(refreshDesktopApps(reason: 'timer'));
-      });
-      final watcher = await repository.watchApplications(
-        onChanged: () {
-          if (!_isBuildActive(generation)) {
-            return;
-          }
-          _desktopAppsDirty = true;
-          if (_launcherActive) {
-            _scheduleFilesystemRefresh();
-          }
-        },
-      );
-      if (!_isBuildActive(generation) || !_desktopRefreshTriggersStarted) {
-        await watcher.dispose();
+      DesktopAppsWatcher? watcher;
+      try {
+        watcher = await repository.watchApplications(
+          onChanged: () {
+            if (!_isBuildActive(generation)) {
+              return;
+            }
+            _desktopAppsDirty = true;
+            if (_launcherActive) {
+              _scheduleFilesystemRefresh();
+            }
+          },
+        );
+      } on Object {
+        // Filesystem notifications are best effort. The periodic timer below
+        // is the fallback when the platform cannot establish a watcher.
+      }
+      if (!_isBuildActive(generation)) {
+        // A newer build took over during the await: dispose only the watcher
+        // this call obtained and leave the flag and timers to that build.
+        await watcher?.dispose();
         return;
       }
+      // Commit flag, watcher and periodic timer only after the generation is
+      // confirmed, so a superseded call can never half-establish state.
       _desktopAppsWatcher = watcher;
+      _desktopRefreshTriggersStarted = true;
+      _restartDesktopRefreshTimer();
     } on Object {
-      // Filesystem notifications are best effort. Keep the periodic timer as
-      // the fallback when the platform cannot establish a watcher.
+      // Trigger setup is best effort; a later activation or rebuild retries.
     }
+  }
+
+  void _restartDesktopRefreshTimer() {
+    _desktopRefreshTimer?.cancel();
+    _desktopRefreshTimer = null;
+    if (!_launcherActive || !_desktopRefreshTriggersStarted) {
+      return;
+    }
+    final generation = _buildGeneration;
+    _desktopRefreshTimer = Timer.periodic(_periodicRefreshInterval, (_) {
+      if (!_isBuildActive(generation) || !_launcherActive) {
+        return;
+      }
+      unawaited(refreshDesktopApps(reason: 'timer'));
+    });
   }
 
   void _scheduleFilesystemRefresh() {
@@ -336,12 +404,13 @@ class HomeGridController extends AsyncNotifier<HomeGridState> {
   bool _isBuildActive(int generation) =>
       ref.mounted && generation == _buildGeneration;
 
-  Future<List<DesktopApp>> _loadApplications(
+  Future<DesktopAppsLoadResult> _loadApplications(
     DesktopAppsRepository repository, {
     required String reason,
   }) {
+    final fingerprint = _desktopAppsFingerprint;
     return Isolate.run(
-      repository.loadApplications,
+      () => repository.loadApplicationsIfChanged(fingerprint),
       debugName: 'denia-launcher-desktop-$reason',
     );
   }
