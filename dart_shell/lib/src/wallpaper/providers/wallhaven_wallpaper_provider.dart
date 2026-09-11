@@ -13,14 +13,16 @@ class WallhavenWallpaperProvider implements WallpaperProvider {
     required this._downloadDirectory,
     String apiKey = '',
     HttpClient? httpClient,
+    this._requestTimeout = _defaultRequestTimeout,
+    this._downloadTimeout = _defaultDownloadTimeout,
   }) : _apiKey = apiKey.trim(),
        _httpClient = httpClient ?? HttpClient();
 
   static final Uri _searchEndpoint = Uri.parse(
     'https://wallhaven.cc/api/v1/search',
   );
-  static const Duration _requestTimeout = Duration(seconds: 30);
-  static const Duration _downloadTimeout = Duration(seconds: 60);
+  static const Duration _defaultRequestTimeout = Duration(seconds: 30);
+  static const Duration _defaultDownloadTimeout = Duration(seconds: 60);
   static const int _maximumSearchBytes = 2 * 1024 * 1024;
   static const int _maximumWallpaperBytes = 64 * 1024 * 1024;
   static const List<String> _queryBlacklist = <String>[
@@ -32,6 +34,8 @@ class WallhavenWallpaperProvider implements WallpaperProvider {
   final Directory _downloadDirectory;
   final String _apiKey;
   final HttpClient _httpClient;
+  final Duration _requestTimeout;
+  final Duration _downloadTimeout;
 
   @override
   String get id => 'wallhaven';
@@ -57,27 +61,35 @@ class WallhavenWallpaperProvider implements WallpaperProvider {
       if (_apiKey.isNotEmpty) 'apikey': _apiKey,
     };
     final uri = _searchEndpoint.replace(queryParameters: parameters);
-    final request = await _httpClient.getUrl(uri).timeout(_requestTimeout);
+    final request = await _openRequest(_httpClient, uri, _requestTimeout);
     request.headers
       ..set(HttpHeaders.userAgentHeader, 'denial-wallpaper-provider/1.0')
       ..set(HttpHeaders.acceptHeader, 'application/json');
-    final response = await request.close().timeout(_requestTimeout);
+    final response = await _closeRequest(request, _requestTimeout);
     if (response.statusCode != HttpStatus.ok) {
-      await response.drain<void>();
+      await _drainResponse(response, _requestTimeout);
       throw HttpException(
         'Wallhaven returned HTTP ${response.statusCode}',
         uri: uri,
       );
     }
     if (response.contentLength > _maximumSearchBytes) {
-      await response.drain<void>();
+      _releaseResponse(response);
       throw const FormatException('Wallhaven response is too large');
     }
 
-    final body = await response
-        .transform(utf8.decoder)
-        .join()
-        .timeout(_requestTimeout);
+    final String body;
+    try {
+      // Stream.timeout cancels the body subscription, which is what releases
+      // the connection; a Future.timeout on join() would leave it consuming.
+      body = await response
+          .timeout(_requestTimeout)
+          .transform(utf8.decoder)
+          .join();
+    } on Object {
+      _releaseResponse(response);
+      rethrow;
+    }
     if (body.length > _maximumSearchBytes) {
       throw const FormatException('Wallhaven response is too large');
     }
@@ -173,14 +185,14 @@ class WallhavenWallpaperProvider implements WallpaperProvider {
     }
 
     final temporary = File('${output.path}.part');
-    final request = await _httpClient.getUrl(uri).timeout(_downloadTimeout);
+    final request = await _openRequest(_httpClient, uri, _downloadTimeout);
     request.headers.set(
       HttpHeaders.userAgentHeader,
       'denial-wallpaper-provider/1.0',
     );
-    final response = await request.close().timeout(_downloadTimeout);
+    final response = await _closeRequest(request, _downloadTimeout);
     if (response.statusCode != HttpStatus.ok) {
-      await response.drain<void>();
+      await _drainResponse(response, _downloadTimeout);
       throw HttpException(
         'Wallpaper download returned HTTP ${response.statusCode}',
         uri: uri,
@@ -188,7 +200,7 @@ class WallhavenWallpaperProvider implements WallpaperProvider {
     }
     final expectedBytes = response.contentLength;
     if (expectedBytes > _maximumWallpaperBytes) {
-      await response.drain<void>();
+      _releaseResponse(response);
       throw const FormatException('Wallpaper is larger than 64 MiB');
     }
 
@@ -214,6 +226,9 @@ class WallhavenWallpaperProvider implements WallpaperProvider {
       await temporary.rename(output.path);
       onProgress?.call(1.0);
       return WallpaperResource.file(output.path);
+    } on Object {
+      _releaseResponse(response);
+      rethrow;
     } finally {
       await sink?.close();
       if (await temporary.exists()) {
@@ -225,6 +240,75 @@ class WallhavenWallpaperProvider implements WallpaperProvider {
   @override
   void dispose() {
     _httpClient.close(force: true);
+  }
+}
+
+Future<HttpClientRequest> _openRequest(
+  HttpClient client,
+  Uri uri,
+  Duration timeout,
+) async {
+  final pending = client.getUrl(uri);
+  try {
+    return await pending.timeout(timeout);
+  } on TimeoutException {
+    // getUrl can still finish after the timeout; abort the late request so
+    // its connection is not parked on the idle pool.
+    pending.then<void>(_abortRequest).ignore();
+    rethrow;
+  }
+}
+
+Future<HttpClientResponse> _closeRequest(
+  HttpClientRequest request,
+  Duration timeout,
+) async {
+  final pending = request.close();
+  try {
+    return await pending.timeout(timeout);
+  } on TimeoutException {
+    // A response landing after the timeout would sit unread and park the
+    // connection until the idle timeout; abort now and drain whatever still
+    // slips through so the socket is released either way.
+    _abortRequest(request);
+    pending
+        .then<void>((response) => _drainResponse(response, timeout))
+        .ignore();
+    rethrow;
+  }
+}
+
+void _abortRequest(HttpClientRequest request) {
+  try {
+    request.abort();
+  } on Object {
+    // Abort racing a completed request is best effort only.
+  }
+}
+
+/// Bounded drain for error responses: the stream-level timeout cancels the
+/// body subscription instead of leaving it parked on the socket, and a
+/// stalled body falls back to detach + destroy.
+Future<void> _drainResponse(
+  HttpClientResponse response,
+  Duration timeout,
+) async {
+  try {
+    await response.timeout(timeout).drain<void>();
+  } on Object {
+    _releaseResponse(response);
+  }
+}
+
+/// Called when consuming [response]'s body fails or times out. Cancelling
+/// the body subscription asks the client to destroy the connection, but
+/// that happens asynchronously on the parser's teardown path; detach +
+/// destroy releases the socket deterministically here.
+void _releaseResponse(HttpClientResponse response) {
+  try {
+    response.detachSocket().then<void>((socket) => socket.destroy()).ignore();
+  } on Object {
+    // The cancelled subscription already released the connection.
   }
 }
 

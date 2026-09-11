@@ -9,23 +9,10 @@ class HomeBatteryDischargeSeries {
   factory HomeBatteryDischargeSeries({
     required List<HomeBatteryDischargePoint> points,
   }) {
-    final bounded = _boundedPoints(points);
-    return HomeBatteryDischargeSeries._(
-      points: bounded,
-      graph: HomeBatteryDischargeGraphViewModel.fromPoints(bounded),
-      averageDrawMa60: _averageDrawMa(
-        bounded,
-        window: const Duration(seconds: 60),
-        dischargingOnly: false,
-      ),
-    );
+    return HomeBatteryDischargeSeries._(points: _boundedPoints(points));
   }
 
-  const HomeBatteryDischargeSeries._({
-    required this.points,
-    required this.graph,
-    required this.averageDrawMa60,
-  });
+  HomeBatteryDischargeSeries._({required this.points});
 
   static final empty = HomeBatteryDischargeSeries(points: const []);
   static const int _maxReadBytes = 128 * 1024;
@@ -63,8 +50,17 @@ class HomeBatteryDischargeSeries {
   }
 
   final List<HomeBatteryDischargePoint> points;
-  final HomeBatteryDischargeGraphViewModel graph;
-  final int? averageDrawMa60;
+
+  /// Derived views are built on first read: emissions that are never
+  /// rendered, and consumers that only inspect [points] or [latest], skip
+  /// the graph min/max scan and the trailing-window average entirely.
+  late final HomeBatteryDischargeGraphViewModel graph =
+      HomeBatteryDischargeGraphViewModel.fromPoints(points);
+  late final int? averageDrawMa60 = _averageDrawMa(
+    points,
+    window: const Duration(seconds: 60),
+    dischargingOnly: false,
+  );
 
   HomeBatteryDischargePoint? get latest {
     return points.isEmpty ? null : points.last;
@@ -170,7 +166,8 @@ class HomeBatteryDischargeGraphViewModel {
 ///
 /// Filesystem events are authoritative. The slow watchdog only recovers a
 /// dropped watch or missed rotation; unchanged files cost one metadata read
-/// and never republish the series.
+/// and never republish the series. While nobody listens the watch and the
+/// watchdog stay paused; the next listener re-reads the tail from scratch.
 class HomeBatteryDischargeTailReader {
   HomeBatteryDischargeTailReader({
     File? file,
@@ -178,15 +175,19 @@ class HomeBatteryDischargeTailReader {
     this.recoveryInterval = const Duration(minutes: 1),
   }) : file = file ?? File('/run/denia-powerd/battery_discharge.tsv'),
        _current = HomeBatteryDischargeSeries.empty {
-    _controller.onListen = () => unawaited(_start());
+    _controller.onListen = () => unawaited(_start(++_startGeneration));
+    _controller.onCancel = _pause;
   }
 
   final File file;
   final Duration eventDebounce;
   final Duration recoveryInterval;
 
+  // Broadcast because [snapshots] is a public surface: a second listener
+  // must not trip StateError, and onCancel lets the reader pause while
+  // unlistened instead of dying with a single-use stream.
   final StreamController<HomeBatteryDischargeSeries> _controller =
-      StreamController<HomeBatteryDischargeSeries>();
+      StreamController<HomeBatteryDischargeSeries>.broadcast();
   StreamSubscription<FileSystemEvent>? _watchSubscription;
   Timer? _eventTimer;
   Timer? _recoveryTimer;
@@ -197,6 +198,8 @@ class HomeBatteryDischargeTailReader {
   bool _started = false;
   bool _disposed = false;
   bool _watchSetupPending = false;
+  int _startGeneration = 0;
+  int _watchSetupGeneration = 0;
   bool _refreshing = false;
   bool _refreshAgain = false;
   bool _resetRequested = false;
@@ -207,50 +210,92 @@ class HomeBatteryDischargeTailReader {
   @visibleForTesting
   bool get debugHasActiveWatch => _watchSubscription != null;
 
-  Future<void> _start() async {
+  @visibleForTesting
+  bool get debugRecoveryTimerActive => _recoveryTimer?.isActive ?? false;
+
+  Future<void> _start(int generation) async {
     if (_started || _disposed) {
       return;
     }
     _started = true;
     await _ensureWatch();
-    await _refresh(reset: true, forceEmission: true);
-    if (_disposed) {
+    if (_disposed || !_started || generation != _startGeneration) {
       return;
     }
-    _recoveryTimer = Timer.periodic(recoveryInterval, (_) {
+    await _refresh(reset: true, forceEmission: true);
+    if (_disposed || !_started || generation != _startGeneration) {
+      return;
+    }
+    _recoveryTimer ??= Timer.periodic(recoveryInterval, (_) {
       unawaited(_ensureWatch());
       unawaited(_refresh());
     });
   }
 
-  Future<void> _ensureWatch() async {
-    if (_disposed || _watchSubscription != null || _watchSetupPending) {
+  /// Stops every polling resource while the stream has no listeners. The
+  /// retained tail position and the reset on the next listen keep the
+  /// series correct across whatever the file did in between.
+  void _pause() {
+    if (_disposed || _controller.hasListener) {
       return;
     }
+    _started = false;
+    // Invalidate any setup in flight: its late resume must not create a
+    // watch, and its finally must not clear a newer generation's flag.
+    _watchSetupGeneration += 1;
+    _watchSetupPending = false;
+    _recoveryTimer?.cancel();
+    _recoveryTimer = null;
+    _eventTimer?.cancel();
+    _eventTimer = null;
+    _dropWatch();
+  }
+
+  Future<void> _ensureWatch() async {
+    if (_disposed ||
+        !_started ||
+        _watchSubscription != null ||
+        _watchSetupPending) {
+      return;
+    }
+    final generation = ++_watchSetupGeneration;
     _watchSetupPending = true;
     try {
       final directory = file.parent;
       if (!await directory.exists()) {
         return;
       }
-      if (_disposed || _watchSubscription != null) {
+      if (_disposed ||
+          !_started ||
+          _watchSubscription != null ||
+          generation != _watchSetupGeneration) {
         return;
       }
-      _watchSubscription = directory.watch().listen(
+      StreamSubscription<FileSystemEvent>? subscription;
+      subscription = directory.watch().listen(
         _handleFileEvent,
-        onError: (_) => _dropWatch(),
-        onDone: _dropWatch,
+        onError: (_) => _dropWatch(subscription),
+        onDone: () => _dropWatch(subscription),
         cancelOnError: true,
       );
+      _watchSubscription = subscription;
     } on FileSystemException {
       // The recovery watchdog retries when powerd creates its runtime folder.
     } finally {
-      _watchSetupPending = false;
+      if (generation == _watchSetupGeneration) {
+        _watchSetupPending = false;
+      }
     }
   }
 
-  void _dropWatch() {
+  /// [expected] pins the drop to the subscription generation that raised it,
+  /// so a late onDone/onError from a superseded watch cannot cancel its
+  /// replacement.
+  void _dropWatch([StreamSubscription<FileSystemEvent>? expected]) {
     final subscription = _watchSubscription;
+    if (expected != null && !identical(subscription, expected)) {
+      return;
+    }
     _watchSubscription = null;
     if (subscription != null) {
       unawaited(subscription.cancel());
@@ -258,7 +303,9 @@ class HomeBatteryDischargeTailReader {
   }
 
   void _handleFileEvent(FileSystemEvent event) {
-    if (_disposed || event.path != file.path) {
+    // A watch that is being dropped can still deliver events; while paused
+    // they must not arm the debounce timer.
+    if (_disposed || !_started || event.path != file.path) {
       return;
     }
     final reset =
