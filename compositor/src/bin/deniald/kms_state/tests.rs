@@ -1,6 +1,11 @@
 #[cfg(feature = "flutter")]
 use super::ensure_resident_jit_engine_matches;
-use super::{DrmModeCloseFb, ScanoutIdentity, ScanoutIdentityError, validate_scanout_identities};
+use super::{
+    DrmModeCloseFb, MAX_SCANOUT_POOL_BYTES, PixelSize, ScanoutIdentity, ScanoutIdentityError,
+    parse_scanout_pool_budget, validate_scanout_identities, validate_scanout_pool_allocation,
+};
+use std::ffi::OsStr;
+use std::os::unix::ffi::OsStrExt;
 
 #[cfg(feature = "flutter")]
 #[test]
@@ -74,3 +79,52 @@ fn drm_mode_close_fb_layout_and_fields() {
     assert_eq!(closefb.pad, 0);
 }
 
+#[test]
+fn scanout_pool_budget_counts_offscreen_linear_targets() {
+    // An 8192x8192 XR24 buffer is 268435456 bytes; a pool of 3 needs
+    // 805306368 bytes of scanout storage, which fits the default budget
+    // only until the per-buffer linear render target is counted too.
+    let size = PixelSize::new(8192, 8192);
+    assert!(validate_scanout_pool_allocation(size, 3, false, MAX_SCANOUT_POOL_BYTES).is_ok());
+    let error = validate_scanout_pool_allocation(size, 3, true, MAX_SCANOUT_POOL_BYTES)
+        .expect_err("offscreen linear render targets must count toward the pool budget");
+    let message = error.to_string();
+    assert!(message.contains("805306368"));
+    assert!(message.contains("1610612736"));
+    assert!(message.contains("1073741824"));
+    assert!(message.contains("linear"));
+}
+
+#[test]
+fn scanout_pool_budget_honours_an_explicit_limit() {
+    let size = PixelSize::new(1920, 1080);
+    // 1920x1080x4x3 = 24883200 bytes of scanout; a limit just below that
+    // rejects even without linear targets.
+    assert!(validate_scanout_pool_allocation(size, 3, false, 24_883_200).is_ok());
+    assert!(validate_scanout_pool_allocation(size, 3, false, 24_883_199).is_err());
+    // A limit between the scanout-only and doubled totals rejects only the
+    // offscreen-blit configuration.
+    assert!(validate_scanout_pool_allocation(size, 3, false, 40_000_000).is_ok());
+    assert!(validate_scanout_pool_allocation(size, 3, true, 40_000_000).is_err());
+}
+
+#[test]
+fn scanout_pool_budget_environment_parsing() {
+    assert_eq!(
+        parse_scanout_pool_budget(None),
+        Some(MAX_SCANOUT_POOL_BYTES)
+    );
+    assert_eq!(parse_scanout_pool_budget(Some(OsStr::new(""))), None);
+    assert_eq!(parse_scanout_pool_budget(Some(OsStr::new("  "))), None);
+    assert_eq!(
+        parse_scanout_pool_budget(Some(OsStr::new("  536870912 "))),
+        Some(536870912)
+    );
+    assert_eq!(
+        parse_scanout_pool_budget(Some(OsStr::from_bytes(b"\xff"))),
+        None
+    );
+    assert_eq!(parse_scanout_pool_budget(Some(OsStr::new("junk"))), None);
+    assert_eq!(parse_scanout_pool_budget(Some(OsStr::new("-1"))), None);
+    assert_eq!(parse_scanout_pool_budget(Some(OsStr::new("0"))), None);
+}

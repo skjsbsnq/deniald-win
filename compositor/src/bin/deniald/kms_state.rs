@@ -16,6 +16,8 @@ use smithay::backend::egl::EGLContext;
 const SCANOUT_BYTES_PER_PIXEL: u64 = 4;
 const MAX_SCANOUT_DIMENSION: u32 = 16_384;
 const MAX_SCANOUT_POOL_BYTES: u64 = 1024 * 1024 * 1024;
+const SCANOUT_POOL_BUDGET_ENV: &str = "DENIAL_MAX_SCANOUT_POOL_BYTES";
+static INVALID_POOL_BUDGET_WARNED: AtomicBool = AtomicBool::new(false);
 const MAX_SCANOUT_BUFFERS: usize = 49;
 #[cfg(feature = "flutter")]
 pub(super) const OUTPUT_POOL_LENGTH: usize = 3;
@@ -723,8 +725,10 @@ impl OutputSwapchains {
             return Err("physical output pools do not match the active scanouts".into());
         }
 
+        let budget = scanout_pool_budget();
         let mut outputs = Vec::with_capacity(plans.len());
-        let mut allocated_bytes = 0u64;
+        let mut allocated_scanout_bytes = 0u64;
+        let mut allocated_linear_bytes = 0u64;
         for plan in plans {
             let scanout = scanouts
                 .iter()
@@ -741,17 +745,32 @@ impl OutputSwapchains {
                 )
                 .into());
             }
-            let pool_bytes = u64::from(plan.target_size.width)
+            // Each offscreen-blit scanout buffer also owns a full-size LINEAR
+            // render target, so the pool's real footprint doubles.
+            let buffer_bytes = u64::from(plan.target_size.width)
                 .checked_mul(u64::from(plan.target_size.height))
                 .and_then(|pixels| pixels.checked_mul(SCANOUT_BYTES_PER_PIXEL))
-                .and_then(|bytes| bytes.checked_mul(OUTPUT_POOL_LENGTH as u64))
                 .ok_or("physical output pool byte count overflow")?;
-            allocated_bytes = allocated_bytes
-                .checked_add(pool_bytes)
+            let scanout_bytes = buffer_bytes
+                .checked_mul(OUTPUT_POOL_LENGTH as u64)
+                .ok_or("physical output pool byte count overflow")?;
+            let linear_bytes = if linear_render_targets {
+                scanout_bytes
+            } else {
+                0
+            };
+            allocated_scanout_bytes = allocated_scanout_bytes
+                .checked_add(scanout_bytes)
                 .ok_or("physical output pool aggregate byte count overflow")?;
-            if allocated_bytes > MAX_SCANOUT_POOL_BYTES {
+            allocated_linear_bytes = allocated_linear_bytes
+                .checked_add(linear_bytes)
+                .ok_or("physical output pool aggregate byte count overflow")?;
+            let allocated_bytes = allocated_scanout_bytes
+                .checked_add(allocated_linear_bytes)
+                .ok_or("physical output pool aggregate byte count overflow")?;
+            if allocated_bytes > budget {
                 return Err(format!(
-                    "physical output pools need {allocated_bytes} bytes, above the {MAX_SCANOUT_POOL_BYTES}-byte safety limit"
+                    "physical output pools need {allocated_bytes} bytes ({allocated_scanout_bytes} scanout + {allocated_linear_bytes} linear render target), above the {budget}-byte safety limit"
                 )
                 .into());
             }
@@ -1423,7 +1442,7 @@ fn allocate_scanout_pool(
     modifiers: &[Modifier],
     linear_render_targets: bool,
 ) -> Result<Vec<ScanoutBuffer>, Box<dyn Error>> {
-    validate_scanout_pool_allocation(size, length)?;
+    validate_scanout_pool_allocation(size, length, linear_render_targets, scanout_pool_budget())?;
     let optimized = modifiers
         .iter()
         .copied()
@@ -1466,7 +1485,40 @@ fn allocate_scanout_pool(
     Ok(buffers)
 }
 
-fn validate_scanout_pool_allocation(size: PixelSize, length: usize) -> Result<(), Box<dyn Error>> {
+fn scanout_pool_budget() -> u64 {
+    let value = std::env::var_os(SCANOUT_POOL_BUDGET_ENV);
+    match parse_scanout_pool_budget(value.as_deref()) {
+        Some(budget) => budget,
+        None => {
+            if !INVALID_POOL_BUDGET_WARNED.swap(true, Ordering::Relaxed) {
+                warn!(
+                    variable = SCANOUT_POOL_BUDGET_ENV,
+                    value = ?value,
+                    "ignored invalid scanout pool budget; expected a positive byte count"
+                );
+            }
+            MAX_SCANOUT_POOL_BYTES
+        }
+    }
+}
+
+fn parse_scanout_pool_budget(value: Option<&OsStr>) -> Option<u64> {
+    match value {
+        None => Some(MAX_SCANOUT_POOL_BYTES),
+        Some(raw) => raw
+            .to_str()
+            .map(str::trim)
+            .and_then(|text| text.parse::<u64>().ok())
+            .filter(|budget| *budget > 0),
+    }
+}
+
+fn validate_scanout_pool_allocation(
+    size: PixelSize,
+    length: usize,
+    linear_render_targets: bool,
+    budget: u64,
+) -> Result<(), Box<dyn Error>> {
     if !(2..=MAX_SCANOUT_BUFFERS).contains(&length) {
         return Err(format!(
             "scanout pool length {length} is outside the supported 2..={MAX_SCANOUT_BUFFERS} range"
@@ -1483,15 +1535,28 @@ fn validate_scanout_pool_allocation(size: PixelSize, length: usize) -> Result<()
         )
         .into());
     }
-    let pool_bytes = u64::from(size.width)
+    let buffer_bytes = u64::from(size.width)
         .checked_mul(u64::from(size.height))
         .and_then(|pixels| pixels.checked_mul(SCANOUT_BYTES_PER_PIXEL))
-        .and_then(|bytes| bytes.checked_mul(u64::try_from(length).ok()?))
         .ok_or("scanout pool byte count overflow")?;
-    if pool_bytes > MAX_SCANOUT_POOL_BYTES {
+    let length = u64::try_from(length).map_err(|_| "scanout pool byte count overflow")?;
+    let scanout_bytes = buffer_bytes
+        .checked_mul(length)
+        .ok_or("scanout pool byte count overflow")?;
+    // Offscreen blit allocates one extra LINEAR XR24 render target per
+    // scanout buffer; the Impeller depth/stencil renderbuffer is shared
+    // across a pool's rotating FBOs and stays out of this per-buffer count.
+    let linear_bytes = if linear_render_targets {
+        scanout_bytes
+    } else {
+        0
+    };
+    let pool_bytes = scanout_bytes
+        .checked_add(linear_bytes)
+        .ok_or("scanout pool byte count overflow")?;
+    if pool_bytes > budget {
         return Err(format!(
-            "scanout pool needs {pool_bytes} bytes, above the {}-byte safety limit",
-            MAX_SCANOUT_POOL_BYTES
+            "scanout pool needs {pool_bytes} bytes ({scanout_bytes} scanout + {linear_bytes} linear render target), above the {budget}-byte safety limit"
         )
         .into());
     }
