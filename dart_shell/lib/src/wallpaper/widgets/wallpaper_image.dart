@@ -8,6 +8,11 @@ import 'package:flutter/widgets.dart';
 
 import '../wallpaper.dart';
 
+/// Longest decoded edge allowed when the caller cannot name a target size.
+/// Large enough to cover any single output, small enough to keep 8K or
+/// panoramic sources from decoding at native resolution.
+const int _maxWallpaperDecodeEdge = 2560;
+
 ImageProvider<Object> wallpaperImageProvider(
   WallpaperResource resource, {
   required Size targetPixelSize,
@@ -17,7 +22,12 @@ ImageProvider<Object> wallpaperImageProvider(
       !targetPixelSize.height.isFinite ||
       targetPixelSize.width <= 0.0 ||
       targetPixelSize.height <= 0.0) {
-    return provider;
+    return ResizeImage(
+      provider,
+      width: _maxWallpaperDecodeEdge,
+      height: _maxWallpaperDecodeEdge,
+      policy: ResizeImagePolicy.fit,
+    );
   }
   return _CoverResizeImage(
     provider,
@@ -78,7 +88,8 @@ class _CoverResizeImageKey {
 
 /// Decodes an image to the smallest size that can cover the target without
 /// changing its aspect ratio. Unlike [ResizeImagePolicy.fit], neither axis can
-/// end up smaller than the surface and be upscaled again by [BoxFit.cover].
+/// end up smaller than the surface and be upscaled again by [BoxFit.cover],
+/// unless the longest-edge cap takes precedence for an extreme source.
 @immutable
 class _CoverResizeImage extends ImageProvider<_CoverResizeImageKey> {
   const _CoverResizeImage(
@@ -107,13 +118,32 @@ class _CoverResizeImage extends ImageProvider<_CoverResizeImageKey> {
       return decode(
         buffer,
         getTargetSize: (intrinsicWidth, intrinsicHeight) {
-          final scale = math.min(
+          var scale = math.min(
             1.0,
             math.max(width / intrinsicWidth, height / intrinsicHeight),
           );
+          // A source far longer on one axis than the cover target still
+          // decodes that whole edge, so bound the longest decoded edge too.
+          final limit = math.max(
+            math.max(width, height),
+            _maxWallpaperDecodeEdge,
+          );
+          final decodedLongest =
+              math.max(intrinsicWidth, intrinsicHeight) * scale;
+          if (decodedLongest > limit) {
+            scale *= limit / decodedLongest;
+          }
+          // Clamp after ceil: floating-point error in scale must not round
+          // the longest edge up past the limit.
           return ui.TargetImageSize(
-            width: math.min(intrinsicWidth, (intrinsicWidth * scale).ceil()),
-            height: math.min(intrinsicHeight, (intrinsicHeight * scale).ceil()),
+            width: math.min(
+              intrinsicWidth,
+              math.min(limit, (intrinsicWidth * scale).ceil()),
+            ),
+            height: math.min(
+              intrinsicHeight,
+              math.min(limit, (intrinsicHeight * scale).ceil()),
+            ),
           );
         },
       );
