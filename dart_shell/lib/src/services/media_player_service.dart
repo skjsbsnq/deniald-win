@@ -8,14 +8,14 @@ final mediaPlayerServiceProvider = Provider<MediaPlayerService>((ref) {
   final service = MediaPlayerService();
   ref.onDispose(() => unawaited(service.dispose()));
   return service;
-});
+}, isAutoDispose: true);
 
 final mediaPlaybackProvider = StreamProvider<MprisPlaybackState>((ref) async* {
   final service = ref.watch(mediaPlayerServiceProvider);
   await service.start();
   yield service.current;
   yield* service.snapshots;
-});
+}, isAutoDispose: true);
 
 enum MprisPlaybackStatus { playing, paused, stopped }
 
