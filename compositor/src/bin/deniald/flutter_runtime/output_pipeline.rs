@@ -501,19 +501,24 @@ pub(super) enum VsyncRegistration {
     AtCapacity,
 }
 
+/// The queue order in `values` decides which baton the next output-timeline
+/// tick consumes; `members` mirrors it so duplicate registration stays O(1)
+/// at the pending-baton ceiling.
 #[derive(Debug, Default)]
 pub(super) struct PendingVsyncBatons {
     values: VecDeque<isize>,
+    members: HashSet<isize>,
 }
 
 impl PendingVsyncBatons {
     pub(super) fn register(&mut self, baton: isize) -> VsyncRegistration {
-        if self.values.contains(&baton) {
+        if self.members.contains(&baton) {
             return VsyncRegistration::Duplicate;
         }
-        if self.values.len() == MAX_PENDING_VSYNC_BATONS {
+        if self.values.len() >= MAX_PENDING_VSYNC_BATONS {
             return VsyncRegistration::AtCapacity;
         }
+        self.members.insert(baton);
         self.values.push_back(baton);
         VsyncRegistration::Accepted
     }
@@ -523,6 +528,7 @@ impl PendingVsyncBatons {
             return false;
         };
         self.values.remove(index);
+        self.members.remove(&baton);
         true
     }
 
@@ -531,16 +537,28 @@ impl PendingVsyncBatons {
     }
 
     pub(super) fn take_next(&mut self) -> Option<isize> {
-        self.values.pop_front()
+        let baton = self.values.pop_front()?;
+        self.members.remove(&baton);
+        Some(baton)
     }
 
     pub(super) fn restore_front(&mut self, baton: isize) {
-        debug_assert!(self.values.len() < MAX_PENDING_VSYNC_BATONS);
-        debug_assert!(!self.values.contains(&baton));
+        // Already pending means the caller restored twice; the baton is still
+        // queued, so rejecting it keeps `values` and `members` in step.
+        if self.members.contains(&baton) {
+            warn!(baton, "vsync baton restore ignored: already pending");
+            return;
+        }
+        // Restoring hands back a baton this queue previously gave out, so it is
+        // unconditional even at capacity: dropping it would orphan the vsync
+        // token. The queue may briefly hold one over the cap while `register`'s
+        // >= check blocks new growth and drains it back down.
+        self.members.insert(baton);
         self.values.push_front(baton);
     }
 
     pub(super) fn take_all(&mut self) -> VecDeque<isize> {
+        self.members.clear();
         mem::take(&mut self.values)
     }
 }

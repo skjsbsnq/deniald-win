@@ -272,6 +272,15 @@ fn collect_surface_presentation_feedback(
     );
 }
 
+/// `wl_callback.done` carries a u32 millisecond timestamp whose epoch the
+/// protocol leaves undefined, so clients must already tolerate wraparound.
+/// Truncating the monotonic timeline to its low 32 bits keeps the ~49.7-day
+/// rollover identical on every frame-callback path. `wp_presentation` is
+/// unaffected: its timestamp travels as split u64 seconds and nanoseconds.
+pub(super) fn frame_callback_millis(callback_time: Duration) -> u32 {
+    callback_time.as_millis() as u32
+}
+
 /// Advance every outstanding client frame callback on one output-timeline tick.
 /// The returned count lets the caller avoid refreshing and flushing an idle
 /// Wayland space.
@@ -279,7 +288,7 @@ pub(super) fn send_window_frame_callbacks(window: &Window, callback_time: Durati
     let Some(root) = window.wl_surface() else {
         return 0;
     };
-    let callback_millis = callback_time.as_millis() as u32;
+    let callback_millis = frame_callback_millis(callback_time);
     let mut sent = send_surface_frame_callbacks(&root, callback_millis);
     for (popup, _) in PopupManager::popups_for_surface(&root) {
         sent = sent.saturating_add(send_surface_frame_callbacks(

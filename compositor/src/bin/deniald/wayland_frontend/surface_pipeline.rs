@@ -78,8 +78,18 @@ impl WaylandFrontend {
         let Some(frame) = self.surface_shm_frames.remove(surface_id) else {
             return;
         };
-        let bytes = rgba_payload_len(frame.width(), frame.height())
-            .expect("validated SHM frame dimensions must fit usize");
+        // Snapshot dimensions were validated before caching, so an overflow
+        // here means the bound regressed; leaving the byte counter untouched
+        // keeps the accounting conservative rather than panicking.
+        let Some(bytes) = rgba_payload_len(frame.width(), frame.height()) else {
+            warn!(
+                surface_id = ?surface_id,
+                width = frame.width(),
+                height = frame.height(),
+                "cached SHM frame dimensions no longer fit usize"
+            );
+            return;
+        };
         debug_assert!(bytes <= self.shm_snapshot_bytes);
         self.shm_snapshot_bytes = self.shm_snapshot_bytes.saturating_sub(bytes);
     }
@@ -106,13 +116,30 @@ impl WaylandFrontend {
             &self.shm_snapshot_pool,
         ) {
             Ok(Some(frame)) => {
-                let frame_bytes = rgba_payload_len(frame.width(), frame.height())
-                    .expect("validated SHM frame dimensions must fit usize");
+                // The snapshot bounds its dimensions before this point, but a
+                // payload that still does not fit usize must degrade to a
+                // dropped frame instead of a compositor panic.
+                let Some(frame_bytes) = rgba_payload_len(frame.width(), frame.height()) else {
+                    warn!(
+                        surface_id = ?surface_id,
+                        buffer_id = ?buffer.id(),
+                        "dropping SHM snapshot whose dimensions overflow usize"
+                    );
+                    return;
+                };
                 debug_assert!(frame_bytes <= available_cache_bytes);
-                self.shm_snapshot_bytes = self
-                    .shm_snapshot_bytes
-                    .checked_add(frame_bytes)
-                    .expect("bounded SHM snapshot accounting must not overflow");
+                let Some(shm_snapshot_bytes) = self.shm_snapshot_bytes.checked_add(frame_bytes)
+                else {
+                    warn!(
+                        surface_id = ?surface_id,
+                        buffer_id = ?buffer.id(),
+                        cached_bytes = self.shm_snapshot_bytes,
+                        frame_bytes,
+                        "dropping SHM snapshot that would overflow cache accounting"
+                    );
+                    return;
+                };
+                self.shm_snapshot_bytes = shm_snapshot_bytes;
                 self.next_shm_revision = revision.wrapping_add(1).max(1);
                 self.surface_shm_frames.insert(surface_id, frame);
             }

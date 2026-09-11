@@ -280,7 +280,7 @@ impl WaylandFrontend {
                 ));
             }
         }
-        let callback_millis = callback_time.as_millis() as u32;
+        let callback_millis = presentation::frame_callback_millis(callback_time);
         if !self.pending_cursor_frame_callback_roots.is_empty()
             && cursor_frame_callback_matches(self.cursor_output, tick.output)
         {
