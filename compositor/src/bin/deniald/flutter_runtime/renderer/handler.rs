@@ -14,6 +14,40 @@ struct PendingOutputPresentation {
     presentation_time_nanos: u64,
 }
 
+/// Accounting returned by `destroy_targets_after_engine_failure` so the
+/// caller can log exactly which resources still could not be reclaimed and
+/// had to outlive the failed engine with the process.
+#[derive(Clone, Copy, Debug, Default)]
+pub(in crate::flutter_runtime) struct EngineFailureTeardown {
+    /// Texture sources and sampled-buffer guards dropped without needing the
+    /// engine or a GL context.
+    pub released_sources: usize,
+    pub released_sampled_buffers: usize,
+    /// Reusable lease tokens freed from the pool; in-flight leases stay owned
+    /// by surviving engine frame callbacks.
+    pub released_lease_tokens: usize,
+    /// Cache entries pushed into the retired queue during teardown.
+    pub queued_cached_bindings: usize,
+    /// True when the context-bound teardown ran to completion. False means a
+    /// surviving engine worker still held the render context or a teardown
+    /// mutex, and the retained counts below include what it still owned.
+    pub gl_teardown_completed: bool,
+    /// GPU objects still owned after the teardown attempt.
+    pub retained_targets: usize,
+    pub retained_depth_stencils: usize,
+    pub retained_shader_blit: bool,
+    pub retained_external_bindings: usize,
+    /// External texture leases still owned by Flutter through `user_data`
+    /// pointers whose destruction_callback never ran after the failed
+    /// shutdown. These stay leaked by contract — freeing one would leave a
+    /// dangling pointer a surviving worker may still call back through —
+    /// but they are counted here.
+    pub inflight_external_leases: usize,
+    /// Lower-bound estimate of GPU memory still referenced by the retained
+    /// objects above.
+    pub retained_estimated_bytes: usize,
+}
+
 pub(in crate::flutter_runtime) struct FlutterGlHandler {
     render_context: Mutex<ContextBinding>,
     resource_context: Mutex<ContextBinding>,
@@ -962,35 +996,72 @@ impl FlutterGlHandler {
         true
     }
 
-    pub(in crate::flutter_runtime) fn destroy_targets(&self) {
-        let mut targets = lock(&self.targets);
-        let mut shader_blit = lock(&self.shader_blit);
-        let mut depth_stencils = lock(&self.depth_stencils);
-        if targets.is_empty() && shader_blit.is_none() && depth_stencils.is_empty() {
-            return;
+    /// Destroys every context-bound GL object owned by this handler. Returns
+    /// false when the render context or a teardown mutex stayed owned by a
+    /// surviving engine worker — the untouched objects are then retained for
+    /// the process to outlive. The clean-shutdown path always observes true:
+    /// EngineHost has already joined the raster thread, so nothing is
+    /// contended and the context is not current anywhere else.
+    pub(in crate::flutter_runtime) fn destroy_targets(&self) -> bool {
+        // These guards stay held across eglMakeCurrent and the GL deletes
+        // below, so teardown must not queue behind a surviving worker's
+        // critical section: contention retains the objects for the process
+        // instead of blocking. The clean-shutdown path never observes
+        // contention — the raster thread is joined before this runs.
+        let (Some(mut targets), Some(mut shader_blit), Some(mut depth_stencils)) = (
+            try_lock(&self.targets),
+            try_lock(&self.shader_blit),
+            try_lock(&self.depth_stencils),
+        ) else {
+            return false;
+        };
+        if targets.is_empty()
+            && shader_blit.is_none()
+            && depth_stencils.is_empty()
+            && !self
+                .retired_external_bindings
+                .pending
+                .load(Ordering::Relaxed)
+        {
+            return true;
         }
-        let mut context = lock(&self.render_context);
-        // SAFETY: EngineHost has already shut down and joined its raster
-        // thread, so this context is no longer current anywhere else.
+        // The cache mutexes below are only ever held across bounded CPU
+        // work, so they can be taken normally; the render-context mutex is
+        // the one a worker may hold across a wedged driver call.
+        let Some(mut context) = try_lock(&self.render_context) else {
+            error!("a surviving engine worker still owns the Flutter render context");
+            return false;
+        };
+        // SAFETY: on the clean path the raster thread is joined and the
+        // context is not current anywhere else. After a failed shutdown a
+        // surviving worker may still hold it current; eglMakeCurrent then
+        // fails and every GL object is retained for the process to outlive.
         if let Err(error) = unsafe { context.context.make_current() } {
             error!(%error, "could not bind Flutter context for output-target cleanup");
-            return;
+            return false;
         }
         context.owner = Some(thread::current().id());
         let cached_dmabufs = lock(&self.dmabuf_texture_cache).drain();
         let cached_shm = lock(&self.shm_texture_cache).drain();
         drop((cached_dmabufs, cached_shm));
-        self.destroy_retired_external_bindings();
-        if let Some(gpu_timing) = &self.gpu_timing {
-            lock(gpu_timing).clear();
+        let retired_done = self.destroy_retired_external_bindings();
+        if let Some(gpu_timing) = &self.gpu_timing
+            && let Some(mut gpu_timing) = try_lock(gpu_timing)
+        {
+            gpu_timing.clear();
         }
         destroy_shader_blit(self.gl, &mut shader_blit);
         destroy_targets(self.gl, &self.display, &mut targets);
         destroy_depth_stencils(self.gl, &mut depth_stencils);
         let _ = context.clear_current();
+        retired_done
     }
 
-    pub(in crate::flutter_runtime) fn destroy_retired_external_bindings(&self) {
+    /// Drains the retired queue while the render context is current. Returns
+    /// false when a callback thread still holds the scratch or queue lock —
+    /// the pending flag then stays set so a later call retries — which keeps
+    /// the failed-shutdown teardown from hanging behind a wedged worker.
+    pub(in crate::flutter_runtime) fn destroy_retired_external_bindings(&self) -> bool {
         // The flag is a hint in front of the mutex-protected queue. Missing a
         // concurrent transition here only defers reclamation to the next
         // callback; it cannot lose the queued binding or clear the flag.
@@ -999,19 +1070,21 @@ impl FlutterGlHandler {
             .pending
             .load(Ordering::Relaxed)
         {
-            return;
+            return true;
         }
-        if !self
-            .retired_external_bindings
-            .pending
-            .swap(false, Ordering::Relaxed)
+        let Some(mut retired) = try_lock(&self.retired_external_binding_scratch) else {
+            return false;
+        };
         {
-            return;
-        }
-        let mut retired = lock(&self.retired_external_binding_scratch);
-        debug_assert!(retired.is_empty());
-        {
-            let mut pending = lock(&self.retired_external_bindings.bindings);
+            let Some(mut pending) = try_lock(&self.retired_external_bindings.bindings) else {
+                return false;
+            };
+            // Binding drops always set the flag after pushing, so clearing it
+            // while holding the queue cannot lose a concurrent retirement.
+            self.retired_external_bindings
+                .pending
+                .store(false, Ordering::Relaxed);
+            debug_assert!(retired.is_empty());
             mem::swap(&mut *retired, &mut *pending);
         }
         for binding in retired.drain(..) {
@@ -1031,6 +1104,153 @@ impl FlutterGlHandler {
                 }
             }
         }
+        true
+    }
+
+    /// Reclaims handler resources after `EngineHost::shutdown` failed and
+    /// reports what could not be released.
+    ///
+    /// A failed FlutterEngineShutdown gives no guarantee that engine workers
+    /// stopped, so two ordering rules apply. Every release below is either
+    /// engine-independent state this thread may always drop — sources are
+    /// cleared first so a surviving worker cannot mint new EGLImage/texture
+    /// bindings — or the same context-bound teardown as the clean path, which
+    /// never blocks on a lock a worker could hold across a wedged driver
+    /// call. `eglMakeCurrent` itself fails when a worker still holds the
+    /// render context, which retains the whole GPU object set for the
+    /// process to outlive.
+    pub(in crate::flutter_runtime) fn destroy_targets_after_engine_failure(
+        &self,
+    ) -> EngineFailureTeardown {
+        let mut report = EngineFailureTeardown::default();
+        // Move every engine-independent collection out of its mutex first:
+        // dropping these values runs Wayland buffer release, DRM syncobj
+        // signal, presentation-discard and fd-close side effects, which are
+        // not bounded CPU work and must not execute under the guard.
+        let sources = mem::take(&mut *lock(&self.external_texture_sources));
+        report.released_sources = sources.len();
+        let sampled = mem::take(&mut *lock(&self.raster_sampled_buffers));
+        report.released_sampled_buffers = sampled.len();
+        let feedback = mem::take(&mut *lock(&self.raster_sampled_feedback));
+        let prepared = lock(&self.prepared_external_texture).take();
+        let release_fence = lock(&self.sampled_buffer_release_fence).take();
+        // Pooled leases are retired tokens whose resource was already
+        // released by ExternalTextureLease::retire, so dropping them frees
+        // only boxes. Pooled hold batches are recycled Vec capacity that can
+        // still carry holds. Neither mutex is ever held across a driver
+        // call, so taking them cannot wedge on a stuck worker.
+        let lease_tokens = mem::take(&mut *lock(&self.external_texture_lease_pool));
+        report.released_lease_tokens = lease_tokens.len();
+        let batch_pool = mem::take(&mut *lock(&self.sampled_buffer_batch_pool));
+        drop((
+            sources,
+            sampled,
+            feedback,
+            prepared,
+            release_fence,
+            lease_tokens,
+            batch_pool,
+        ));
+        // Cache drops only queue their bindings for context-bound
+        // destruction; drain them here so the queued count is measured even
+        // when the render context stays owned by a surviving worker.
+        let cached_dmabufs = lock(&self.dmabuf_texture_cache).drain();
+        let cached_shm = lock(&self.shm_texture_cache).drain();
+        report.queued_cached_bindings = cached_dmabufs.len().saturating_add(cached_shm.len());
+        drop((cached_dmabufs, cached_shm));
+        report.gl_teardown_completed = self.destroy_targets();
+        self.measure_retained(&mut report);
+        report
+    }
+
+    /// Counts the GL resources still owned by this handler after a teardown
+    /// attempt. The retired-queue and target mutexes are only held across
+    /// bounded CPU work, so blocking here cannot wedge on a stuck driver.
+    fn measure_retained(&self, report: &mut EngineFailureTeardown) {
+        // Nominal driver-side bookkeeping per GL container object (FBO,
+        // renderbuffer, program); pixel storage dominates the estimate.
+        const GL_CONTAINER_OBJECT_BYTES: usize = 4 * 1024;
+        let desktop_plane = (self.desktop_size.width as usize)
+            .saturating_mul(self.desktop_size.height as usize)
+            .saturating_mul(4);
+        let mut estimated_bytes = 0usize;
+        let mut largest_output_plane = 0usize;
+        {
+            let targets = lock(&self.targets);
+            for target in targets.iter() {
+                let plane = (target.size.width as usize)
+                    .saturating_mul(target.size.height as usize)
+                    .saturating_mul(4);
+                largest_output_plane = largest_output_plane.max(plane);
+                // One texture plane per target, plus the separate render
+                // plane when the offscreen blit owns a second texture, plus
+                // the framebuffer's driver-side bookkeeping.
+                let planes = if target.needs_blit() { 2 } else { 1 };
+                estimated_bytes = estimated_bytes
+                    .saturating_add(plane.saturating_mul(planes))
+                    .saturating_add(GL_CONTAINER_OBJECT_BYTES);
+            }
+            report.retained_targets = targets.len();
+        }
+        // One packed depth/stencil renderbuffer exists per output pool, sized
+        // to that output's current mode. There is no per-stencil size record,
+        // so the largest live output plane is the closest bound; the desktop
+        // plane stands in when no target survived to measure.
+        let stencil_plane = if largest_output_plane == 0 {
+            desktop_plane
+        } else {
+            largest_output_plane
+        };
+        report.retained_depth_stencils = lock(&self.depth_stencils).len();
+        estimated_bytes = estimated_bytes.saturating_add(
+            report
+                .retained_depth_stencils
+                .saturating_mul(stencil_plane.saturating_add(GL_CONTAINER_OBJECT_BYTES)),
+        );
+        report.retained_shader_blit = lock(&self.shader_blit).is_some();
+        if report.retained_shader_blit {
+            estimated_bytes = estimated_bytes.saturating_add(GL_CONTAINER_OBJECT_BYTES);
+        }
+        {
+            let retired = lock(&self.retired_external_bindings.bindings);
+            for binding in retired.iter() {
+                let binding_bytes = match &binding.dmabuf_image {
+                    Some((dmabuf, _)) => {
+                        // u64 keeps the multiply lossless; a conversion that
+                        // ever failed saturates loudly instead of recording
+                        // a silent zero.
+                        let plane = u64::from(dmabuf.width())
+                            .saturating_mul(u64::from(dmabuf.height()))
+                            .saturating_mul(4);
+                        usize::try_from(plane).unwrap_or(usize::MAX)
+                    }
+                    // SHM bindings keep no size record; the desktop plane is
+                    // the closest bound for a surface-sized texture.
+                    None => desktop_plane,
+                };
+                estimated_bytes = estimated_bytes.saturating_add(binding_bytes);
+            }
+            report.retained_external_bindings = retired.len();
+        }
+        // One resource permit is held by every ExternalTextureBinding and by
+        // every lease handed to Flutter as user_data. After the drains above
+        // moved cached bindings into the retired queue and released the
+        // prepared texture, live-minus-retired is an upper bound on leases a
+        // failed shutdown leaves outstanding: their destruction_callback may
+        // still arrive from a surviving worker, so they leak by contract but
+        // are metered here at one surface-sized plane plus its objects.
+        let outstanding_permits = self
+            .external_texture_resource_budget
+            .live
+            .load(Ordering::Relaxed);
+        report.inflight_external_leases =
+            outstanding_permits.saturating_sub(report.retained_external_bindings);
+        estimated_bytes = estimated_bytes.saturating_add(
+            report
+                .inflight_external_leases
+                .saturating_mul(desktop_plane.saturating_add(GL_CONTAINER_OBJECT_BYTES)),
+        );
+        report.retained_estimated_bytes = estimated_bytes;
     }
 
     /// Reserves a cache hit for the immediately following Flutter texture
@@ -1129,6 +1349,20 @@ impl FlutterGlHandler {
             first.get_or_insert(error);
         }
         first
+    }
+}
+
+/// Lock-poisoning-tolerant try_lock used by the failed-shutdown path, where
+/// a contended mutex means a surviving engine worker still owns it. Poison
+/// is reported once per recovery so a panicking worker is not silent.
+fn try_lock<T>(mutex: &Mutex<T>) -> Option<MutexGuard<'_, T>> {
+    match mutex.try_lock() {
+        Ok(guard) => Some(guard),
+        Err(std::sync::TryLockError::Poisoned(poisoned)) => {
+            warn!("recovering a poisoned Flutter renderer lock during teardown");
+            Some(poisoned.into_inner())
+        }
+        Err(std::sync::TryLockError::WouldBlock) => None,
     }
 }
 

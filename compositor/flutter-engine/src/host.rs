@@ -496,8 +496,9 @@ struct EngineHostState {
 pub struct EngineHost {
     /// Everything reachable through pointers retained by Flutter lives in one
     /// allocation. A failed FlutterEngineShutdown does not prove that the
-    /// engine stopped using any of it, so the whole allocation is leaked as a
-    /// unit on that error path.
+    /// engine stopped using any of it, so that error path forgets every
+    /// FFI-reachable field and only drops what Flutter was documented to
+    /// release when the synchronous Run call returned.
     state: Option<Box<EngineHostState>>,
 }
 
@@ -702,8 +703,61 @@ impl EngineHost {
                 ._callback_state
                 .engine_handle
                 .store(0, Ordering::Release);
+            return release_or_leak(state, result);
         }
-        release_or_leak(state, result)
+        // A failed FlutterEngineShutdown gives no lifetime guarantee: engine
+        // workers may still dereference the callback baton or invoke the
+        // runner/compositor callbacks, and they may still execute code from
+        // the mapped engine library and AOT snapshot. Forget exactly that
+        // FFI-reachable graph. The assets/ICU path strings and the argv
+        // array were documented as releasable once the synchronous
+        // FlutterEngineRun call returned, and the dropped library Arc is
+        // held again by the leaked engine. The leaked project args still
+        // name the released buffers, but nothing can dereference a leaked
+        // struct.
+        let EngineHostState {
+            engine,
+            _library,
+            _callback_state,
+            _renderer,
+            _platform_runner,
+            _custom_runners,
+            _compositor,
+            _project_args,
+            _assets,
+            _icu_data,
+            _argv,
+            _argv_pointers,
+        } = *state;
+        let aot_data = engine
+            .as_ref()
+            .is_some_and(|engine| engine.aot_data.is_some());
+        // Seven tuple items are forgotten below; account for all seven so
+        // the reported byte estimate stays self-consistent with the count.
+        let retained_bytes = mem::size_of::<Option<RunningEngine>>()
+            .saturating_add(mem::size_of::<CallbackState>())
+            .saturating_add(mem::size_of::<sys::FlutterRendererConfig>())
+            .saturating_add(mem::size_of::<sys::FlutterTaskRunnerDescription>())
+            .saturating_add(mem::size_of::<sys::FlutterCustomTaskRunners>())
+            .saturating_add(mem::size_of::<sys::FlutterCompositor>())
+            .saturating_add(mem::size_of::<sys::FlutterProjectArgs>());
+        eprintln!(
+            "flutter: engine shutdown failed; retained 7 FFI-reachable items \
+             (~{retained_bytes} bytes) plus the mapped engine library{}",
+            if aot_data { " and AOT snapshot" } else { "" },
+        );
+        release_or_leak(
+            (
+                engine,
+                _callback_state,
+                _renderer,
+                _platform_runner,
+                _custom_runners,
+                _compositor,
+                _project_args,
+            ),
+            result,
+        )
     }
 }
 
@@ -719,9 +773,10 @@ impl Drop for EngineHost {
 fn release_or_leak<T, E>(owner: T, result: Result<(), E>) -> Result<(), E> {
     if result.is_err() {
         // FlutterEngineShutdown returning an error gives us no lifetime
-        // guarantee whatsoever. Leaking is bounded by process lifetime and is
-        // the only sound option: the compositor aborts its runtime loop after
-        // propagating this error, and the OS reclaims the allocation.
+        // guarantee whatsoever. Leaking is bounded by process lifetime and
+        // remains the only sound option for memory Flutter may still reach:
+        // the compositor aborts its runtime loop after propagating this
+        // error, and the OS reclaims the allocation.
         mem::forget(owner);
     }
     result

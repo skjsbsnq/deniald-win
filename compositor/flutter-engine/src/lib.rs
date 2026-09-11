@@ -851,6 +851,15 @@ impl RunningEngine {
             // to preserve this ownership after the consuming method returns.
             // Keep the handle, AOT mapping and engine library alive forever;
             // EngineHost additionally retains the callback/config graph.
+            eprintln!(
+                "flutter: engine shutdown failed; retained 1 engine handle{} \
+                 and the mapped engine library for process lifetime",
+                if self.aot_data.is_some() {
+                    ", its AOT data"
+                } else {
+                    ""
+                },
+            );
             mem::forget(self);
         }
         result
@@ -884,6 +893,14 @@ impl Drop for RunningEngine {
             if let Some(aot_data) = self.aot_data.take() {
                 mem::forget(aot_data);
             }
+            // `self.library` is released when this drop finishes; retain one
+            // extra reference forever so a final-Arc drop cannot unmap code
+            // that surviving engine workers may still execute.
+            mem::forget(Arc::clone(&self.library));
+            eprintln!(
+                "flutter: engine drop after failed shutdown; retained AOT data \
+                 and engine library mapping"
+            );
         }
     }
 }

@@ -252,10 +252,26 @@ impl FlutterRuntime {
         if result.is_ok() {
             self.handler.destroy_targets();
         } else {
-            // The leaked EngineHost owns another Arc to this handler. Do not
-            // destroy GL targets or external texture sources that an engine
-            // worker may still reach after a failed shutdown.
-            error!("retaining Flutter GL resources after failed engine shutdown");
+            // The leaked EngineHost owns another Arc to this handler, so an
+            // engine worker that survived the failed shutdown can still call
+            // into it. Reclaim everything that does not need a live engine;
+            // the GL object set is only retained while a surviving worker
+            // still holds the render context or a teardown mutex.
+            let teardown = self.handler.destroy_targets_after_engine_failure();
+            error!(
+                released_sources = teardown.released_sources,
+                released_sampled_buffers = teardown.released_sampled_buffers,
+                released_lease_tokens = teardown.released_lease_tokens,
+                queued_cached_bindings = teardown.queued_cached_bindings,
+                gl_teardown_completed = teardown.gl_teardown_completed,
+                retained_targets = teardown.retained_targets,
+                retained_depth_stencils = teardown.retained_depth_stencils,
+                retained_shader_blit = teardown.retained_shader_blit,
+                retained_external_bindings = teardown.retained_external_bindings,
+                inflight_external_leases = teardown.inflight_external_leases,
+                retained_estimated_bytes = teardown.retained_estimated_bytes,
+                "reclaimed what it could after failed Flutter engine shutdown"
+            );
         }
         result
     }
