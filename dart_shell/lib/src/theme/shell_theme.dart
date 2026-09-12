@@ -706,6 +706,26 @@ class _ShellThemeResolution {
       surfaceBright: theme.colors.background,
       shadow: theme.colors.shadow,
     ),
+    // Mount the M3E typescale so Material widgets resolve the same fifteen
+    // roles the shell uses via `theme.text`; the emphasized variants stay
+    // shell-side since TextTheme has no slots for them.
+    textTheme: TextTheme(
+      displayLarge: text.displayLarge,
+      displayMedium: text.displayMedium,
+      displaySmall: text.displaySmall,
+      headlineLarge: text.headlineLarge,
+      headlineMedium: text.headlineMedium,
+      headlineSmall: text.headlineSmall,
+      titleLarge: text.titleLarge,
+      titleMedium: text.titleMedium,
+      titleSmall: text.titleSmall,
+      bodyLarge: text.bodyLarge,
+      bodyMedium: text.bodyMedium,
+      bodySmall: text.bodySmall,
+      labelLarge: text.labelLarge,
+      labelMedium: text.labelMedium,
+      labelSmall: text.labelSmall,
+    ),
     cardTheme: CardThemeData(
       color: cardColor(theme.colors.surfaceContainerLow),
       shape: RoundedRectangleBorder(

@@ -93,6 +93,40 @@ abstract final class ShellShapeScale {
   static const double full = 999.0;
 }
 
+/// Material 3 Expressive spacing ramp (02-VISUAL-SPEC.md §4).
+///
+/// Every padding, gap, and margin introduced by the expressive refactor snaps
+/// to these steps instead of inventing ad-hoc offsets.
+abstract final class ShellSpacing {
+  static const double xs = 4;
+  static const double sm = 8;
+  static const double md = 12;
+  static const double lg = 16;
+  static const double xl = 24;
+  static const double xxl = 32;
+}
+
+/// Material 3 Expressive elevation levels (02-VISUAL-SPEC.md §1.2).
+///
+/// Hierarchy is tonal, not shadow-based: each level resolves to a
+/// `surfaceContainer*` tier of the active `ShellColorScheme`, so frosted
+/// surfaces keep their blur and panels never paint cast shadows.
+abstract final class ShellElevation {
+  /// Flat content painted directly on the surrounding surface.
+  static const int level0 = 0;
+
+  /// Raised floor for panels and bubbles — `surfaceContainerLow`.
+  static const int level1 = 1;
+
+  /// Cards and grouped content resting on a level-1 surface —
+  /// `surfaceContainer`.
+  static const int level2 = 2;
+
+  /// Nested cards, indicator wells, and other highest-order content —
+  /// `surfaceContainerHigh`/`surfaceContainerHighest`.
+  static const int level3 = 3;
+}
+
 /// Brightness-independent text metrics.
 ///
 /// [ShellTextTheme] applies semantic foreground colors. Keeping these
@@ -337,6 +371,318 @@ abstract final class ShellText {
     fontSize: 16,
     height: 24 / 16,
     fontWeight: FontWeight.w400,
+    letterSpacing: 0,
+    decoration: TextDecoration.none,
+  );
+
+  // Full M3E typescale (02-VISUAL-SPEC.md §3).
+  //
+  // Every size is an integer sp value and `letterSpacing` stays zero (§D5).
+  // Line heights use the standard M3 line-height / font-size ratios, the same
+  // convention as the settings roles above. Baseline weights follow the M3
+  // scale; each `*Emphasized` variant carries identical metrics at w600 for
+  // hero numerals and other moments the spec calls for emphasized type.
+  //
+  // Older shell roles remain as semantic aliases of this scale — for example
+  // [settingsNavLabel] matches titleMedium and [cardTitle] reads as an
+  // emphasized label — and keep their own fields for existing callers.
+
+  /// M3E DisplayLarge (57sp).
+  static const TextStyle displayLarge = TextStyle(
+    fontFamilyFallback: fallbackFontFamilies,
+    fontSize: 57,
+    height: 64 / 57,
+    fontWeight: FontWeight.w400,
+    letterSpacing: 0,
+    decoration: TextDecoration.none,
+  );
+
+  /// M3E DisplayMedium (45sp).
+  static const TextStyle displayMedium = TextStyle(
+    fontFamilyFallback: fallbackFontFamilies,
+    fontSize: 45,
+    height: 52 / 45,
+    fontWeight: FontWeight.w400,
+    letterSpacing: 0,
+    decoration: TextDecoration.none,
+  );
+
+  /// M3E DisplaySmall (36sp).
+  static const TextStyle displaySmall = TextStyle(
+    fontFamilyFallback: fallbackFontFamilies,
+    fontSize: 36,
+    height: 44 / 36,
+    fontWeight: FontWeight.w400,
+    letterSpacing: 0,
+    decoration: TextDecoration.none,
+  );
+
+  /// M3E HeadlineLarge (32sp).
+  static const TextStyle headlineLarge = TextStyle(
+    fontFamilyFallback: fallbackFontFamilies,
+    fontSize: 32,
+    height: 40 / 32,
+    fontWeight: FontWeight.w400,
+    letterSpacing: 0,
+    decoration: TextDecoration.none,
+  );
+
+  /// M3E HeadlineMedium (28sp).
+  static const TextStyle headlineMedium = TextStyle(
+    fontFamilyFallback: fallbackFontFamilies,
+    fontSize: 28,
+    height: 36 / 28,
+    fontWeight: FontWeight.w400,
+    letterSpacing: 0,
+    decoration: TextDecoration.none,
+  );
+
+  /// M3E HeadlineSmall (24sp).
+  static const TextStyle headlineSmall = TextStyle(
+    fontFamilyFallback: fallbackFontFamilies,
+    fontSize: 24,
+    height: 32 / 24,
+    fontWeight: FontWeight.w400,
+    letterSpacing: 0,
+    decoration: TextDecoration.none,
+  );
+
+  /// M3E TitleLarge (22sp).
+  static const TextStyle titleLarge = TextStyle(
+    fontFamilyFallback: fallbackFontFamilies,
+    fontSize: 22,
+    height: 28 / 22,
+    fontWeight: FontWeight.w400,
+    letterSpacing: 0,
+    decoration: TextDecoration.none,
+  );
+
+  /// M3E TitleMedium (16sp).
+  static const TextStyle titleMedium = TextStyle(
+    fontFamilyFallback: fallbackFontFamilies,
+    fontSize: 16,
+    height: 24 / 16,
+    fontWeight: FontWeight.w500,
+    letterSpacing: 0,
+    decoration: TextDecoration.none,
+  );
+
+  /// M3E TitleSmall (14sp).
+  static const TextStyle titleSmall = TextStyle(
+    fontFamilyFallback: fallbackFontFamilies,
+    fontSize: 14,
+    height: 20 / 14,
+    fontWeight: FontWeight.w500,
+    letterSpacing: 0,
+    decoration: TextDecoration.none,
+  );
+
+  /// M3E BodyLarge (16sp).
+  static const TextStyle bodyLarge = TextStyle(
+    fontFamilyFallback: fallbackFontFamilies,
+    fontSize: 16,
+    height: 24 / 16,
+    fontWeight: FontWeight.w400,
+    letterSpacing: 0,
+    decoration: TextDecoration.none,
+  );
+
+  /// M3E BodyMedium (14sp).
+  static const TextStyle bodyMedium = TextStyle(
+    fontFamilyFallback: fallbackFontFamilies,
+    fontSize: 14,
+    height: 20 / 14,
+    fontWeight: FontWeight.w400,
+    letterSpacing: 0,
+    decoration: TextDecoration.none,
+  );
+
+  /// M3E BodySmall (12sp).
+  static const TextStyle bodySmall = TextStyle(
+    fontFamilyFallback: fallbackFontFamilies,
+    fontSize: 12,
+    height: 16 / 12,
+    fontWeight: FontWeight.w400,
+    letterSpacing: 0,
+    decoration: TextDecoration.none,
+  );
+
+  /// M3E LabelLarge (14sp).
+  static const TextStyle labelLarge = TextStyle(
+    fontFamilyFallback: fallbackFontFamilies,
+    fontSize: 14,
+    height: 20 / 14,
+    fontWeight: FontWeight.w500,
+    letterSpacing: 0,
+    decoration: TextDecoration.none,
+  );
+
+  /// M3E LabelMedium (12sp).
+  static const TextStyle labelMedium = TextStyle(
+    fontFamilyFallback: fallbackFontFamilies,
+    fontSize: 12,
+    height: 16 / 12,
+    fontWeight: FontWeight.w500,
+    letterSpacing: 0,
+    decoration: TextDecoration.none,
+  );
+
+  /// M3E LabelSmall (11sp).
+  static const TextStyle labelSmall = TextStyle(
+    fontFamilyFallback: fallbackFontFamilies,
+    fontSize: 11,
+    height: 16 / 11,
+    fontWeight: FontWeight.w500,
+    letterSpacing: 0,
+    decoration: TextDecoration.none,
+  );
+
+  /// Emphasized DisplayLarge: [displayLarge] metrics at w600.
+  static const TextStyle displayLargeEmphasized = TextStyle(
+    fontFamilyFallback: fallbackFontFamilies,
+    fontSize: 57,
+    height: 64 / 57,
+    fontWeight: FontWeight.w600,
+    letterSpacing: 0,
+    decoration: TextDecoration.none,
+  );
+
+  /// Emphasized DisplayMedium: [displayMedium] metrics at w600.
+  static const TextStyle displayMediumEmphasized = TextStyle(
+    fontFamilyFallback: fallbackFontFamilies,
+    fontSize: 45,
+    height: 52 / 45,
+    fontWeight: FontWeight.w600,
+    letterSpacing: 0,
+    decoration: TextDecoration.none,
+  );
+
+  /// Emphasized DisplaySmall: [displaySmall] metrics at w600.
+  static const TextStyle displaySmallEmphasized = TextStyle(
+    fontFamilyFallback: fallbackFontFamilies,
+    fontSize: 36,
+    height: 44 / 36,
+    fontWeight: FontWeight.w600,
+    letterSpacing: 0,
+    decoration: TextDecoration.none,
+  );
+
+  /// Emphasized HeadlineLarge: [headlineLarge] metrics at w600.
+  static const TextStyle headlineLargeEmphasized = TextStyle(
+    fontFamilyFallback: fallbackFontFamilies,
+    fontSize: 32,
+    height: 40 / 32,
+    fontWeight: FontWeight.w600,
+    letterSpacing: 0,
+    decoration: TextDecoration.none,
+  );
+
+  /// Emphasized HeadlineMedium: [headlineMedium] metrics at w600.
+  static const TextStyle headlineMediumEmphasized = TextStyle(
+    fontFamilyFallback: fallbackFontFamilies,
+    fontSize: 28,
+    height: 36 / 28,
+    fontWeight: FontWeight.w600,
+    letterSpacing: 0,
+    decoration: TextDecoration.none,
+  );
+
+  /// Emphasized HeadlineSmall: [headlineSmall] metrics at w600.
+  static const TextStyle headlineSmallEmphasized = TextStyle(
+    fontFamilyFallback: fallbackFontFamilies,
+    fontSize: 24,
+    height: 32 / 24,
+    fontWeight: FontWeight.w600,
+    letterSpacing: 0,
+    decoration: TextDecoration.none,
+  );
+
+  /// Emphasized TitleLarge: [titleLarge] metrics at w600.
+  static const TextStyle titleLargeEmphasized = TextStyle(
+    fontFamilyFallback: fallbackFontFamilies,
+    fontSize: 22,
+    height: 28 / 22,
+    fontWeight: FontWeight.w600,
+    letterSpacing: 0,
+    decoration: TextDecoration.none,
+  );
+
+  /// Emphasized TitleMedium: [titleMedium] metrics at w600.
+  static const TextStyle titleMediumEmphasized = TextStyle(
+    fontFamilyFallback: fallbackFontFamilies,
+    fontSize: 16,
+    height: 24 / 16,
+    fontWeight: FontWeight.w600,
+    letterSpacing: 0,
+    decoration: TextDecoration.none,
+  );
+
+  /// Emphasized TitleSmall: [titleSmall] metrics at w600.
+  static const TextStyle titleSmallEmphasized = TextStyle(
+    fontFamilyFallback: fallbackFontFamilies,
+    fontSize: 14,
+    height: 20 / 14,
+    fontWeight: FontWeight.w600,
+    letterSpacing: 0,
+    decoration: TextDecoration.none,
+  );
+
+  /// Emphasized BodyLarge: [bodyLarge] metrics at w600.
+  static const TextStyle bodyLargeEmphasized = TextStyle(
+    fontFamilyFallback: fallbackFontFamilies,
+    fontSize: 16,
+    height: 24 / 16,
+    fontWeight: FontWeight.w600,
+    letterSpacing: 0,
+    decoration: TextDecoration.none,
+  );
+
+  /// Emphasized BodyMedium: [bodyMedium] metrics at w600.
+  static const TextStyle bodyMediumEmphasized = TextStyle(
+    fontFamilyFallback: fallbackFontFamilies,
+    fontSize: 14,
+    height: 20 / 14,
+    fontWeight: FontWeight.w600,
+    letterSpacing: 0,
+    decoration: TextDecoration.none,
+  );
+
+  /// Emphasized BodySmall: [bodySmall] metrics at w600.
+  static const TextStyle bodySmallEmphasized = TextStyle(
+    fontFamilyFallback: fallbackFontFamilies,
+    fontSize: 12,
+    height: 16 / 12,
+    fontWeight: FontWeight.w600,
+    letterSpacing: 0,
+    decoration: TextDecoration.none,
+  );
+
+  /// Emphasized LabelLarge: [labelLarge] metrics at w600.
+  static const TextStyle labelLargeEmphasized = TextStyle(
+    fontFamilyFallback: fallbackFontFamilies,
+    fontSize: 14,
+    height: 20 / 14,
+    fontWeight: FontWeight.w600,
+    letterSpacing: 0,
+    decoration: TextDecoration.none,
+  );
+
+  /// Emphasized LabelMedium: [labelMedium] metrics at w600.
+  static const TextStyle labelMediumEmphasized = TextStyle(
+    fontFamilyFallback: fallbackFontFamilies,
+    fontSize: 12,
+    height: 16 / 12,
+    fontWeight: FontWeight.w600,
+    letterSpacing: 0,
+    decoration: TextDecoration.none,
+  );
+
+  /// Emphasized LabelSmall: [labelSmall] metrics at w600.
+  static const TextStyle labelSmallEmphasized = TextStyle(
+    fontFamilyFallback: fallbackFontFamilies,
+    fontSize: 11,
+    height: 16 / 11,
+    fontWeight: FontWeight.w600,
     letterSpacing: 0,
     decoration: TextDecoration.none,
   );
