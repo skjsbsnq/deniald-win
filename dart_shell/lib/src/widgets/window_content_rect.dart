@@ -61,6 +61,7 @@ class WindowContentRect extends ConsumerWidget {
             : Color(window.statusColorArgb!);
         return ShellBackdropBlur(
           blur: application?.translucent ?? false,
+          useWindowAlphaThreshold: true,
           borderRadius: borderRadius,
           child: FittedBox(
             fit: BoxFit.cover,

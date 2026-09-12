@@ -89,8 +89,14 @@ class WindowTextureRect extends StatelessWidget {
       child: texture,
     );
 
+    // The alpha-threshold config lets the engine skip backdrop work wherever
+    // the drawn content is already opaque, so a window that merely fails to
+    // report an opaque region no longer pays for a full-frame blur.
     return ShellBackdropBlur(
       blur: !window.isOpaque,
+      useWindowAlphaThreshold: true,
+      singleWindowSurface:
+          statusBarHeight <= 0.0 && window.visibleSurfaceIds.length == 1,
       borderRadius: borderRadius,
       child: fittedTexture,
     );
