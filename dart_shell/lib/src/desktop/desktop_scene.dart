@@ -826,7 +826,22 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
         widget.onCloseLeaseComplete(window.windowId);
         continue;
       }
-      final frame = oldWidget.desktop.visualFrame(placement);
+      var frame = oldWidget.desktop.visualFrame(placement);
+      if (placement.dragging &&
+          oldWidget.desktop.isInOverview(window.objectId)) {
+        // A dragged preview's live offset rides the retained channel, not
+        // the committed frame. Re-apply it — in-flight or already settled by
+        // the same update — to keep the close animation's origin exact. The
+        // dragging gate keeps a settle offset left behind by an
+        // already-finished gesture from shifting the origin back to a
+        // position the user abandoned.
+        final dragOffsets = ref.read(desktopOverviewDragOffsetsProvider);
+        frame = frame.shift(
+          dragOffsets.translationOf(placement.objectId) +
+              (dragOffsets.settleTranslationFor(placement.objectId) ??
+                  Offset.zero),
+        );
+      }
       if (frame.isEmpty) {
         widget.onCloseLeaseComplete(window.windowId);
         continue;

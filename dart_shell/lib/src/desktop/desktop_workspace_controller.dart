@@ -5,6 +5,100 @@ final desktopWorkspaceProvider =
       DesktopWorkspaceController.new,
     );
 
+/// Publishes in-progress overview drag offsets without invalidating
+/// workspace state.
+///
+/// The overview counterpart of the native-grab channel in
+/// `desktop_window_coordinator.dart`: pointer deltas move a retained paint
+/// translation, while the arranged overview frame only re-enters provider
+/// state when the drag commits, cancels, or the overview closes.
+@visibleForTesting
+class DesktopOverviewDragOffsets {
+  final Map<int, ValueNotifier<Offset>> _translations =
+      <int, ValueNotifier<Offset>>{};
+  final Map<int, Offset> _settleTranslations = <int, Offset>{};
+
+  /// The retained paint offset of [objectId]'s dragged preview, relative to
+  /// its committed overview frame. Exposed read-only, matching
+  /// `DesktopLiveWindowPlacements.translationFor`.
+  ValueListenable<Offset> translationFor(int objectId) {
+    return _translations.putIfAbsent(
+      objectId,
+      () => ValueNotifier<Offset>(Offset.zero),
+    );
+  }
+
+  /// The current live offset relative to the committed overview frame.
+  Offset translationOf(int objectId) {
+    return _translations[objectId]?.value ?? Offset.zero;
+  }
+
+  /// Starts a drag, discarding any settle offset left by an earlier gesture.
+  void start(int objectId) {
+    _settleTranslations.remove(objectId);
+    _setTranslation(objectId, Offset.zero);
+  }
+
+  void update(int objectId, Offset translation) {
+    _setTranslation(objectId, translation);
+  }
+
+  /// Ends a drag and retains its last offset as the release animation
+  /// origin. The settle entry survives a repeated finish — and everything
+  /// else short of [start] or [dispose] — so the keyed position widget can
+  /// still read it when the release frame builds, even if a stale boundary
+  /// arrives between commit and build.
+  void finish(int objectId) {
+    final translation = _translations[objectId]?.value ?? Offset.zero;
+    if (translation != Offset.zero) {
+      _settleTranslations[objectId] = translation;
+    }
+    _setTranslation(objectId, Offset.zero);
+  }
+
+  Offset? settleTranslationFor(int objectId) => _settleTranslations[objectId];
+
+  /// Full reset for teardown. Never call between gestures: a settle offset
+  /// written by [finish] must outlive the state commit so the release
+  /// animation can still read it on the next build.
+  void clear() {
+    _settleTranslations.clear();
+    for (final translation in _translations.values) {
+      translation.value = Offset.zero;
+    }
+  }
+
+  void dispose() {
+    for (final translation in _translations.values) {
+      translation.dispose();
+    }
+    _translations.clear();
+    _settleTranslations.clear();
+  }
+
+  void _setTranslation(int objectId, Offset value) {
+    final translation = _translations.putIfAbsent(
+      objectId,
+      () => ValueNotifier<Offset>(Offset.zero),
+    );
+    translation.value = value;
+  }
+}
+
+/// Retained per-window paint offsets for overview drags.
+///
+/// The channel is consumed through `ref.read` by retained render objects
+/// rather than provider listeners, so like
+/// `desktopLiveWindowPlacementsProvider` it stays alive for the shell's
+/// lifetime instead of being reclaimed between gestures.
+final desktopOverviewDragOffsetsProvider = Provider<DesktopOverviewDragOffsets>(
+  (ref) {
+    final offsets = DesktopOverviewDragOffsets();
+    ref.onDispose(offsets.dispose);
+    return offsets;
+  },
+);
+
 class DesktopWorkspaceController extends Notifier<DesktopWorkspaceState> {
   @override
   DesktopWorkspaceState build() => DesktopWorkspaceState.initial();
@@ -21,6 +115,9 @@ class DesktopWorkspaceController extends Notifier<DesktopWorkspaceState> {
   double _devicePixelRatio = 1.0;
   Map<int, Rect> _workAreas = const <int, Rect>{};
   int _workspaceTransitionSerial = 0;
+
+  DesktopOverviewDragOffsets get _overviewDragOffsets =>
+      ref.read(desktopOverviewDragOffsetsProvider);
 
   /// Publishes the native workspace policy for every known monitor.
   ///
@@ -349,6 +446,7 @@ class DesktopWorkspaceController extends Notifier<DesktopWorkspaceState> {
     if (state.overview != null && nextOverview == null) {
       for (final entry in next.entries.toList(growable: false)) {
         if (entry.value.dragging) {
+          _overviewDragOffsets.finish(entry.key);
           next[entry.key] = entry.value.copyWith(
             z: _overviewDragOrigins[entry.key]?.z,
             dragging: false,
@@ -412,6 +510,11 @@ class DesktopWorkspaceController extends Notifier<DesktopWorkspaceState> {
 
     _moveRemainders.clear();
     _overviewDragOrigins.clear();
+    // Drag offsets deliberately survive a session boundary: a settle entry
+    // written by the just-finished gesture must remain readable until the
+    // release animation's didUpdateWidget consumes it. `start` and
+    // `dispose` own the cleanup; a translation left outside a live gesture
+    // is always zero.
     final settledPlacements = <int, DesktopWindowPlacement>{
       for (final placement in state.placements.values)
         placement.objectId: placement.dragging
@@ -458,6 +561,11 @@ class DesktopWorkspaceController extends Notifier<DesktopWorkspaceState> {
               )
             : placement,
     };
+    for (final placement in state.placements.values) {
+      if (placement.dragging) {
+        _overviewDragOffsets.finish(placement.objectId);
+      }
+    }
     _overviewDragOrigins.clear();
     state = state.copyWith(placements: next, clearOverview: true);
   }
@@ -473,6 +581,7 @@ class DesktopWorkspaceController extends Notifier<DesktopWorkspaceState> {
       return;
     }
     _overviewDragOrigins[objectId] = (frame: previewFrame, z: placement.z);
+    _overviewDragOffsets.start(objectId);
     final next = Map<int, DesktopWindowPlacement>.of(state.placements);
     next[objectId] = placement.copyWith(z: state.nextZ, dragging: true);
     state = state.copyWith(placements: next, nextZ: state.nextZ + 1);
@@ -481,24 +590,21 @@ class DesktopWorkspaceController extends Notifier<DesktopWorkspaceState> {
   void moveOverviewBy(int objectId, Offset delta) {
     final overview = state.overview;
     final placement = state.placements[objectId];
-    final previewFrame = overview?.frames[objectId];
+    final committedFrame = overview?.frames[objectId];
     if (overview == null ||
         placement == null ||
         !placement.dragging ||
-        previewFrame == null ||
+        committedFrame == null ||
         delta == Offset.zero) {
       return;
     }
-    final frames = Map<int, Rect>.of(overview.frames);
-    frames[objectId] = _clampFrame(previewFrame.shift(delta), state.viewSize);
-    state = state.copyWith(
-      overview: DesktopOverviewState(
-        monitorId: overview.monitorId,
-        bounds: overview.bounds,
-        backgroundBounds: overview.backgroundBounds,
-        frames: frames,
-      ),
-    );
+    // The committed frame stays at its arranged slot for the whole gesture;
+    // every delta lands on the retained paint channel instead of provider
+    // state, so an overview drag never rebuilds the scene.
+    final dragOffsets = _overviewDragOffsets;
+    final liveFrame = committedFrame.shift(dragOffsets.translationOf(objectId));
+    final nextFrame = _clampFrame(liveFrame.shift(delta), state.viewSize);
+    dragOffsets.update(objectId, nextFrame.topLeft - committedFrame.topLeft);
   }
 
   bool endOverviewDrag(
@@ -508,14 +614,19 @@ class DesktopWorkspaceController extends Notifier<DesktopWorkspaceState> {
   }) {
     final overview = state.overview;
     final placement = state.placements[objectId];
-    final previewFrame = overview?.frames[objectId];
+    final committedFrame = overview?.frames[objectId];
     if (overview == null ||
         placement == null ||
         !placement.dragging ||
-        previewFrame == null) {
+        committedFrame == null) {
       _overviewDragOrigins.remove(objectId);
+      _overviewDragOffsets.finish(objectId);
       return false;
     }
+    final dragOffsets = _overviewDragOffsets;
+    final previewFrame = committedFrame.shift(
+      dragOffsets.translationOf(objectId),
+    );
 
     int? targetMonitorId;
     for (final entry in outputBounds.entries) {
@@ -574,6 +685,9 @@ class DesktopWorkspaceController extends Notifier<DesktopWorkspaceState> {
     );
     next[objectId] = transferred;
     _pendingNativeFrames[objectId] = destinationFrame;
+    for (final activeDrag in _overviewDragOrigins.keys) {
+      dragOffsets.finish(activeDrag);
+    }
     _overviewDragOrigins.clear();
     state = state.copyWith(placements: next, clearOverview: true);
     return true;
@@ -584,6 +698,7 @@ class DesktopWorkspaceController extends Notifier<DesktopWorkspaceState> {
     final placement = state.placements[objectId];
     if (overview == null || placement == null || !placement.dragging) {
       _overviewDragOrigins.remove(objectId);
+      _overviewDragOffsets.finish(objectId);
       return;
     }
     _restoreOverviewDrag(objectId, placement, overview);
@@ -594,6 +709,7 @@ class DesktopWorkspaceController extends Notifier<DesktopWorkspaceState> {
     DesktopWindowPlacement placement,
     DesktopOverviewState overview,
   ) {
+    _overviewDragOffsets.finish(objectId);
     final frames = Map<int, Rect>.of(overview.frames);
     final origin = _overviewDragOrigins.remove(objectId);
     if (origin != null) {

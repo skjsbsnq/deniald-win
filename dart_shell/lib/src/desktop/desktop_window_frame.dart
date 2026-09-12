@@ -481,9 +481,15 @@ class _DesktopAnimatedWindowPositionState
   void didUpdateWidget(covariant _DesktopAnimatedWindowPosition oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.dragging && !widget.dragging) {
-      final translation = ref
-          .read(desktopLiveWindowPlacementsProvider)
-          .settleTranslationFor(widget.placementObjectId);
+      // Overview drags publish on their own channel, so the release origin
+      // comes from whichever channel carried the gesture's live offset.
+      final translation = oldWidget.overview
+          ? ref
+                .read(desktopOverviewDragOffsetsProvider)
+                .settleTranslationFor(widget.placementObjectId)
+          : ref
+                .read(desktopLiveWindowPlacementsProvider)
+                .settleTranslationFor(widget.placementObjectId);
       _dragReleaseAnimationOrigin = translation == null
           ? null
           : oldWidget.rect.shift(translation);
@@ -542,9 +548,16 @@ class _DesktopAnimatedWindowPositionState
         );
       }
     }
-    final liveTranslation = ref
-        .read(desktopLiveWindowPlacementsProvider)
-        .translationFor(widget.placementObjectId);
+    // Overview drags translate the arranged preview through their own
+    // channel so pointer deltas never touch workspace state; native move
+    // grabs keep the placement channel.
+    final liveTranslation = widget.overview
+        ? ref
+              .read(desktopOverviewDragOffsetsProvider)
+              .translationFor(widget.placementObjectId)
+        : ref
+              .read(desktopLiveWindowPlacementsProvider)
+              .translationFor(widget.placementObjectId);
     final previewMotionActive =
         widget.layoutPreviewing || _layoutPreviewExitActive;
     final positionDuration = widget.dragging
@@ -569,7 +582,15 @@ class _DesktopAnimatedWindowPositionState
       child: RetainedTranslation(
         translation: liveTranslation,
         enabled: widget.dragging,
-        devicePixelRatio: pixelAlignmentInset == null ? null : devicePixelRatio,
+        // Overview drags already land on a `_clampFrame`-snapped frame, so
+        // committed + offset reproduces the committed target exactly;
+        // snapping the offset again would quantize it against a fractional
+        // arranged origin and diverge up to a physical pixel from the frame
+        // the gesture committed. Native grabs keep the atlas-grid snap for
+        // their unscaled texture.
+        devicePixelRatio: widget.overview || pixelAlignmentInset == null
+            ? null
+            : devicePixelRatio,
         child: widget.placement == null
             ? widget.child
             : DesktopWorkspaceWindowTransition(
