@@ -39,6 +39,23 @@ class ShellBackdropBlur extends StatelessWidget {
   final BorderRadiusGeometry? borderRadius;
   final ui.BlendMode blendMode;
 
+  /// Animated callers bind opening-spring progress directly to [strength],
+  /// which keeps the first frames below any perceptible sigma step and makes
+  /// the blur appear to pop in mid-animation. Every non-zero strength is
+  /// lifted to at least half of the quantizer range and eased out so the ramp
+  /// saturates within the first third of the animation. Both endpoints are
+  /// fixed points, so static callers (`0` or `1`, the default) are untouched.
+  static double _effectiveStrength(double strength) {
+    if (strength <= 0 || strength >= 1) {
+      return strength;
+    }
+    const rampScale = 3.0;
+    const minimum = 0.5;
+    final t = strength * rampScale;
+    final curved = t >= 1 ? 1.0 : Curves.easeOutCubic.transform(t);
+    return curved < minimum ? minimum : curved;
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = ShellTheme.of(context);
@@ -55,7 +72,9 @@ class ShellBackdropBlur extends StatelessWidget {
           ? singleWindowSurface
                 ? theme.singleSurfaceWindowBackdropBlurFilterConfig
                 : theme.windowBackdropBlurFilterConfig
-          : theme.backdropBlurFilterConfigAt(resolvedStrength);
+          : theme.backdropBlurFilterConfigAt(
+              _effectiveStrength(resolvedStrength),
+            );
       final filterChild = separateChild ? const SizedBox.expand() : child;
       final backdrop = grouped
           ? BackdropFilter.grouped(
