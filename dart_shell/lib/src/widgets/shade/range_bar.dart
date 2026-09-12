@@ -15,6 +15,7 @@ class RangeBar extends StatefulWidget {
     required this.onChanged,
     required this.onChangeEnd,
     required this.height,
+    this.enabled = true,
     this.onChangeStart,
     this.trailing,
   });
@@ -26,6 +27,12 @@ class RangeBar extends StatefulWidget {
   final ValueChanged<double> onChanged;
   final ValueChanged<double> onChangeEnd;
   final double height;
+
+  /// Whether the bar accepts input and renders [value]. While disabled the
+  /// track stays empty and dimmed so an unknown level never reads as a real
+  /// position.
+  final bool enabled;
+
   final VoidCallback? onChangeStart;
   final Widget? trailing;
 
@@ -37,6 +44,26 @@ class _RangeBarState extends State<RangeBar> {
   static const _wheelStep = 0.05;
 
   double? _gestureValue;
+
+  @override
+  void didUpdateWidget(covariant RangeBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // A disabled bar delivers no gesture callbacks, so a gesture in flight
+    // when `enabled` flips would never report its end — leaving the caller's
+    // interaction state (e.g. an in-progress volume drag) stuck. Match the
+    // gesture-cancel path by delivering onChangeEnd after this update, which
+    // also keeps a stale gesture value from resurfacing on re-enable.
+    final interrupted = _gestureValue;
+    if (!widget.enabled && interrupted != null) {
+      _gestureValue = null;
+      // Deliver unconditionally: dropping it would leave the caller's
+      // interaction state (e.g. an in-progress volume drag) stuck forever.
+      final onChangeEnd = widget.onChangeEnd;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        onChangeEnd(interrupted);
+      });
+    }
+  }
 
   double get _displayValue =>
       (_gestureValue ?? widget.value).clamp(0.0, 1.0).toDouble();
@@ -135,7 +162,8 @@ class _RangeBarState extends State<RangeBar> {
     return LayoutBuilder(
       builder: (context, constraints) {
         final totalWidth = constraints.maxWidth;
-        final clamped = _displayValue;
+        final enabled = widget.enabled;
+        final clamped = enabled ? _displayValue : 0.0;
         final theme = context.shellTheme;
         final colors = context.shellColors;
         final radius = theme.borderRadius(widget.height / 2);
@@ -182,44 +210,55 @@ class _RangeBarState extends State<RangeBar> {
 
         final dotX = totalWidth * 0.82;
         final showDotAtX =
+            enabled &&
             !isFull &&
             inactiveWidth > 24.0 &&
             dotX > inactiveLeft + 6.0 &&
             dotX < totalWidth - 8.0;
 
         final iconOnActive = activeWidth >= 28.0;
-        final iconColor = iconOnActive
+        final iconColor = !enabled
+            ? colors.textTertiary
+            : iconOnActive
             ? theme.accentPalette.onPrimary
             : colors.textPrimary;
 
         return Listener(
-          onPointerSignal: _handlePointerSignal,
+          onPointerSignal: enabled ? _handlePointerSignal : null,
           child: GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onTapDown: (details) {
-              _updateFromPosition(details.localPosition, totalWidth);
-            },
-            onTapUp: (details) {
-              _updateFromPosition(details.localPosition, totalWidth);
-              _endGesture();
-            },
-            onTapCancel: _endGesture,
-            onHorizontalDragStart: (details) {
-              if (details.kind == PointerDeviceKind.trackpad) {
-                _startRelativeGesture();
-              } else {
-                _updateFromPosition(details.localPosition, totalWidth);
-              }
-            },
-            onHorizontalDragUpdate: (details) {
-              if (details.kind == PointerDeviceKind.trackpad) {
-                _updateFromDelta(details.primaryDelta ?? 0, totalWidth);
-              } else {
-                _updateFromPosition(details.localPosition, totalWidth);
-              }
-            },
-            onHorizontalDragEnd: (_) => _endGesture(),
-            onHorizontalDragCancel: _endGesture,
+            onTapDown: enabled
+                ? (details) {
+                    _updateFromPosition(details.localPosition, totalWidth);
+                  }
+                : null,
+            onTapUp: enabled
+                ? (details) {
+                    _updateFromPosition(details.localPosition, totalWidth);
+                    _endGesture();
+                  }
+                : null,
+            onTapCancel: enabled ? _endGesture : null,
+            onHorizontalDragStart: enabled
+                ? (details) {
+                    if (details.kind == PointerDeviceKind.trackpad) {
+                      _startRelativeGesture();
+                    } else {
+                      _updateFromPosition(details.localPosition, totalWidth);
+                    }
+                  }
+                : null,
+            onHorizontalDragUpdate: enabled
+                ? (details) {
+                    if (details.kind == PointerDeviceKind.trackpad) {
+                      _updateFromDelta(details.primaryDelta ?? 0, totalWidth);
+                    } else {
+                      _updateFromPosition(details.localPosition, totalWidth);
+                    }
+                  }
+                : null,
+            onHorizontalDragEnd: enabled ? (_) => _endGesture() : null,
+            onHorizontalDragCancel: enabled ? _endGesture : null,
             child: SizedBox(
               height: widget.height,
               child: Stack(

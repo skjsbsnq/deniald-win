@@ -775,7 +775,9 @@ class _CanvasZoomButton extends StatelessWidget {
       padding: EdgeInsets.zero,
       style: IconButton.styleFrom(
         foregroundColor: context.shellColors.textSecondary,
-        disabledForegroundColor: context.shellColors.textSecondary.withAlpha(82),
+        disabledForegroundColor: context.shellColors.textSecondary.withAlpha(
+          82,
+        ),
         backgroundColor: context.shellColors.surfaceContainerHigh,
         hoverColor: context.shellColors.textSecondary.withAlpha(26),
         focusColor: context.shellColors.textSecondary.withAlpha(26),
@@ -1608,20 +1610,20 @@ class _DisplayBrightnessCard extends ConsumerWidget {
                       Builder(
                         builder: (context) {
                           final output = layout.outputs[index];
-                          final level =
-                              brightness.levels[output.monitorId] ?? 0.72;
+                          final level = brightness.levels[output.monitorId];
+                          final levelPending =
+                              level == null ||
+                              brightness.loading.contains(output.monitorId);
                           return SettingsSlider(
                             label: l10n.outputBrightnessSemantics(output.name),
-                            value: level,
+                            value: level ?? 0.01,
                             minimum: 0.01,
                             maximum: 1,
                             divisions: 99,
-                            valueLabel: l10n.settingsPercent(
-                              (level * 100).round(),
-                            ),
-                            enabled: !brightness.loading.contains(
-                              output.monitorId,
-                            ),
+                            valueLabel: level == null
+                                ? '—'
+                                : l10n.settingsPercent((level * 100).round()),
+                            enabled: !levelPending,
                             onChanged: (value) =>
                                 controller.setLevel(output, value),
                             onChangeEnd: (value) =>

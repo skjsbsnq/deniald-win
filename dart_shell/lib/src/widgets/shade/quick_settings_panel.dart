@@ -238,12 +238,15 @@ class _BrightnessRangeBar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final brightness = ref.watch(
-      quickSettingsProvider.select((state) => state.brightness),
+      quickSettingsProvider.select(
+        (state) => (value: state.brightness, loaded: state.brightnessLoaded),
+      ),
     );
     final controller = ref.read(quickSettingsProvider.notifier);
     return RangeBar(
       icon: Icons.brightness_6_rounded,
-      value: brightness,
+      value: brightness.value,
+      enabled: brightness.loaded,
       activeColor: ShellTheme.of(context).accent,
       inactiveColor: context.shellColors.brightnessTrack,
       onChanged: controller.setBrightness,
@@ -259,12 +262,15 @@ class _VolumeRangeBar extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final volume = ref.watch(
-      quickSettingsProvider.select((state) => state.volume),
+      quickSettingsProvider.select(
+        (state) => (value: state.volume, loaded: state.volumeLoaded),
+      ),
     );
     final controller = ref.read(quickSettingsProvider.notifier);
     return RangeBar(
       icon: Icons.volume_up_rounded,
-      value: volume,
+      value: volume.value,
+      enabled: volume.loaded,
       activeColor: ShellTheme.of(context).accent,
       inactiveColor: context.shellColors.volumeTrack,
       onChangeStart: controller.beginVolumeInteraction,

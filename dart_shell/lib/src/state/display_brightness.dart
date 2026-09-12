@@ -33,6 +33,8 @@ class DisplayBrightnessState {
 class DisplayBrightnessController extends Notifier<DisplayBrightnessState>
     with NotifierLifecycle<DisplayBrightnessState> {
   static const Duration _commitInterval = Duration(milliseconds: 90);
+  static const Duration _refreshRetryInterval = Duration(milliseconds: 250);
+  static const int _refreshMaxAttempts = 16;
 
   final Map<int, Timer> _commitTimers = <int, Timer>{};
   late BrightnessService _service;
@@ -64,10 +66,12 @@ class DisplayBrightnessController extends Notifier<DisplayBrightnessState>
         }
       }
     });
+    // No seed levels: an output has no truthful value until a read or a
+    // native update lands, and `loading` already expresses that pending
+    // state. Prefilled placeholders were rendered as real readings and were
+    // what reset() used to write back to hardware.
     return DisplayBrightnessState(
-      levels: Map<int, double>.unmodifiable({
-        for (final output in _outputs) output.monitorId: 0.72,
-      }),
+      levels: const <int, double>{},
       loading: Set<int>.unmodifiable({
         for (final output in _outputs) output.monitorId,
       }),
@@ -88,9 +92,15 @@ class DisplayBrightnessController extends Notifier<DisplayBrightnessState>
     _flush(output);
   }
 
+  /// Re-applies the last known hardware level for each output. An output
+  /// whose level was never read has nothing truthful to write and is skipped.
   void reset() {
     for (final output in _outputs) {
-      commitLevel(output, 0.72);
+      final level = state.levels[output.monitorId];
+      if (level == null) {
+        continue;
+      }
+      commitLevel(output, level);
     }
   }
 
@@ -113,24 +123,43 @@ class DisplayBrightnessController extends Notifier<DisplayBrightnessState>
   }
 
   Future<void> _refreshOutput(DisplayOutput output, int generation) async {
-    final level = await _service.readLevel(output);
-    if (!isBuildGenerationActive(generation)) {
-      return;
+    // A transient read failure must not pin the output on its disabled end
+    // state forever; retry briefly. A native update or a layout-driven
+    // rebuild is another chance on top of this loop.
+    for (var attempt = 0; attempt < _refreshMaxAttempts; attempt++) {
+      if (attempt > 0) {
+        await Future<void>.delayed(_refreshRetryInterval);
+      }
+      if (!isBuildGenerationActive(generation)) {
+        return;
+      }
+      final level = await _service.readLevel(output);
+      if (!isBuildGenerationActive(generation)) {
+        return;
+      }
+      if (level != null) {
+        final levels = Map<int, double>.of(state.levels)
+          ..[output.monitorId] = level;
+        final loading = Set<int>.of(state.loading)..remove(output.monitorId);
+        state = DisplayBrightnessState(
+          levels: Map<int, double>.unmodifiable(levels),
+          loading: Set<int>.unmodifiable(loading),
+        );
+        return;
+      }
     }
+    // The read never produced a level: the output stays disabled via its
+    // missing levels entry, and `loading` clears so it no longer reads as
+    // work in progress.
     final loading = Set<int>.of(state.loading)..remove(output.monitorId);
-    final levels = Map<int, double>.of(state.levels);
-    if (level != null) {
-      levels[output.monitorId] = level;
-    }
-    state = DisplayBrightnessState(
-      levels: Map<int, double>.unmodifiable(levels),
-      loading: Set<int>.unmodifiable(loading),
-    );
+    state = state.copyWith(loading: Set<int>.unmodifiable(loading));
   }
 
   void _handleNativeUpdate(DenialBrightnessState update, int generation) {
+    // `levels` starts empty, so membership in `_outputs` — not in `levels` —
+    // decides whether this event describes a known monitor.
     if (!isBuildGenerationActive(generation) ||
-        !state.levels.containsKey(update.monitorId)) {
+        !_outputs.any((output) => output.monitorId == update.monitorId)) {
       return;
     }
     final levels = Map<int, double>.of(state.levels)
