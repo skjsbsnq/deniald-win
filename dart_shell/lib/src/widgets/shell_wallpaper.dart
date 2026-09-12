@@ -12,8 +12,24 @@ import '../wallpaper/state/wallpaper_controller.dart';
 import '../wallpaper/wallpaper.dart';
 import '../wallpaper/widgets/wallpaper_image.dart';
 
+export '../wallpaper/widgets/wallpaper_image.dart'
+    show blurredWallpaperImageProvider;
+
+/// Rewrites the provider a wallpaper image resolves through, letting a
+/// surface substitute a filtered variant of the decoded frame. The lock
+/// screen uses this to paint pre-blurred frames instead of convolving the
+/// live scene on its first frame.
+typedef WallpaperImageTransformer =
+    ImageProvider<Object> Function(
+      ImageProvider<Object> imageProvider, {
+      required Size targetPixelSize,
+      required Size targetLogicalSize,
+    });
+
 class ShellWallpaper extends ConsumerWidget {
-  const ShellWallpaper({super.key});
+  const ShellWallpaper({super.key, this.imageTransformer});
+
+  final WallpaperImageTransformer? imageTransformer;
 
   static const String assetPath = defaultShellWallpaperAsset;
 
@@ -46,6 +62,13 @@ class ShellWallpaper extends ConsumerWidget {
           outputs,
           spanRect,
         );
+        // spanPixelSize describes the whole layout, not the surface the
+        // span fallback paints on; keep its device-per-logical ratio at the
+        // engine scale so an offscreen layout cannot inflate it.
+        final spanPixelScale =
+            displayLayout?.engineScale ??
+            MediaQuery.devicePixelRatioOf(context);
+        final transitionBounds = transitionRect.intersect(canvas);
         final outgoing = wallpaper.outgoingAssignment;
         final animateOutgoing =
             outgoing != null && !reduceMotion && !transitionRect.isEmpty;
@@ -66,31 +89,56 @@ class ShellWallpaper extends ConsumerWidget {
                   outputs: outputs,
                   spanRect: spanRect,
                   spanPixelSize: spanPixelSize,
+                  spanPixelScale: spanPixelScale,
+                  imageTransformer: imageTransformer,
                 ),
+                // The reveal path is strictly bounded by the output being
+                // changed, so the transition subtree only spans that rect:
+                // the anti-aliased clip never covers the rest of the canvas.
                 if (animateOutgoing)
-                  TweenAnimationBuilder<double>(
-                    key: ValueKey<int>(wallpaper.transitionId),
-                    tween: Tween<double>(begin: 0.0, end: 1.0),
-                    duration: Motion.wallpaperReveal,
-                    curve: Motion.md3Emphasized,
-                    onEnd: () =>
-                        _completeTransition(ref, wallpaper.transitionId),
-                    builder: (context, progress, child) {
-                      return ClipPath(
-                        clipper: _ExpandingWallpaperHoleClipper(
-                          targetRect: transitionRect,
-                          originFraction: wallpaper.revealOriginFraction,
-                          progress: progress,
+                  Positioned.fromRect(
+                    rect: transitionBounds,
+                    child: TweenAnimationBuilder<double>(
+                      key: ValueKey<int>(wallpaper.transitionId),
+                      tween: Tween<double>(begin: 0.0, end: 1.0),
+                      duration: Motion.wallpaperReveal,
+                      curve: Motion.md3Emphasized,
+                      onEnd: () =>
+                          _completeTransition(ref, wallpaper.transitionId),
+                      builder: (context, progress, child) {
+                        return ClipPath(
+                          clipper: _ExpandingWallpaperHoleClipper(
+                            targetRect: Offset.zero & transitionBounds.size,
+                            originFraction: wallpaper.revealOriginFraction,
+                            progress: progress,
+                          ),
+                          clipBehavior: Clip.antiAlias,
+                          child: child,
+                        );
+                      },
+                      // The outgoing scene is static while the clip ticks;
+                      // keeping it behind its own repaint boundary stops the
+                      // per-frame reclip from re-recording every image.
+                      child: RepaintBoundary(
+                        child: Transform.translate(
+                          offset: -transitionBounds.topLeft,
+                          child: OverflowBox(
+                            minWidth: canvas.width,
+                            maxWidth: canvas.width,
+                            minHeight: canvas.height,
+                            maxHeight: canvas.height,
+                            alignment: Alignment.topLeft,
+                            child: WallpaperScene(
+                              assignment: outgoing,
+                              outputs: outputs,
+                              spanRect: spanRect,
+                              spanPixelSize: spanPixelSize,
+                              spanPixelScale: spanPixelScale,
+                              imageTransformer: imageTransformer,
+                            ),
+                          ),
                         ),
-                        clipBehavior: Clip.antiAlias,
-                        child: child,
-                      );
-                    },
-                    child: WallpaperScene(
-                      assignment: outgoing,
-                      outputs: outputs,
-                      spanRect: spanRect,
-                      spanPixelSize: spanPixelSize,
+                      ),
                     ),
                   ),
               ],
@@ -151,9 +199,14 @@ class ShellWallpaper extends ConsumerWidget {
 /// the empty space around rotated or offset monitors. A local, fully opaque
 /// wallpaper gives security surfaces a real edge for every output instead.
 class ShellOutputWallpaper extends ConsumerWidget {
-  const ShellOutputWallpaper({required this.output, super.key});
+  const ShellOutputWallpaper({
+    required this.output,
+    this.imageTransformer,
+    super.key,
+  });
 
   final DisplayOutput output;
+  final WallpaperImageTransformer? imageTransformer;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -171,10 +224,12 @@ class ShellOutputWallpaper extends ConsumerWidget {
               key: ValueKey<String>('wallpaper-image-output-${output.name}'),
               resource: assignment.forOutput(output.name),
               targetPixelSize: output.pixelSize,
+              targetLogicalSize: output.logicalRect.size,
               alignment: Alignment(
                 assignment.alignmentForOutput(output.name).x,
                 assignment.alignmentForOutput(output.name).y,
               ),
+              imageTransformer: imageTransformer,
             ),
             if (darkness > 0)
               _WallpaperDarknessLayer(
@@ -195,12 +250,22 @@ class WallpaperScene extends StatelessWidget {
     required this.outputs,
     required this.spanRect,
     required this.spanPixelSize,
+    required this.spanPixelScale,
+    this.imageTransformer,
   });
 
   final WallpaperAssignment assignment;
   final List<DisplayOutput> outputs;
   final Rect spanRect;
   final Size spanPixelSize;
+
+  /// Device pixels per logical pixel of the surface the span fallback is
+  /// painted on. Unlike the per-output paths, [spanPixelSize] can describe a
+  /// layout wider than this surface, so the ratio cannot be derived from
+  /// [spanRect].
+  final double spanPixelScale;
+
+  final WallpaperImageTransformer? imageTransformer;
 
   @override
   Widget build(BuildContext context) {
@@ -214,10 +279,12 @@ class WallpaperScene extends StatelessWidget {
               key: const ValueKey<String>('wallpaper-image-fallback'),
               resource: assignment.all,
               targetPixelSize: spanPixelSize,
+              targetLogicalSize: spanPixelSize / spanPixelScale,
               alignment: Alignment(
                 assignment.spanAlignment.x,
                 assignment.spanAlignment.y,
               ),
+              imageTransformer: imageTransformer,
             ),
           ),
         for (final output in outputs)
@@ -227,10 +294,12 @@ class WallpaperScene extends StatelessWidget {
               key: ValueKey<String>('wallpaper-image-output-${output.name}'),
               resource: assignment.forOutput(output.name),
               targetPixelSize: output.pixelSize,
+              targetLogicalSize: output.logicalRect.size,
               alignment: Alignment(
                 assignment.alignmentForOutput(output.name).x,
                 assignment.alignmentForOutput(output.name).y,
               ),
+              imageTransformer: imageTransformer,
             ),
           ),
         if (outputs.isEmpty && assignment.allDarkness > 0.0)
@@ -275,27 +344,43 @@ class _WallpaperImage extends StatelessWidget {
     super.key,
     required this.resource,
     required this.targetPixelSize,
+    required this.targetLogicalSize,
     this.alignment = Alignment.center,
+    this.imageTransformer,
   });
 
   final WallpaperResource resource;
   final Size targetPixelSize;
+  final Size targetLogicalSize;
   final Alignment alignment;
+  final WallpaperImageTransformer? imageTransformer;
 
   @override
   Widget build(BuildContext context) {
+    ImageProvider<Object> providerFor(WallpaperResource wallpaper) {
+      final base = wallpaperImageProvider(
+        wallpaper,
+        targetPixelSize: targetPixelSize,
+      );
+      final transformer = imageTransformer;
+      return transformer == null
+          ? base
+          : transformer(
+              base,
+              targetPixelSize: targetPixelSize,
+              targetLogicalSize: targetLogicalSize,
+            );
+    }
+
     return Image(
-      image: wallpaperImageProvider(resource, targetPixelSize: targetPixelSize),
+      image: providerFor(resource),
       fit: BoxFit.cover,
       alignment: alignment,
       filterQuality: FilterQuality.low,
       gaplessPlayback: true,
       excludeFromSemantics: true,
       errorBuilder: (context, error, stackTrace) => Image(
-        image: wallpaperImageProvider(
-          WallpaperResource.defaultWallpaper,
-          targetPixelSize: targetPixelSize,
-        ),
+        image: providerFor(WallpaperResource.defaultWallpaper),
         fit: BoxFit.cover,
         alignment: alignment,
         filterQuality: FilterQuality.low,

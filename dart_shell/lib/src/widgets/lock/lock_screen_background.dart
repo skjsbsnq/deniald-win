@@ -19,26 +19,22 @@ class _LockBackdrop extends ConsumerWidget {
             painter: _LockFillPainter(color: context.shellColors.background),
           ),
           if (settings.useSystemWallpaper)
-            ClipRect(
-              child: ImageFiltered(
-                key: ValueKey<String>(
-                  output == null
-                      ? 'lock-wallpaper-blur'
-                      : 'lock-wallpaper-blur-${output.monitorId}',
-                ),
-                imageFilter: ImageFilter.blur(
-                  sigmaX: settings.blurRadius,
-                  sigmaY: settings.blurRadius,
-                  // The lock wallpaper fills the output. Clamping keeps the
-                  // blur kernel from sampling transparent pixels beyond that
-                  // boundary and exposing a bright halo around the display.
-                  tileMode: TileMode.clamp,
-                ),
-                child: output == null
-                    ? const ShellWallpaper()
-                    : ShellOutputWallpaper(output: output),
-              ),
-            ),
+            output == null
+                ? ShellWallpaper(
+                    key: const ValueKey<String>('lock-wallpaper-blur'),
+                    imageTransformer: _lockBackdropImageTransformer(
+                      settings.blurRadius,
+                    ),
+                  )
+                : ShellOutputWallpaper(
+                    key: ValueKey<String>(
+                      'lock-wallpaper-blur-${output.monitorId}',
+                    ),
+                    output: output,
+                    imageTransformer: _lockBackdropImageTransformer(
+                      settings.blurRadius,
+                    ),
+                  ),
           CustomPaint(
             painter: _LockFillPainter(
               color: ShellMediaColors.darkness.withValues(
@@ -50,6 +46,39 @@ class _LockBackdrop extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// The lock wallpaper used to run its gaussian blur on the full-screen scene
+/// during the lock surface's first frame. Routing each decoded frame through
+/// [blurredWallpaperImageProvider] instead performs the same kernel once on a
+/// small offscreen picture while the source decodes; the lock screen then
+/// paints the result as an ordinary image and its steady state is cheaper too.
+WallpaperImageTransformer? _lockBackdropImageTransformer(double blurRadius) {
+  if (!blurRadius.isFinite || blurRadius <= 0.0) {
+    return null;
+  }
+  return (
+    imageProvider, {
+    required targetPixelSize,
+    required targetLogicalSize,
+  }) => blurredWallpaperImageProvider(
+    imageProvider,
+    sigma: blurRadius,
+    targetPixelSize: targetPixelSize,
+    targetLogicalSize: targetLogicalSize,
+    filterBuilder: _lockBackdropBlurFilter,
+  );
+}
+
+ImageFilter _lockBackdropBlurFilter(double sigma) {
+  // The lock wallpaper fills the output. Clamping keeps the blur kernel from
+  // sampling transparent pixels beyond that boundary and exposing a bright
+  // halo around the display.
+  return ImageFilter.blur(
+    sigmaX: sigma,
+    sigmaY: sigma,
+    tileMode: TileMode.clamp,
+  );
 }
 
 /// Uses round-rect geometry with an imperceptible radius so the backdrop obeys
