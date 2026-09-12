@@ -1,9 +1,7 @@
-import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 
-import '../theme/motion.dart';
-import '../theme/shell_theme.dart';
 import '../theme/tokens.dart';
+import 'shell_expressive_surface.dart';
 
 /// A hoverable, keyboard-activatable capsule control for shell chrome.
 ///
@@ -11,8 +9,9 @@ import '../theme/tokens.dart';
 /// proliferated across shelf and dashboard surfaces — a per-site
 /// StatefulWidget holding `MouseRegion(onEnter/onExit → setState)` +
 /// `GestureDetector` + `AnimatedContainer(duration: Motion.pill)`. Input
-/// plumbing and lifecycle live here; paint stays declarative at the call
-/// site through [color]/[hoverColor]/[border]/[hoverBorder].
+/// plumbing and lifecycle now live in [ShellExpressiveSurface]; paint stays
+/// declarative at the call site through [color]/[hoverColor]/[border]/
+/// [hoverBorder].
 ///
 /// Unlike the hand-rolled copies, the control is focusable: Tab reaches it,
 /// Enter and Space activate it, and the focused state is exposed to
@@ -21,7 +20,7 @@ import '../theme/tokens.dart';
 /// Provide either [child] for static content or [childBuilder] when the
 /// content itself reacts to hover (e.g. a foreground color that follows the
 /// surface).
-class ShellHoverPill extends StatefulWidget {
+class ShellHoverPill extends StatelessWidget {
   const ShellHoverPill({
     required this.onTap,
     required this.child,
@@ -101,80 +100,54 @@ class ShellHoverPill extends StatefulWidget {
   childBuilder;
 
   @override
-  State<ShellHoverPill> createState() => _ShellHoverPillState();
-}
-
-class _ShellHoverPillState extends State<ShellHoverPill> {
-  bool _hovered = false;
-  bool _focused = false;
-
-  bool get _active => widget.enabled && widget.onTap != null;
-
-  @override
   Widget build(BuildContext context) {
-    final hovered = _active && _hovered;
-    final theme = context.shellTheme;
-    final content =
-        widget.childBuilder?.call(context, hovered, _focused) ?? widget.child!;
-
-    Widget pill = AnimatedContainer(
-      duration: Motion.pill,
-      curve: Curves.easeOut,
-      width: widget.width,
-      height: widget.height,
-      padding: widget.padding,
-      alignment: widget.alignment,
-      decoration: BoxDecoration(
-        color: hovered ? (widget.hoverColor ?? widget.color) : widget.color,
-        borderRadius: theme.borderRadius(widget.radius),
-        border: hovered ? (widget.hoverBorder ?? widget.border) : widget.border,
-      ),
-      child: content,
-    );
-
-    if (widget.semanticLabel != null) {
-      pill = Semantics(
-        button: true,
-        enabled: _active,
-        label: widget.semanticLabel,
-        child: pill,
+    final builder = childBuilder;
+    if (builder != null) {
+      return ShellExpressiveSurface.builder(
+        onPressed: onTap,
+        shape: radius,
+        color: color,
+        // A null [hoverColor] historically meant "no hover tint"; the
+        // surface's default state-layer overlay would add one, so pin the
+        // resting color.
+        hoverColor: hoverColor ?? color,
+        border: border,
+        hoverBorder: hoverBorder,
+        // The pill historically paints no press scale and no focus treatment
+        // of its own — call sites that care draw through [childBuilder]. Keep
+        // that contract while the plumbing moves to the shared surface.
+        enablePressScale: false,
+        showFocusRing: false,
+        highlightOnFocus: false,
+        width: width,
+        height: height,
+        padding: padding,
+        alignment: alignment,
+        enabled: enabled,
+        autofocus: autofocus,
+        semanticLabel: semanticLabel,
+        childBuilder: (context, state) =>
+            builder(context, state.hovered, state.focused),
       );
     }
-
-    return FocusableActionDetector(
-      enabled: _active,
-      autofocus: widget.autofocus,
-      mouseCursor: _active
-          ? SystemMouseCursors.click
-          : SystemMouseCursors.basic,
-      onShowHoverHighlight: (value) {
-        if (_hovered != value) {
-          setState(() => _hovered = value);
-        }
-      },
-      onShowFocusHighlight: (value) {
-        if (_focused != value) {
-          setState(() => _focused = value);
-        }
-      },
-      shortcuts: _active
-          ? const <ShortcutActivator, Intent>{
-              SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
-              SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
-            }
-          : null,
-      actions: _active
-          ? <Type, Action<Intent>>{
-              ActivateIntent: CallbackAction<ActivateIntent>(
-                onInvoke: (_) => widget.onTap!.call(),
-              ),
-            }
-          : null,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: _active ? widget.onTap : null,
-        child: pill,
-      ),
+    return ShellExpressiveSurface(
+      onPressed: onTap,
+      shape: radius,
+      color: color,
+      hoverColor: hoverColor ?? color,
+      border: border,
+      hoverBorder: hoverBorder,
+      enablePressScale: false,
+      showFocusRing: false,
+      highlightOnFocus: false,
+      width: width,
+      height: height,
+      padding: padding,
+      alignment: alignment,
+      enabled: enabled,
+      autofocus: autofocus,
+      semanticLabel: semanticLabel,
+      child: child,
     );
   }
 }
