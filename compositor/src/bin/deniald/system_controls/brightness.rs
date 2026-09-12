@@ -9,6 +9,7 @@ trait BrightnessProvider {
 
 struct BrightnessProviders {
     providers: Vec<Box<dyn BrightnessProvider>>,
+    ddc_detection: Option<DdcDetection>,
     desired: HashMap<String, f64>,
     failure_latched: HashMap<String, bool>,
 }
@@ -22,12 +23,18 @@ impl BrightnessProviders {
             Ok(provider) => providers.push(Box::new(provider)),
             Err(error) => failures.push(format!("kernel backlight: {error}")),
         }
-        match DdcWorker::start() {
-            Ok(provider) => providers.push(Box::new(provider)),
-            Err(error) => failures.push(format!("DDC/CI: {error}")),
-        }
+        // DDC/CI display enumeration probes every I2C bus and can take
+        // seconds, so it runs on a dedicated thread and joins the provider
+        // list once ready instead of delaying kernel-backlight commands.
+        let ddc_detection = match DdcDetection::start() {
+            Ok(detection) => Some(detection),
+            Err(error) => {
+                failures.push(format!("DDC/CI: {error}"));
+                None
+            }
+        };
 
-        if providers.is_empty() {
+        if providers.is_empty() && ddc_detection.is_none() {
             return Err(failures.join("; "));
         }
         if !failures.is_empty() {
@@ -35,9 +42,63 @@ impl BrightnessProviders {
         }
         Ok(Self {
             providers,
+            ddc_detection,
             desired: HashMap::new(),
             failure_latched: HashMap::new(),
         })
+    }
+
+    fn poll_ddc_detection(&mut self) {
+        let Some(detection) = &self.ddc_detection else {
+            return;
+        };
+        let result = match detection.result.try_recv() {
+            Ok(result) => result,
+            Err(TryRecvError::Empty) => return,
+            Err(TryRecvError::Disconnected) => {
+                Err("display detection ended without a result".to_owned())
+            }
+        };
+        // The sender has reported or hung up, so the detection thread is
+        // already exiting and this join cannot block on I2C traffic.
+        if self
+            .ddc_detection
+            .take()
+            .is_some_and(|detection| detection.thread.join().is_err())
+        {
+            warn!("native DDC/CI detection thread panicked");
+        }
+        match result {
+            Ok(result) => {
+                let worker = DdcWorker::from_detection(result);
+                info!(
+                    outputs = worker.displays.len(),
+                    "Denial brightness registered the native DDC/CI provider"
+                );
+                self.providers.push(Box::new(worker));
+            }
+            Err(error) => {
+                warn!(%error, "native DDC/CI brightness provider is unavailable");
+            }
+        }
+    }
+
+    fn stop(&mut self) {
+        if let Some(detection) = self.ddc_detection.take() {
+            // Keep shutdown bounded: an already-finished detection thread is
+            // joined instantly, while one still probing I2C is detached. Its
+            // report send then fails on the dropped receiver and the thread
+            // exits on its own — safe because `SystemControls` lives for the
+            // process lifetime, so no second detection can ever overlap it.
+            drop(detection.result);
+            if detection.thread.is_finished() {
+                if detection.thread.join().is_err() {
+                    warn!("native DDC/CI detection thread panicked during shutdown");
+                }
+            } else {
+                warn!("native DDC/CI detection still in flight during shutdown; detaching");
+            }
+        }
     }
 
     fn read(&mut self, connector: &str, monitor_id: i64, events: &SystemControlEventSender) {
@@ -162,6 +223,9 @@ struct BacklightWorker {
 
 impl BacklightWorker {
     fn start() -> Result<Self, String> {
+        // The blocking system-bus handshake is a bounded local exchange, so
+        // keeping it synchronous here adds only millisecond-scale latency to
+        // the first brightness read. Only `set` uses the connection.
         let connection = zbus::blocking::Connection::system()
             .map_err(|error| format!("could not connect to logind: {error}"))?;
         let mut worker = Self {
@@ -609,13 +673,51 @@ fn connector_for_stable_display(
     matches.next().is_none().then(|| connector.name.clone())
 }
 
+/// In-flight display detection running on its own thread. The result is
+/// delivered through a channel because `DdcDisplayRef` raw pointers are not
+/// `Send` and cannot be carried in a `DdcWorker` directly.
+struct DdcDetection {
+    thread: JoinHandle<()>,
+    result: Receiver<Result<DdcDetectionResult, String>>,
+}
+
+/// Display references cross the detection-thread boundary as integers so the
+/// payload stays `Send` without marker impls. Handing the pointers over is
+/// sound here: the channel send/receive plus the join give the worker thread
+/// a happens-before view of everything the detection thread did, the
+/// `DdcApi` (and thus the loaded library) travels inside the same result so
+/// no `dlclose` can outlive a reference, and `ddca_init2` on the detection
+/// thread is fully serialized before any later libddcutil call on the
+/// worker thread. libddcutil's cross-thread affinity is covered by
+/// on-machine verification.
+struct DdcDetectionResult {
+    api: DdcApi,
+    displays: HashMap<String, usize>,
+}
+
+impl DdcDetection {
+    fn start() -> Result<Self, String> {
+        let (result_tx, result) = mpsc::sync_channel(1);
+        let thread = thread::Builder::new()
+            .name("denial-ddc-detect".into())
+            .spawn(move || {
+                crate::cpu_scheduling::normalize_current_worker("DDC detection");
+                let _ = result_tx.send(DdcWorker::detect());
+            })
+            .map_err(|error| format!("could not spawn display detection: {error}"))?;
+        Ok(Self { thread, result })
+    }
+}
+
 struct DdcWorker {
     api: DdcApi,
     displays: HashMap<String, DdcDisplayRef>,
 }
 
 impl DdcWorker {
-    fn start() -> Result<Self, String> {
+    /// Runs on the dedicated detection thread: loading libddcutil and its
+    /// first display enumeration can block on I2C traffic for seconds.
+    fn detect() -> Result<DdcDetectionResult, String> {
         let api = DdcApi::load()?;
         // DDCA_SYSLOG_NEVER=0 and DISABLE_CONFIG_FILE=1 keep this embedded
         // controller independent from global logging/configuration policy.
@@ -631,14 +733,28 @@ impl DdcWorker {
             api,
             displays: HashMap::new(),
         };
-        let outputs = worker
-            .refresh_displays(false)
-            .map_or(0, |()| worker.displays.len());
-        info!(
-            outputs,
-            "Denial brightness registered the native DDC/CI provider"
-        );
-        Ok(worker)
+        // An empty enumeration still registers the provider so a later miss
+        // can redetect hot-plugged displays.
+        let _ = worker.refresh_displays(false);
+        Ok(DdcDetectionResult {
+            api: worker.api,
+            displays: worker
+                .displays
+                .into_iter()
+                .map(|(connector, reference)| (connector, reference as usize))
+                .collect(),
+        })
+    }
+
+    fn from_detection(result: DdcDetectionResult) -> Self {
+        Self {
+            api: result.api,
+            displays: result
+                .displays
+                .into_iter()
+                .map(|(connector, reference)| (connector, reference as DdcDisplayRef))
+                .collect(),
+        }
     }
 
     fn refresh_displays(&mut self, redetect: bool) -> Result<(), String> {
@@ -884,6 +1000,7 @@ pub(super) fn run_brightness_worker(
         let Some(batch) = receive_brightness_batch(first, &commands) else {
             break;
         };
+        worker.poll_ddc_detection();
         for (connector, (monitor_id, command)) in batch {
             match command {
                 PendingBrightnessCommand::Read => worker.read(&connector, monitor_id, &events),
@@ -896,4 +1013,5 @@ pub(super) fn run_brightness_worker(
             }
         }
     }
+    worker.stop();
 }
