@@ -217,17 +217,16 @@ class _RawNotificationImageState extends State<_RawNotificationImage> {
 
   Future<void> _decode() async {
     final generation = ++_decodeGeneration;
-    final pixels = _rgbaPixels(widget.image);
-    if (pixels == null) {
-      _replaceDecoded(null, generation);
-      return;
-    }
-
     ui.ImmutableBuffer? buffer;
     ui.ImageDescriptor? descriptor;
     ui.Codec? codec;
     ui.Image? decoded;
     try {
+      final pixels = await notificationImageRgbaPixels(widget.image);
+      if (pixels == null) {
+        _replaceDecoded(null, generation);
+        return;
+      }
       buffer = await ui.ImmutableBuffer.fromUint8List(pixels);
       descriptor = ui.ImageDescriptor.raw(
         buffer,
@@ -290,7 +289,25 @@ class _RawNotificationImageState extends State<_RawNotificationImage> {
   }
 }
 
-Uint8List? _rgbaPixels(DesktopNotificationImageData image) {
+/// Converts a bounded freedesktop image tuple into tightly packed RGBA.
+///
+/// Already-packed 4-channel payloads are reused as-is; every other layout
+/// expands on a worker isolate so the per-byte loop stays off the UI
+/// isolate for the largest allowed payloads.
+@visibleForTesting
+Future<Uint8List?> notificationImageRgbaPixels(
+  DesktopNotificationImageData image,
+) {
+  if (!_isSupportedLayout(image)) {
+    return Future<Uint8List?>.value();
+  }
+  if (image.channels == 4 && image.rowStride == image.width * 4) {
+    return Future<Uint8List?>.value(image.data);
+  }
+  return Isolate.run(() => _rgbaPixels(image));
+}
+
+bool _isSupportedLayout(DesktopNotificationImageData image) {
   if (image.width <= 0 ||
       image.height <= 0 ||
       image.width > 4096 ||
@@ -298,13 +315,16 @@ Uint8List? _rgbaPixels(DesktopNotificationImageData image) {
       image.bitsPerSample != 8 ||
       (image.channels != 3 && image.channels != 4) ||
       image.rowStride < image.width * image.channels) {
-    return null;
+    return false;
   }
   final requiredBytes = image.rowStride * image.height;
-  if (requiredBytes != image.data.length || requiredBytes > 512 * 1024) {
+  return requiredBytes == image.data.length && requiredBytes <= 512 * 1024;
+}
+
+Uint8List? _rgbaPixels(DesktopNotificationImageData image) {
+  if (!_isSupportedLayout(image)) {
     return null;
   }
-
   final output = Uint8List(image.width * image.height * 4);
   for (var y = 0; y < image.height; y += 1) {
     final sourceRow = y * image.rowStride;

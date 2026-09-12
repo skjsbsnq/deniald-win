@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart' show Icons;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -25,22 +26,56 @@ part 'notification_card.dart';
 part 'notification_card_controls.dart';
 part 'notification_transition.dart';
 
+/// The banner layer's slice of [DesktopNotificationsState].
+///
+/// History appends, read markers and raw event traffic rebuild the full
+/// state without changing what the banner presents. Selecting this slice
+/// keeps those updates from rebuilding the banner stack.
+@immutable
+class NotificationBannerSlice {
+  const NotificationBannerSlice({
+    required this.notifications,
+    required this.lockPreview,
+  });
+
+  factory NotificationBannerSlice.fromState(DesktopNotificationsState state) =>
+      NotificationBannerSlice(
+        notifications: state.bannerNotifications,
+        lockPreview: state.lockPreview,
+      );
+
+  final List<DesktopNotification> notifications;
+  final NotificationPreviewMode lockPreview;
+
+  @override
+  bool operator ==(Object other) {
+    return other is NotificationBannerSlice &&
+        other.lockPreview == lockPreview &&
+        listEquals(other.notifications, notifications);
+  }
+
+  @override
+  int get hashCode => Object.hash(lockPreview, Object.hashAll(notifications));
+}
+
 class NotificationBannerLayer extends ConsumerWidget {
   const NotificationBannerLayer({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final notificationState = ref.watch(desktopNotificationsProvider);
+    final banner = ref.watch(
+      desktopNotificationsProvider.select(NotificationBannerSlice.fromState),
+    );
     final locked = ref.watch(
       shellControllerProvider.select((state) => state.lockLayerVisible),
     );
     final previewMode = locked
-        ? notificationState.lockPreview
+        ? banner.lockPreview
         : NotificationPreviewMode.full;
     final notifications =
         locked && previewMode == NotificationPreviewMode.hidden
         ? const <DesktopNotification>[]
-        : notificationState.bannerNotifications;
+        : banner.notifications;
     final controller = ref.read(desktopNotificationsProvider.notifier);
     final placement = ref.watch(
       shellSettingsProvider.select(

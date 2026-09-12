@@ -254,7 +254,13 @@ class _DeferredIconLoadScheduler {
 
   static final _DeferredIconLoadScheduler instance =
       _DeferredIconLoadScheduler._();
-  static const int _maxConcurrentLoads = 2;
+
+  // In release/profile builds the icon file IO already runs inside
+  // flutter_svg's compute worker isolate; debug/test builds inline it by
+  // design (flutter_svg's compute shim). A slightly wider gate therefore
+  // only overlaps worker spawns and cache lookups, and it still keeps a
+  // full-grid reveal from starting every decode at once.
+  static const int _maxConcurrentLoads = 4;
 
   final Queue<Future<void> Function()> _pending =
       Queue<Future<void> Function()>();
