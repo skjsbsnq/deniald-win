@@ -1,11 +1,50 @@
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:material_color_utilities/material_color_utilities.dart'
+    show DynamicScheme, Hct, SchemeExpressive;
 
 import 'backdrop_blur_level.dart';
 import 'shell_color_scheme.dart';
 import 'shell_text_theme.dart';
 import 'tokens.dart';
+
+export 'package:material_color_utilities/material_color_utilities.dart'
+    show DynamicScheme;
+export 'shell_color_scheme.dart' show shellSchemeColor;
+
+/// Memoized `SchemeExpressive` dynamic schemes keyed by the
+/// (seed argb, isDark, contrastLevel) triple.
+final Map<(int, bool, double), DynamicScheme> _dynamicSchemes =
+    <(int, bool, double), DynamicScheme>{};
+
+/// The single Monet entry point: expands a seed into a `SchemeExpressive`
+/// [DynamicScheme] aligned with Android 16. Every accent-driven consumer
+/// (shell surfaces, accent palette, Settings category hues, appearance-page
+/// swatches) resolves through this helper so the variant can never drift.
+///
+/// [contrastLevel] follows the MCU convention: 0 is standard, ±1 are the
+/// accessibility extremes. Schemes are memoized because construction is far
+/// too expensive to run from `build`.
+DynamicScheme shellDynamicScheme(
+  Color seed, {
+  Brightness brightness = Brightness.dark,
+  double contrastLevel = 0,
+}) {
+  final key = (
+    seed.withValues(alpha: 1).toARGB32(),
+    brightness == Brightness.dark,
+    contrastLevel.clamp(-1.0, 1.0).toDouble(),
+  );
+  return _dynamicSchemes.putIfAbsent(
+    key,
+    () => SchemeExpressive(
+      sourceColorHct: Hct.fromInt(key.$1),
+      isDark: key.$2,
+      contrastLevel: key.$3,
+    ),
+  );
+}
 
 @immutable
 class ShellAccentPalette {
@@ -20,24 +59,36 @@ class ShellAccentPalette {
     required this.subtle,
     required this.outline,
     required this.selection,
+    required this.secondary,
+    required this.onSecondary,
+    required this.secondaryContainer,
+    required this.onSecondaryContainer,
+    required this.tertiary,
+    required this.onTertiary,
+    required this.tertiaryContainer,
+    required this.onTertiaryContainer,
+    required this.error,
+    required this.onError,
+    required this.errorContainer,
+    required this.onErrorContainer,
   });
 
   factory ShellAccentPalette.from(
     Color source, [
     ShellColorScheme colors = ShellColorScheme.dark,
   ]) {
-    return ShellAccentPalette._fromGenerated(
-      _accentColorScheme(source, colors),
+    return ShellAccentPalette._fromScheme(
+      shellDynamicScheme(source, brightness: colors.brightness),
       colors,
     );
   }
 
-  factory ShellAccentPalette._fromGenerated(
-    ColorScheme generated,
+  factory ShellAccentPalette._fromScheme(
+    DynamicScheme scheme,
     ShellColorScheme colors,
   ) {
-    final primary = generated.primary;
-    final container = generated.primaryContainer;
+    final primary = shellSchemeColor(scheme.primary);
+    final container = shellSchemeColor(scheme.primaryContainer);
     // M3E derives quiet roles from the same tonal palette instead of alpha
     // blends: tone-based derivation keeps light and dark brightness
     // symmetric, which alpha blending cannot.
@@ -48,19 +99,33 @@ class ShellAccentPalette {
     );
     return ShellAccentPalette._(
       primary: primary,
-      onPrimary: generated.onPrimary,
+      onPrimary: shellSchemeColor(scheme.onPrimary),
       container: container,
-      onContainer: generated.onPrimaryContainer,
-      onContainerSecondary: generated.onPrimaryContainer.withValues(
-        alpha: 0.78,
-      ),
+      onContainer: shellSchemeColor(scheme.onPrimaryContainer),
+      onContainerSecondary: shellSchemeColor(
+        scheme.onPrimaryContainer,
+      ).withValues(alpha: 0.78),
       mutedContainer: mutedContainer,
       onMutedContainer: _contrastForeground(mutedContainer),
       subtle: colors.brightness == Brightness.dark
           ? primary.withValues(alpha: 0.10)
           : _tintedSurface(primary, colors, 0.10),
-      outline: generated.outline,
-      selection: generated.primary.withValues(alpha: 0.38),
+      outline: shellSchemeColor(scheme.outline),
+      selection: primary.withValues(alpha: 0.38),
+      secondary: shellSchemeColor(scheme.secondary),
+      onSecondary: shellSchemeColor(scheme.onSecondary),
+      secondaryContainer: shellSchemeColor(scheme.secondaryContainer),
+      onSecondaryContainer: shellSchemeColor(scheme.onSecondaryContainer),
+      tertiary: shellSchemeColor(scheme.tertiary),
+      onTertiary: shellSchemeColor(scheme.onTertiary),
+      tertiaryContainer: shellSchemeColor(scheme.tertiaryContainer),
+      onTertiaryContainer: shellSchemeColor(scheme.onTertiaryContainer),
+      // The error palette is seed-independent inside DynamicScheme
+      // (TonalPalette.of(25, 84)), so these roles are static by construction.
+      error: shellSchemeColor(scheme.error),
+      onError: shellSchemeColor(scheme.onError),
+      errorContainer: shellSchemeColor(scheme.errorContainer),
+      onErrorContainer: shellSchemeColor(scheme.onErrorContainer),
     );
   }
 
@@ -74,6 +139,24 @@ class ShellAccentPalette {
   final Color subtle;
   final Color outline;
   final Color selection;
+
+  /// Secondary family: lower-emphasis accent used for secondary activation.
+  final Color secondary;
+  final Color onSecondary;
+  final Color secondaryContainer;
+  final Color onSecondaryContainer;
+
+  /// Tertiary family: rotated-hue accents for emphasis and ratings.
+  final Color tertiary;
+  final Color onTertiary;
+  final Color tertiaryContainer;
+  final Color onTertiaryContainer;
+
+  /// Error family: static and seed-independent.
+  final Color error;
+  final Color onError;
+  final Color errorContainer;
+  final Color onErrorContainer;
 
   static ShellAccentPalette lerp(
     ShellAccentPalette first,
@@ -95,15 +178,94 @@ class ShellAccentPalette {
       subtle: blend(first.subtle, second.subtle),
       outline: blend(first.outline, second.outline),
       selection: blend(first.selection, second.selection),
+      secondary: blend(first.secondary, second.secondary),
+      onSecondary: blend(first.onSecondary, second.onSecondary),
+      secondaryContainer: blend(
+        first.secondaryContainer,
+        second.secondaryContainer,
+      ),
+      onSecondaryContainer: blend(
+        first.onSecondaryContainer,
+        second.onSecondaryContainer,
+      ),
+      tertiary: blend(first.tertiary, second.tertiary),
+      onTertiary: blend(first.onTertiary, second.onTertiary),
+      tertiaryContainer: blend(
+        first.tertiaryContainer,
+        second.tertiaryContainer,
+      ),
+      onTertiaryContainer: blend(
+        first.onTertiaryContainer,
+        second.onTertiaryContainer,
+      ),
+      error: blend(first.error, second.error),
+      onError: blend(first.onError, second.onError),
+      errorContainer: blend(first.errorContainer, second.errorContainer),
+      onErrorContainer: blend(first.onErrorContainer, second.onErrorContainer),
     );
   }
+
+  @override
+  bool operator ==(Object other) {
+    return identical(this, other) ||
+        other is ShellAccentPalette &&
+            other.primary == primary &&
+            other.onPrimary == onPrimary &&
+            other.container == container &&
+            other.onContainer == onContainer &&
+            other.onContainerSecondary == onContainerSecondary &&
+            other.mutedContainer == mutedContainer &&
+            other.onMutedContainer == onMutedContainer &&
+            other.subtle == subtle &&
+            other.outline == outline &&
+            other.selection == selection &&
+            other.secondary == secondary &&
+            other.onSecondary == onSecondary &&
+            other.secondaryContainer == secondaryContainer &&
+            other.onSecondaryContainer == onSecondaryContainer &&
+            other.tertiary == tertiary &&
+            other.onTertiary == onTertiary &&
+            other.tertiaryContainer == tertiaryContainer &&
+            other.onTertiaryContainer == onTertiaryContainer &&
+            other.error == error &&
+            other.onError == onError &&
+            other.errorContainer == errorContainer &&
+            other.onErrorContainer == onErrorContainer;
+  }
+
+  @override
+  int get hashCode => Object.hashAll(<Object>[
+    primary,
+    onPrimary,
+    container,
+    onContainer,
+    onContainerSecondary,
+    mutedContainer,
+    onMutedContainer,
+    subtle,
+    outline,
+    selection,
+    secondary,
+    onSecondary,
+    secondaryContainer,
+    onSecondaryContainer,
+    tertiary,
+    onTertiary,
+    tertiaryContainer,
+    onTertiaryContainer,
+    error,
+    onError,
+    errorContainer,
+    onErrorContainer,
+  ]);
 }
 
 @immutable
 class ShellThemeData {
   const ShellThemeData({
-    this.colors = ShellColorScheme.dark,
+    ShellColorScheme colors = ShellColorScheme.dark,
     Color accent = ShellBrandColors.defaultAccent,
+    this.contrastLevel = 0,
     this.cornerRadiusScale = ShellRoundness.normal,
     this.panelOpacity = ShellOpacity.panel,
     this.cardOpacity = ShellOpacity.card,
@@ -114,14 +276,27 @@ class ShellThemeData {
     this.focusedWindowOpacity = 1,
     this.unfocusedWindowOpacity = 1,
     this.fontFamily,
+    this._resolvedColorScheme,
     this._resolvedTextTheme,
     this._resolvedAccentPalette,
     this._resolvedGeneratedColorScheme,
     this._resolvedBackdropBlurFilterConfig,
-  }) : accentSeed = accent;
+  }) : _baseColors = colors,
+       accentSeed = accent;
 
-  final ShellColorScheme colors;
+  /// The neutral base scheme supplied at construction. Only its brightness
+  /// still participates in derivation; every semantic role is expanded from
+  /// the wallpaper seed through [ShellColorScheme.fromDynamicScheme].
+  final ShellColorScheme _baseColors;
+
+  /// Precomputed interpolated scheme produced by [ShellThemeData.lerp]; when
+  /// set, [colors] returns it verbatim instead of re-deriving from the seed.
+  final ShellColorScheme? _resolvedColorScheme;
   final Color accentSeed;
+
+  /// MCU contrast level for the generated dynamic scheme: 0 is standard,
+  /// -1 reduces and +1 raises contrast. Persisted in appearance settings.
+  final double contrastLevel;
   final ShellTextTheme? _resolvedTextTheme;
   final ShellAccentPalette? _resolvedAccentPalette;
   final ColorScheme? _resolvedGeneratedColorScheme;
@@ -167,7 +342,12 @@ class ShellThemeData {
   ImageFilterConfig get singleSurfaceWindowBackdropBlurFilterConfig =>
       _resolution.singleSurfaceWindowBackdropBlurFilterConfig;
 
-  Brightness get brightness => colors.brightness;
+  Brightness get brightness => _baseColors.brightness;
+
+  /// The effective semantic color stack: derived once from
+  /// ([accentSeed], brightness, [contrastLevel]) through `SchemeExpressive`,
+  /// or the interpolated scheme while [AnimatedShellTheme] is lerping.
+  ShellColorScheme get colors => _resolution.colorScheme;
 
   /// Semantic text roles resolved once for this immutable theme value.
   ShellTextTheme get text => _resolution.text;
@@ -223,6 +403,7 @@ class ShellThemeData {
   ShellThemeData copyWith({
     ShellColorScheme? colors,
     Color? accent,
+    double? contrastLevel,
     double? cornerRadiusScale,
     double? panelOpacity,
     double? cardOpacity,
@@ -235,8 +416,9 @@ class ShellThemeData {
     String? fontFamily,
   }) {
     return ShellThemeData(
-      colors: colors ?? this.colors,
+      colors: colors ?? _baseColors,
       accent: accent ?? accentSeed,
+      contrastLevel: contrastLevel ?? this.contrastLevel,
       cornerRadiusScale: cornerRadiusScale ?? this.cornerRadiusScale,
       panelOpacity: panelOpacity ?? this.panelOpacity,
       cardOpacity: cardOpacity ?? this.cardOpacity,
@@ -266,15 +448,18 @@ class ShellThemeData {
     }
     final colorsMatch = first.colors == second.colors;
     final accentsMatch = first.accentSeed == second.accentSeed;
-    final colorInputsMatch = colorsMatch && accentsMatch;
+    final colorInputsMatch =
+        colorsMatch && accentsMatch && first.contrastLevel == second.contrastLevel;
     double blend(double a, double b) => a + (b - a) * t;
     return ShellThemeData(
-      colors: colorsMatch
-          ? first.colors
-          : ShellColorScheme.lerp(first.colors, second.colors, t),
+      colors: t < 0.5 ? first._baseColors : second._baseColors,
       accent: accentsMatch
           ? first.accentSeed
           : Color.lerp(first.accentSeed, second.accentSeed, t)!,
+      contrastLevel: blend(first.contrastLevel, second.contrastLevel),
+      resolvedColorScheme: colorsMatch
+          ? first.colors
+          : ShellColorScheme.lerp(first.colors, second.colors, t),
       resolvedTextTheme: colorsMatch
           ? first.text
           : ShellTextTheme.lerp(first.text, second.text, t),
@@ -334,6 +519,7 @@ class ShellThemeData {
     return other is ShellThemeData &&
         other.colors == colors &&
         other.accentSeed == accentSeed &&
+        other.contrastLevel == contrastLevel &&
         other.cornerRadiusScale == cornerRadiusScale &&
         other.panelOpacity == panelOpacity &&
         other.cardOpacity == cardOpacity &&
@@ -350,6 +536,7 @@ class ShellThemeData {
   int get hashCode => Object.hash(
     colors,
     accentSeed,
+    contrastLevel,
     cornerRadiusScale,
     panelOpacity,
     cardOpacity,
@@ -422,17 +609,30 @@ class _ShellThemeResolution {
         ),
       );
 
+  /// The shared `SchemeExpressive` dynamic scheme backing every color role
+  /// of this theme value: surfaces, accent palette, and Material theme all
+  /// derive from this one instance.
+  late final DynamicScheme dynamicScheme = shellDynamicScheme(
+    theme.accentSeed,
+    brightness: theme._baseColors.brightness,
+    contrastLevel: theme.contrastLevel,
+  );
+
+  late final ShellColorScheme colorScheme =
+      theme._resolvedColorScheme ??
+      ShellColorScheme.fromDynamicScheme(dynamicScheme);
+
   late final ShellTextTheme text =
       theme._resolvedTextTheme ??
-      ShellTextTheme.from(theme.colors, fontFamily: theme.fontFamily);
+      ShellTextTheme.from(colorScheme, fontFamily: theme.fontFamily);
 
   late final ColorScheme generatedColorScheme =
       theme._resolvedGeneratedColorScheme ??
-      _accentColorScheme(theme.accentSeed, theme.colors);
+      _materialColorScheme(dynamicScheme);
 
   late final ShellAccentPalette accentPalette =
       theme._resolvedAccentPalette ??
-      ShellAccentPalette._fromGenerated(generatedColorScheme, theme.colors);
+      ShellAccentPalette._fromScheme(dynamicScheme, colorScheme);
 
   late final ImageFilterConfig backdropBlurFilterConfig =
       theme._resolvedBackdropBlurFilterConfig ??
@@ -495,9 +695,9 @@ class _ShellThemeResolution {
       surface: theme.colors.background,
       onSurface: theme.colors.textPrimary,
       onSurfaceVariant: theme.colors.textSecondary,
-      outline: theme.colors.hairline,
-      outlineVariant: theme.colors.hairlineSoft,
-      surfaceContainerLowest: theme.colors.background,
+      outline: theme.colors.outline,
+      outlineVariant: theme.colors.outlineVariant,
+      surfaceContainerLowest: theme.colors.surfaceContainerLowest,
       surfaceContainerLow: theme.colors.surfaceContainerLow,
       surfaceContainer: theme.colors.surfaceContainer,
       surfaceContainerHigh: theme.colors.surfaceContainerHigh,
@@ -705,17 +905,60 @@ Color _tintedSurface(Color accent, ShellColorScheme colors, double amount) {
   return tinted.withValues(alpha: colors.surfaceContainerHigh.a);
 }
 
-/// The `content` variant keeps the wallpaper seed's hue and chroma on
-/// primary/primaryContainer while producing a complete tonal scheme, so the
-/// shell accent tracks the user's wallpaper. No surface override is passed:
-/// an override would only replace the single `surface` role and leave the
-/// generated surfaceContainer roles on a different hue, breaking tonal
-/// harmony.
-ColorScheme _accentColorScheme(Color source, ShellColorScheme colors) {
-  return ColorScheme.fromSeed(
-    seedColor: source.withValues(alpha: 1),
-    brightness: colors.brightness,
-    dynamicSchemeVariant: DynamicSchemeVariant.content,
+/// Expands a [DynamicScheme] into a full Material [ColorScheme], mapping
+/// every tonal role — including the five surface-container tiers, the
+/// inverse family, and the fixed palettes — so `materialTheme` reflects real
+/// M3E layering instead of a partial seed expansion.
+ColorScheme _materialColorScheme(DynamicScheme scheme) {
+  Color role(int argb) => shellSchemeColor(argb);
+  return ColorScheme(
+    brightness: scheme.isDark ? Brightness.dark : Brightness.light,
+    primary: role(scheme.primary),
+    onPrimary: role(scheme.onPrimary),
+    primaryContainer: role(scheme.primaryContainer),
+    onPrimaryContainer: role(scheme.onPrimaryContainer),
+    primaryFixed: role(scheme.primaryFixed),
+    primaryFixedDim: role(scheme.primaryFixedDim),
+    onPrimaryFixed: role(scheme.onPrimaryFixed),
+    onPrimaryFixedVariant: role(scheme.onPrimaryFixedVariant),
+    secondary: role(scheme.secondary),
+    onSecondary: role(scheme.onSecondary),
+    secondaryContainer: role(scheme.secondaryContainer),
+    onSecondaryContainer: role(scheme.onSecondaryContainer),
+    secondaryFixed: role(scheme.secondaryFixed),
+    secondaryFixedDim: role(scheme.secondaryFixedDim),
+    onSecondaryFixed: role(scheme.onSecondaryFixed),
+    onSecondaryFixedVariant: role(scheme.onSecondaryFixedVariant),
+    tertiary: role(scheme.tertiary),
+    onTertiary: role(scheme.onTertiary),
+    tertiaryContainer: role(scheme.tertiaryContainer),
+    onTertiaryContainer: role(scheme.onTertiaryContainer),
+    tertiaryFixed: role(scheme.tertiaryFixed),
+    tertiaryFixedDim: role(scheme.tertiaryFixedDim),
+    onTertiaryFixed: role(scheme.onTertiaryFixed),
+    onTertiaryFixedVariant: role(scheme.onTertiaryFixedVariant),
+    error: role(scheme.error),
+    onError: role(scheme.onError),
+    errorContainer: role(scheme.errorContainer),
+    onErrorContainer: role(scheme.onErrorContainer),
+    surface: role(scheme.surface),
+    onSurface: role(scheme.onSurface),
+    surfaceDim: role(scheme.surfaceDim),
+    surfaceBright: role(scheme.surfaceBright),
+    surfaceContainerLowest: role(scheme.surfaceContainerLowest),
+    surfaceContainerLow: role(scheme.surfaceContainerLow),
+    surfaceContainer: role(scheme.surfaceContainer),
+    surfaceContainerHigh: role(scheme.surfaceContainerHigh),
+    surfaceContainerHighest: role(scheme.surfaceContainerHighest),
+    onSurfaceVariant: role(scheme.onSurfaceVariant),
+    outline: role(scheme.outline),
+    outlineVariant: role(scheme.outlineVariant),
+    shadow: role(scheme.shadow),
+    scrim: role(scheme.scrim),
+    inverseSurface: role(scheme.inverseSurface),
+    onInverseSurface: role(scheme.inverseOnSurface),
+    inversePrimary: role(scheme.inversePrimary),
+    surfaceTint: role(scheme.surfaceTint),
   );
 }
 

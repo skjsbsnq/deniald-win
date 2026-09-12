@@ -67,14 +67,10 @@ abstract final class SettingsCategoryColors {
       of(context, page).onContainer;
 
   static SettingsCategoryHue _derive(Color seed, Brightness brightness) {
-    final scheme = ColorScheme.fromSeed(
-      seedColor: seed,
-      brightness: brightness,
-      dynamicSchemeVariant: DynamicSchemeVariant.expressive,
-    );
+    final scheme = shellDynamicScheme(seed, brightness: brightness);
     return (
-      container: scheme.primaryContainer,
-      onContainer: scheme.onPrimaryContainer,
+      container: shellSchemeColor(scheme.primaryContainer),
+      onContainer: shellSchemeColor(scheme.onPrimaryContainer),
     );
   }
 }

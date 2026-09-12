@@ -1,12 +1,13 @@
 import 'dart:async';
 import 'dart:io';
-import 'dart:math' as math;
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:material_color_utilities/material_color_utilities.dart';
 
 import '../../settings/settings_controller.dart';
 import '../../settings/shell_settings.dart';
@@ -42,18 +43,16 @@ class WallpaperAccent {
 
   /// Card fill for system bar cards. The shell theme supplies the shared
   /// frosted-surface opacity at the point of use.
-  Color cardFill(ShellThemeData theme) =>
-      Color.lerp(theme.colors.surfaceContainer, theme.accent, 0.15)!;
+  Color cardFill(ShellThemeData theme) => theme.accentPalette.secondaryContainer;
 
   /// Top stop of the card gradient: [cardFill] nudged further toward the
   /// accent so pills read as softly lit from above.
-  Color cardFillTop(ShellThemeData theme) =>
-      Color.lerp(theme.colors.surfaceContainer, theme.accent, 0.24)!;
+  Color cardFillTop(ShellThemeData theme) => theme.accentPalette.container;
 
-  /// Secondary text inside system bar cards, tinted toward the accent so
-  /// captions re-theme with the wallpaper without losing legibility.
+  /// Secondary text inside system bar cards, re-themed with the wallpaper
+  /// through the matching on-container role instead of an alpha blend.
   Color captionColor(ShellThemeData theme) =>
-      Color.lerp(theme.colors.textSecondary, theme.accent, 0.35)!;
+      theme.accentPalette.onSecondaryContainer;
 
   @override
   bool operator ==(Object other) =>
@@ -199,77 +198,51 @@ Future<Color?> extractWallpaperAccent(Uint8List encoded) async {
   }
 }
 
-/// Scores 15-degree hue buckets by chroma-weighted frequency over raw RGBA
-/// pixels and rebuilds the winning bucket as a canonical seed. The fixed seed
-/// tone is not rendered directly; [ShellAccentPalette] chooses suitable role
-/// tones for the active brightness. Near-gray and near-black pixels carry no
-/// vote; when nothing votes the image has no usable accent.
+/// Quantizes raw RGBA pixels with `QuantizerCelebi` and picks the seed via
+/// `Score.score()` — the same pipeline Android 16 uses for wallpaper Monet.
+///
+/// Returns null for effectively monochrome images: [Score] emits the
+/// sentinel fallback only when every quantized color fails its own
+/// chroma/population cutoffs, and the additional HCT chroma check rejects
+/// near-gray survivors so a washed-out wallpaper keeps the brand accent.
 @visibleForTesting
-Color? dominantVibrantColor(ByteData rgba) {
-  const bucketCount = 24;
-  const bucketDegrees = 360.0 / bucketCount;
-  final weights = Float64List(bucketCount);
-  final hueSin = Float64List(bucketCount);
-  final hueCos = Float64List(bucketCount);
-  final saturations = Float64List(bucketCount);
-
+Future<Color?> dominantVibrantColor(ByteData rgba) async {
   final pixelCount = rgba.lengthInBytes ~/ 4;
-  for (var index = 0; index < pixelCount; index += 1) {
-    final offset = index * 4;
-    final r = rgba.getUint8(offset) / 255.0;
-    final g = rgba.getUint8(offset + 1) / 255.0;
-    final b = rgba.getUint8(offset + 2) / 255.0;
-    final high = math.max(r, math.max(g, b));
-    final low = math.min(r, math.min(g, b));
-    final chroma = high - low;
-    final saturation = high == 0.0 ? 0.0 : chroma / high;
-    if (saturation < 0.15 || high < 0.12) {
-      continue;
-    }
-
-    var hue = 0.0;
-    if (chroma > 0.0) {
-      if (high == r) {
-        hue = 60.0 * (((g - b) / chroma) % 6.0);
-      } else if (high == g) {
-        hue = 60.0 * (((b - r) / chroma) + 2.0);
-      } else {
-        hue = 60.0 * (((r - g) / chroma) + 4.0);
-      }
-    }
-    if (hue < 0.0) {
-      hue += 360.0;
-    }
-
-    final weight = saturation * saturation * high;
-    final bucket = (hue / bucketDegrees).floor() % bucketCount;
-    final radians = hue * math.pi / 180.0;
-    weights[bucket] += weight;
-    hueSin[bucket] += math.sin(radians) * weight;
-    hueCos[bucket] += math.cos(radians) * weight;
-    saturations[bucket] += saturation * weight;
-  }
-
-  var best = 0;
-  for (var bucket = 1; bucket < bucketCount; bucket += 1) {
-    if (weights[bucket] > weights[best]) {
-      best = bucket;
-    }
-  }
-  // A vibrant accent needs a real constituency; a handful of stray colored
-  // pixels in a gray image must not theme the whole shell.
-  if (pixelCount == 0 || weights[best] < pixelCount * 0.002) {
+  if (pixelCount == 0) {
     return null;
   }
-
-  var hue = math.atan2(hueSin[best], hueCos[best]) * 180.0 / math.pi;
-  if (hue < 0.0) {
-    hue += 360.0;
+  final pixels = Uint32List(pixelCount);
+  for (var index = 0; index < pixelCount; index += 1) {
+    final offset = index * 4;
+    pixels[index] =
+        0xff000000 |
+        rgba.getUint8(offset) << 16 |
+        rgba.getUint8(offset + 1) << 8 |
+        rgba.getUint8(offset + 2);
   }
-  final saturation = (saturations[best] / weights[best])
-      // Keep a small quantization margin: HSVColor.toColor() rounds channels,
-      // which can otherwise reconstruct just above the canonical 0.75 cap.
-      .clamp(0.35, 0.74)
-      .toDouble();
-  return HSVColor.fromAHSV(1.0, hue, saturation, 0.65).toColor();
+  final quantized = await QuantizerCelebi().quantize(
+    pixels,
+    _quantizerMaxColors,
+  );
+  // A zero argb fallback is unrepresentable for real pixels (they always
+  // carry a full alpha channel), so it marks "nothing usable was scored".
+  final ranked = Score.score(
+    quantized.colorToCount,
+    fallbackColorARGB: 0x00000000,
+  );
+  if (ranked.isEmpty || ranked.first == 0x00000000) {
+    return null;
+  }
+  final seed = Hct.fromInt(ranked.first);
+  if (seed.chroma < _minimumSeedChroma) {
+    return null;
+  }
+  return Color(ranked.first);
 }
+
+/// Celebi input cluster budget; 128 matches Android's wallpaper pipeline.
+const int _quantizerMaxColors = 128;
+
+/// Mirrors `Score`'s internal chroma cutoff so near-gray winners still fall
+/// back to the brand accent.
+const double _minimumSeedChroma = 5.0;

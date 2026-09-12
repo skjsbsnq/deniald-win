@@ -249,6 +249,7 @@ class ShellAppearanceSettings {
     this.allowClientCursorSurfaces = true,
     this.uiFontFamily = '',
     this.iconThemeName = '',
+    this.contrastLevel = 0,
   });
 
   final DesktopColorSchemePreference colorSchemePreference;
@@ -276,6 +277,10 @@ class ShellAppearanceSettings {
   /// shell restart.
   final String iconThemeName;
 
+  /// MCU dynamic-scheme contrast level for Monet surface derivation:
+  /// 0 is standard, -1 reduces and +1 raises contrast.
+  final double contrastLevel;
+
   ShellAppearanceSettings copyWith({
     DesktopColorSchemePreference? colorSchemePreference,
     ShellAccentSource? accentSource,
@@ -294,6 +299,7 @@ class ShellAppearanceSettings {
     bool? allowClientCursorSurfaces,
     String? uiFontFamily,
     String? iconThemeName,
+    double? contrastLevel,
   }) {
     return ShellAppearanceSettings(
       colorSchemePreference:
@@ -318,6 +324,7 @@ class ShellAppearanceSettings {
           allowClientCursorSurfaces ?? this.allowClientCursorSurfaces,
       uiFontFamily: uiFontFamily ?? this.uiFontFamily,
       iconThemeName: iconThemeName ?? this.iconThemeName,
+      contrastLevel: contrastLevel ?? this.contrastLevel,
     );
   }
 
@@ -340,7 +347,8 @@ class ShellAppearanceSettings {
         other.cursorThemeId == cursorThemeId &&
         other.allowClientCursorSurfaces == allowClientCursorSurfaces &&
         other.uiFontFamily == uiFontFamily &&
-        other.iconThemeName == iconThemeName;
+        other.iconThemeName == iconThemeName &&
+        other.contrastLevel == contrastLevel;
   }
 
   @override
@@ -362,6 +370,7 @@ class ShellAppearanceSettings {
     allowClientCursorSurfaces,
     uiFontFamily,
     iconThemeName,
+    contrastLevel,
   );
 }
 
@@ -988,7 +997,8 @@ class ShellSettings {
 
   // Blur levels are additive in schema 9. Keep emitting the derived legacy
   // sigma so older shells can read settings written by this version.
-  static const int schemaVersion = 22;
+  // Schema 23 adds appearance.contrastLevel (default 0) as a pure append.
+  static const int schemaVersion = 23;
 
   final ShellLocalizationSettings localization;
   final ShellAppearanceSettings appearance;
@@ -1103,6 +1113,9 @@ class ShellSettings {
       }
       if (appearance.iconThemeName != before.iconThemeName) {
         section['iconThemeName'] = appearance.iconThemeName;
+      }
+      if (appearance.contrastLevel != before.contrastLevel) {
+        section['contrastLevel'] = appearance.contrastLevel;
       }
       patch['appearance'] = section;
     }
@@ -1288,6 +1301,7 @@ class ShellSettings {
         'allowClientCursorSurfaces': appearance.allowClientCursorSurfaces,
         'uiFontFamily': appearance.uiFontFamily,
         'iconThemeName': appearance.iconThemeName,
+        'contrastLevel': appearance.contrastLevel,
       },
       'layout': <String, Object>{
         'windowLayout': layout.windowLayout.name,
@@ -1507,6 +1521,12 @@ class ShellSettings {
         iconThemeName: _themeName(
           appearanceJson['iconThemeName'],
           defaults.appearance.iconThemeName,
+        ),
+        contrastLevel: _number(
+          appearanceJson['contrastLevel'],
+          defaults.appearance.contrastLevel,
+          -1,
+          1,
         ),
       ),
       layout: ShellLayoutSettings(

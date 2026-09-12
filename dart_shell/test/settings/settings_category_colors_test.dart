@@ -39,8 +39,13 @@ void main() {
       SettingsCategoryColors.seeds.containsKey(SettingsPageId.about),
       isFalse,
     );
-    expect(hue.container, ShellColorScheme.dark.surfaceContainerHigh);
-    expect(hue.onContainer, ShellColorScheme.dark.textSecondary);
+    // The neutral pair borrows the resolved (seed-derived) surface roles, so
+    // compare against the theme's effective scheme rather than the const base.
+    final resolved = const ShellThemeData(
+      colors: ShellColorScheme.dark,
+    ).colors;
+    expect(hue.container, resolved.surfaceContainerHigh);
+    expect(hue.onContainer, resolved.textSecondary);
   });
 
   testWidgets('the seed table matches the verified spec hues', (tester) async {

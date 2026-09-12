@@ -446,17 +446,13 @@ final _dynamicSwatchesCache = <_DynamicAccentKey, List<Color>>{};
 List<Color> _dynamicAccentSwatches(Color seed, Brightness brightness) {
   final key = _DynamicAccentKey(seed.toARGB32(), brightness);
   return _dynamicSwatchesCache.putIfAbsent(key, () {
-    final scheme = ColorScheme.fromSeed(
-      seedColor: seed.withValues(alpha: 1),
-      brightness: brightness,
-      dynamicSchemeVariant: DynamicSchemeVariant.expressive,
-    );
+    final scheme = shellDynamicScheme(seed, brightness: brightness);
     return [
       seed.withValues(alpha: 1),
-      scheme.primary,
-      scheme.secondary,
-      scheme.tertiary,
-      scheme.primaryContainer,
+      shellSchemeColor(scheme.primary),
+      shellSchemeColor(scheme.secondary),
+      shellSchemeColor(scheme.tertiary),
+      shellSchemeColor(scheme.primaryContainer),
     ];
   });
 }
