@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../input/shell_interaction_registry.dart';
@@ -31,9 +33,11 @@ class DesktopPanelTransition extends StatefulWidget {
 
   /// Keeps the child mounted and offstage after its first completed close.
   ///
-  /// The child is still built lazily on the first open. This is useful for
-  /// panels whose initial state contains decoded images or other expensive
-  /// resources that should survive repeated open/close cycles.
+  /// A kept-alive child is also inflated offstage shortly after mount, while
+  /// the shell is still idle, so the first open does not pay the subtree's
+  /// inflate inside its opening frames. This is useful for panels whose
+  /// initial state contains decoded images or other expensive resources that
+  /// should survive repeated open/close cycles.
   final bool maintainState;
 
   @override
@@ -42,10 +46,16 @@ class DesktopPanelTransition extends StatefulWidget {
 
 class _DesktopPanelTransitionState extends State<DesktopPanelTransition>
     with SingleTickerProviderStateMixin {
+  // Idle delay before a kept-alive panel inflates its still-hidden subtree,
+  // so the first open animates an already-mounted tree instead of paying the
+  // whole inflate inside its opening frames.
+  static const Duration _hiddenInflateDelay = Duration(seconds: 1);
+
   late final AnimationController _controller;
   late final Animation<double> _progress;
   late bool _showChild;
   var _offstage = false;
+  Timer? _hiddenInflateTimer;
 
   @override
   void initState() {
@@ -65,6 +75,31 @@ class _DesktopPanelTransitionState extends State<DesktopPanelTransition>
       curve: Motion.md3EmphasizedDecelerate,
       reverseCurve: Motion.md3EmphasizedAccelerate,
     );
+    if (widget.maintainState && !widget.visible) {
+      _hiddenInflateTimer = Timer(_hiddenInflateDelay, _inflateHiddenChild);
+    }
+  }
+
+  /// Mounts the kept-alive child offstage ahead of its first open.
+  ///
+  /// The parked subtree stays inert: Offstage keeps it out of hit testing
+  /// and the semantics tree, TickerMode parks its animations, and
+  /// [ShellInputRegion] stays inactive because `active` still follows
+  /// `_offstage`.
+  void _inflateHiddenChild() {
+    _hiddenInflateTimer = null;
+    if (!mounted || _showChild || widget.visible) {
+      return;
+    }
+    setState(() {
+      _showChild = true;
+      _offstage = true;
+    });
+  }
+
+  void _cancelHiddenInflate() {
+    _hiddenInflateTimer?.cancel();
+    _hiddenInflateTimer = null;
   }
 
   @override
@@ -81,6 +116,9 @@ class _DesktopPanelTransitionState extends State<DesktopPanelTransition>
       _updateDurations();
     }
     if (widget.visible == oldWidget.visible) {
+      if (!widget.maintainState) {
+        _cancelHiddenInflate();
+      }
       if (!widget.visible &&
           !widget.maintainState &&
           oldWidget.maintainState &&
@@ -92,6 +130,7 @@ class _DesktopPanelTransitionState extends State<DesktopPanelTransition>
     }
 
     if (widget.visible) {
+      _cancelHiddenInflate();
       _showChild = true;
       _offstage = false;
       _controller.forward().whenCompleteOrCancel(() {
@@ -137,6 +176,7 @@ class _DesktopPanelTransitionState extends State<DesktopPanelTransition>
 
   @override
   void dispose() {
+    _hiddenInflateTimer?.cancel();
     _controller.dispose();
     super.dispose();
   }
@@ -208,7 +248,14 @@ class _DesktopPanelTransitionState extends State<DesktopPanelTransition>
     if (widget.maintainState) {
       panel = TickerMode(
         enabled: !_offstage,
-        child: Offstage(offstage: _offstage, child: panel),
+        child: Offstage(
+          offstage: _offstage,
+          // A parked subtree stays attached to the focus tree, so an
+          // autofocus control inside it could still take focus before the
+          // panel has ever been shown. Keep its descendants unfocusable
+          // while parked; the gate lifts as soon as the panel opens.
+          child: ExcludeFocus(excluding: _offstage, child: panel),
+        ),
       );
     }
     return panel;

@@ -115,6 +115,10 @@ class _DesktopApplicationLauncherState
   static const double _tileExtent = 112;
   static const double _suggestedTileExtent = 96;
   static const double _tileSpacing = 8;
+  // Idle delay before the hidden bubble inflates its subtree, so the first
+  // open animates an already-mounted tree instead of paying the inflate
+  // inside its opening frames.
+  static const Duration _preinflateDelay = Duration(seconds: 1);
 
   late final TextEditingController _searchController;
   final ScrollController _gridController = ScrollController();
@@ -138,6 +142,7 @@ class _DesktopApplicationLauncherState
   final Map<String, GlobalKey<_DesktopAppTileState>> _tileKeys =
       <String, GlobalKey<_DesktopAppTileState>>{};
   late final ProviderSubscription<bool> _visibilitySubscription;
+  Timer? _preinflateTimer;
 
   @override
   void initState() {
@@ -156,6 +161,24 @@ class _DesktopApplicationLauncherState
       desktopWorkspaceProvider.select((state) => state.launcherOpen),
       _handleVisibilityChanged,
     );
+    if (!_hasInflated) {
+      _preinflateTimer = Timer(_preinflateDelay, _preinflateBubble);
+    }
+  }
+
+  /// Inflates the bubble subtree while it is still parked offstage.
+  ///
+  /// The first open otherwise pays the whole inflate — search field, grid,
+  /// tiles, and deferred icon decoding — inside its opening frames. The
+  /// parked branch keeps it invisible and inert: TickerMode parks its
+  /// animations and Offstage keeps it out of hit testing and the semantics
+  /// tree until the user opens it.
+  void _preinflateBubble() {
+    _preinflateTimer = null;
+    if (!mounted || _isOpen || _hasInflated) {
+      return;
+    }
+    setState(() => _hasInflated = true);
   }
 
   @override
@@ -168,6 +191,7 @@ class _DesktopApplicationLauncherState
 
   @override
   void dispose() {
+    _preinflateTimer?.cancel();
     _visibilitySubscription.close();
     _expandController.dispose();
     _searchController
@@ -213,7 +237,12 @@ class _DesktopApplicationLauncherState
       telemetryLabel: 'launcher_bubble_toggle',
     );
     if (visible) {
-      _hasInflated = true;
+      _preinflateTimer?.cancel();
+      _preinflateTimer = null;
+      // Rebuild instead of waiting for the spring's first tick: the parked
+      // branch's ExcludeFocus gate must lift before the caller's post-frame
+      // focus request for the search field runs.
+      setState(() => _hasInflated = true);
       return;
     }
     // The kept-alive grid keeps its scroll controller attached, so the
@@ -598,7 +627,10 @@ class _DesktopApplicationLauncherState
                   child: Transform.scale(
                     scale: scale,
                     alignment: Alignment.bottomLeft,
-                    child: content,
+                    // The parked bubble's search field still attaches to the
+                    // focus tree while offstage; keep it unfocusable so its
+                    // autofocus cannot steal focus before the first open.
+                    child: ExcludeFocus(excluding: hidden, child: content),
                   ),
                 ),
               );
