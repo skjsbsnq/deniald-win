@@ -469,7 +469,10 @@ class _MockShelfSettingsController extends ShellSettingsController {
 // every machine: no D-Bus, sysfs, or clock reads.
 class _FakeQuickSettingsController extends QuickSettingsController {
   @override
-  QuickSettingsState build() => QuickSettingsState.initial();
+  QuickSettingsState build() => QuickSettingsState.initial().copyWith(
+    brightnessLoaded: true,
+    volumeLoaded: true,
+  );
 }
 
 class _FakeNetworkController extends NetworkConnectivityController {

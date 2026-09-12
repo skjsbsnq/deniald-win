@@ -21,6 +21,20 @@ import '../../../../wallpaper/widgets/wallpaper_image.dart';
 class ProfileHeaderCard extends ConsumerStatefulWidget {
   const ProfileHeaderCard({super.key});
 
+  /// The cover's image provider at its decode size. The dashboard panel's
+  /// idle warm-up precaches through this helper so the first open resolves
+  /// the same imageCache key the [Image] below asks for.
+  static ImageProvider<Object> coverImageProvider(
+    BuildContext context,
+    WallpaperResource resource,
+  ) {
+    return wallpaperImageProvider(
+      resource,
+      targetPixelSize:
+          const Size(420, 160) * MediaQuery.devicePixelRatioOf(context),
+    );
+  }
+
   @override
   ConsumerState<ProfileHeaderCard> createState() => _ProfileHeaderCardState();
 }
@@ -136,11 +150,7 @@ class _ProfileHeaderCardState extends ConsumerState<ProfileHeaderCard> {
         fit: StackFit.expand,
         children: [
           Image(
-            image: wallpaperImageProvider(
-              resource,
-              targetPixelSize:
-                  const Size(420, 160) * MediaQuery.devicePixelRatioOf(context),
-            ),
+            image: ProfileHeaderCard.coverImageProvider(context, resource),
             fit: BoxFit.cover,
             filterQuality: FilterQuality.low,
             excludeFromSemantics: true,
