@@ -11,10 +11,29 @@ import 'liquid_metric_card.dart';
 
 /// Root filesystem occupancy card with a linear usage bar.
 class StorageCard extends StatelessWidget {
-  const StorageCard({super.key, required this.storage});
+  const StorageCard({
+    super.key,
+    required this.storage,
+    this.surfaceColor,
+    this.contentColor,
+    this.mutedContentColor,
+    this.accentColor,
+  });
 
   /// Latest `df -B1 /` reading; null renders the unavailable state.
   final StorageUsage? storage;
+
+  /// clavis card-surface override; defaults to the panel surface.
+  final Color? surfaceColor;
+
+  /// Strong text inside the card (the percentage readout).
+  final Color? contentColor;
+
+  /// Label and caption text; defaults to the secondary/tertiary text roles.
+  final Color? mutedContentColor;
+
+  /// Usage-bar fill; defaults to the accent primary.
+  final Color? accentColor;
 
   @override
   Widget build(BuildContext context) {
@@ -22,10 +41,13 @@ class StorageCard extends StatelessWidget {
     final colors = context.shellColors;
     final l10n = context.l10n;
     final usage = storage?.fraction ?? 0.0;
+    final strong = contentColor ?? colors.textPrimary;
+    final muted = mutedContentColor ?? colors.textSecondary;
+    final accent = accentColor ?? theme.accentPalette.primary;
 
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: theme.panelColor(colors.surfaceContainer),
+        color: surfaceColor ?? theme.panelColor(colors.surfaceContainer),
         borderRadius: theme.borderRadius(ShellShapeScale.large),
         border: Border.all(color: colors.hairlineSoft, width: 1.0),
       ),
@@ -43,7 +65,7 @@ class StorageCard extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: colors.textSecondary,
+                      color: muted,
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
 
@@ -54,7 +76,7 @@ class StorageCard extends StatelessWidget {
                 Text(
                   storage == null ? '--' : '${(usage * 100).round()}%',
                   style: TextStyle(
-                    color: colors.textPrimary,
+                    color: strong,
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
                     decoration: TextDecoration.none,
@@ -73,11 +95,15 @@ class StorageCard extends StatelessWidget {
                     child: Stack(
                       fit: StackFit.expand,
                       children: [
-                        ColoredBox(color: colors.surfaceContainerHighest),
+                        ColoredBox(
+                          color: surfaceColor == null
+                              ? colors.surfaceContainerHighest
+                              : accent.withValues(alpha: 0.18),
+                        ),
                         FractionallySizedBox(
                           alignment: Alignment.centerLeft,
                           widthFactor: usage,
-                          child: ColoredBox(color: theme.accentPalette.primary),
+                          child: ColoredBox(color: accent),
                         ),
                       ],
                     ),
@@ -95,7 +121,7 @@ class StorageCard extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                color: colors.textTertiary,
+                color: mutedContentColor ?? colors.textTertiary,
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
                 decoration: TextDecoration.none,
@@ -110,9 +136,28 @@ class StorageCard extends StatelessWidget {
 
 /// Battery tank card: liquid level, percentage, and supply status.
 class BatteryTankCard extends StatelessWidget {
-  const BatteryTankCard({super.key, required this.battery});
+  const BatteryTankCard({
+    super.key,
+    required this.battery,
+    this.surfaceColor,
+    this.contentColor,
+    this.mutedContentColor,
+    this.fillColor,
+  });
 
   final BatteryStatus battery;
+
+  /// clavis card-surface override; defaults to the panel surface.
+  final Color? surfaceColor;
+
+  /// Strong text inside the card (the percentage readout).
+  final Color? contentColor;
+
+  /// Label and status-line text; defaults to the secondary/tertiary roles.
+  final Color? mutedContentColor;
+
+  /// Tank fill color; defaults to the accent primary.
+  final Color? fillColor;
 
   @override
   Widget build(BuildContext context) {
@@ -120,10 +165,11 @@ class BatteryTankCard extends StatelessWidget {
     final colors = context.shellColors;
     final l10n = context.l10n;
     final capacity = battery.capacity;
+    final muted = mutedContentColor ?? colors.textSecondary;
 
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: theme.panelColor(colors.surfaceContainer),
+        color: surfaceColor ?? theme.panelColor(colors.surfaceContainer),
         borderRadius: theme.borderRadius(ShellShapeScale.large),
         border: Border.all(color: colors.hairlineSoft, width: 1.0),
       ),
@@ -141,7 +187,7 @@ class BatteryTankCard extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: colors.textSecondary,
+                      color: muted,
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
 
@@ -152,7 +198,7 @@ class BatteryTankCard extends StatelessWidget {
                 Text(
                   capacity == null ? '--' : '$capacity%',
                   style: TextStyle(
-                    color: colors.textPrimary,
+                    color: contentColor ?? colors.textPrimary,
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
                     decoration: TextDecoration.none,
@@ -168,17 +214,21 @@ class BatteryTankCard extends StatelessWidget {
                       child: Text(
                         l10n.systemBatteryUnavailable,
                         style: TextStyle(
-                          color: colors.textTertiary,
+                          color: mutedContentColor ?? colors.textTertiary,
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
                           decoration: TextDecoration.none,
                         ),
                       ),
                     )
-                  : LiquidFill(fraction: capacity / 100),
+                  : LiquidFill(
+                      fraction: capacity / 100,
+                      color: fillColor,
+                      trackColor: fillColor?.withValues(alpha: 0.18),
+                    ),
             ),
             const SizedBox(height: 8),
-            _BatteryStatusLine(battery: battery, l10n: l10n),
+            _BatteryStatusLine(battery: battery, l10n: l10n, muted: muted),
           ],
         ),
       ),
@@ -187,10 +237,15 @@ class BatteryTankCard extends StatelessWidget {
 }
 
 class _BatteryStatusLine extends StatelessWidget {
-  const _BatteryStatusLine({required this.battery, required this.l10n});
+  const _BatteryStatusLine({
+    required this.battery,
+    required this.l10n,
+    required this.muted,
+  });
 
   final BatteryStatus battery;
   final AppLocalizations l10n;
+  final Color muted;
 
   @override
   Widget build(BuildContext context) {
@@ -205,7 +260,7 @@ class _BatteryStatusLine extends StatelessWidget {
       (null, _, _, _) => (
         Icons.battery_0_bar_rounded,
         l10n.systemStatusUnavailable,
-        colors.textTertiary,
+        muted,
       ),
       (_, _, true, _) => (
         Icons.check_rounded,
@@ -217,16 +272,8 @@ class _BatteryStatusLine extends StatelessWidget {
         l10n.batteryCharging,
         colors.performanceGood,
       ),
-      (_, _, _, true) => (
-        Icons.power_rounded,
-        l10n.batteryOnAcPower,
-        colors.textSecondary,
-      ),
-      _ => (
-        Icons.battery_full_rounded,
-        l10n.batteryOnBattery,
-        colors.textSecondary,
-      ),
+      (_, _, _, true) => (Icons.power_rounded, l10n.batteryOnAcPower, muted),
+      _ => (Icons.battery_full_rounded, l10n.batteryOnBattery, muted),
     };
 
     return Row(

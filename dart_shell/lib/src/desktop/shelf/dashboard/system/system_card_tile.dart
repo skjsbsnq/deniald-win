@@ -1,3 +1,4 @@
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart' show Tooltip;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -13,9 +14,11 @@ typedef CardDragMoveCallback = void Function(Offset globalPosition);
 
 /// Drag-and-keyboard shell around one system card.
 ///
-/// Cards stay draggable at all times (no edit mode, like clavis). A long
-/// press starts the drag — the same activation the launcher home grid uses
-/// inside scrollable pages — then every move updates only the drag
+/// Cards stay draggable at all times (no edit mode, like clavis). Moving
+/// the pointer starts the drag — clavis uses an immediate `DragHandler`
+/// that can take the grab over from the surrounding scroll view, so the
+/// recognizer here claims the pointer on down and the session itself opens
+/// on the first real move — then every move updates only the drag
 /// controller's preview while the committed layout stays untouched until
 /// release.
 ///
@@ -88,6 +91,28 @@ class _SystemCardTileState extends State<SystemCardTile> {
     return Duration(milliseconds: (milliseconds * widget.motionScale).round());
   }
 
+  /// Called when the pointer has moved past slop and the recognizer won the
+  /// arena — the clavis `DragHandler` equivalent (`CanTakeOverFromAnything`):
+  /// `ImmediateMultiDrag` resolves on the first slop-exceeding move and,
+  /// sitting deeper than the scroll view, sees the event first, so a card
+  /// drag works in every direction even inside the page's scroll view. A
+  /// press that never travels past slop never reaches this point and stays
+  /// a plain click (focus is armed by the Listener below).
+  Drag? _handlePointerDown(Offset globalPosition) {
+    _focusNode.requestFocus();
+    final box = context.findRenderObject();
+    final grabLocal = box is RenderBox
+        ? box.globalToLocal(globalPosition)
+        : Offset.zero;
+    return _TileCardDrag(
+      downGlobal: globalPosition,
+      onBegin: () => widget.onDragBegin(grabLocal, globalPosition),
+      onUpdate: widget.onDragUpdate,
+      onEnd: widget.onDragEnd,
+      onCancel: widget.onDragCancel,
+    );
+  }
+
   Map<ShortcutActivator, VoidCallback> _shortcutBindings() {
     const step = cardGridSnapStep;
     return <ShortcutActivator, VoidCallback>{
@@ -128,45 +153,48 @@ class _SystemCardTileState extends State<SystemCardTile> {
               cursor: widget.dragged
                   ? SystemMouseCursors.grabbing
                   : SystemMouseCursors.grab,
-              child: GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                // Clicking a card arms keyboard adjust: the focus ring then
-                // shows and arrow keys nudge until Enter/Esc.
-                onTap: _focusNode.requestFocus,
-                onLongPressStart: (details) => widget.onDragBegin(
-                  details.localPosition,
-                  details.globalPosition,
-                ),
-                onLongPressMoveUpdate: (details) =>
-                    widget.onDragUpdate(details.globalPosition),
-                onLongPressEnd: (_) => widget.onDragEnd(),
-                onLongPressCancel: widget.onDragCancel,
-                child: AnimatedOpacity(
-                  opacity: widget.dragged ? 0.45 : 1,
-                  duration: _scaled(150),
-                  child: Stack(
-                    children: [
-                      widget.child,
-                      Positioned.fill(
-                        child: IgnorePointer(
-                          child: AnimatedOpacity(
-                            opacity: _focused ? 1 : 0,
-                            duration: _scaled(120),
-                            child: DecoratedBox(
-                              decoration: BoxDecoration(
-                                borderRadius: theme.borderRadius(
-                                  ShellShapeScale.large,
-                                ),
-                                border: Border.all(
-                                  color: theme.accentPalette.primary,
-                                  width: 2,
+              child: Listener(
+                behavior: HitTestBehavior.translucent,
+                onPointerDown: (_) => _focusNode.requestFocus(),
+                child: RawGestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  gestures: <Type, GestureRecognizerFactory<GestureRecognizer>>{
+                    ImmediateMultiDragGestureRecognizer:
+                        GestureRecognizerFactoryWithHandlers<
+                          ImmediateMultiDragGestureRecognizer
+                        >(
+                          ImmediateMultiDragGestureRecognizer.new,
+                          (recognizer) =>
+                              recognizer.onStart = _handlePointerDown,
+                        ),
+                  },
+                  child: AnimatedOpacity(
+                    opacity: widget.dragged ? 0.45 : 1,
+                    duration: _scaled(150),
+                    child: Stack(
+                      children: [
+                        widget.child,
+                        Positioned.fill(
+                          child: IgnorePointer(
+                            child: AnimatedOpacity(
+                              opacity: _focused ? 1 : 0,
+                              duration: _scaled(120),
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  borderRadius: theme.borderRadius(
+                                    ShellShapeScale.large,
+                                  ),
+                                  border: Border.all(
+                                    color: theme.accentPalette.primary,
+                                    width: 2,
+                                  ),
                                 ),
                               ),
                             ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -175,5 +203,56 @@ class _SystemCardTileState extends State<SystemCardTile> {
         ),
       ),
     );
+  }
+}
+
+/// One pointer session from down to release. `ImmediateMultiDrag` only
+/// resolves after the pointer travels past slop, so the controller hears
+/// about a session once the pointer has actually moved — a stationary
+/// press never flashes the ghost/guide UI or commits a no-op layout.
+///
+/// The first update the framework delivers carries `globalPosition` of the
+/// *down* event while `delta` holds the accumulated pending movement, so
+/// the current position is tracked by accumulating deltas instead of
+/// trusting `globalPosition`.
+class _TileCardDrag extends Drag {
+  _TileCardDrag({
+    required Offset downGlobal,
+    required this.onBegin,
+    required this.onUpdate,
+    required this.onEnd,
+    required this.onCancel,
+  }) : _position = downGlobal;
+
+  final VoidCallback onBegin;
+  final CardDragMoveCallback onUpdate;
+  final VoidCallback onEnd;
+  final VoidCallback onCancel;
+
+  Offset _position;
+  bool _began = false;
+
+  @override
+  void update(DragUpdateDetails details) {
+    _position += details.delta;
+    if (!_began) {
+      _began = true;
+      onBegin();
+    }
+    onUpdate(_position);
+  }
+
+  @override
+  void end(DragEndDetails details) {
+    if (_began) {
+      onEnd();
+    }
+  }
+
+  @override
+  void cancel() {
+    if (_began) {
+      onCancel();
+    }
   }
 }

@@ -175,8 +175,10 @@ void main() {
     expect(find.text('Partly cloudy'), findsOneWidget);
     expect(find.text('Feels like 28°'), findsOneWidget);
     expect(find.text('Hourly'), findsOneWidget);
-    // All 24 upcoming hour columns render inside the horizontal strip.
-    expect(find.textContaining(':00'), findsAtLeastNWidgets(24));
+    // The hourly trend card renders a sparse subset of hour labels along
+    // its axis (the dense 24-column strip was dropped for the clavis
+    // trend-card layout).
+    expect(find.textContaining(':00'), findsAtLeastNWidgets(4));
     expect(find.text('Next 7 days'), findsOneWidget);
     expect(find.text('Today'), findsOneWidget);
     expect(find.text('Tomorrow'), findsOneWidget);

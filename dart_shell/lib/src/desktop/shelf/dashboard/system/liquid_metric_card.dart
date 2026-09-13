@@ -1,5 +1,7 @@
 import 'dart:math' as math;
 
+import 'package:androidx_graphics_shapes/material_shapes.dart';
+import 'package:androidx_graphics_shapes/shapes.dart' show RoundedPolygon;
 import 'package:flutter/widgets.dart';
 
 import '../../../../theme/shell_theme.dart';
@@ -13,6 +15,11 @@ class LiquidMetricCard extends StatelessWidget {
     required this.label,
     required this.fraction,
     this.valueLabel,
+    this.surfaceColor,
+    this.contentColor,
+    this.mutedContentColor,
+    this.fillColor,
+    this.shape,
   });
 
   final String label;
@@ -23,20 +30,50 @@ class LiquidMetricCard extends StatelessWidget {
   /// Optional bottom line with the raw figures, e.g. `7.8 / 15.4 GB`.
   final String? valueLabel;
 
+  /// clavis card-surface override; defaults to the panel surface.
+  final Color? surfaceColor;
+
+  /// Strong text inside the card (the percentage readout).
+  final Color? contentColor;
+
+  /// Label and caption text; defaults to the secondary/tertiary text roles.
+  final Color? mutedContentColor;
+
+  /// Liquid fill wave color; defaults to the accent primary.
+  final Color? fillColor;
+
+  /// clavis expressive surface: when set the card surface is clipped to this
+  /// normalized polygon (`MaterialShapes.*`) stretched to the tile bounds
+  /// and the rectangular border drops out, like the reference shell's
+  /// `MaterialShape` cards.
+  final RoundedPolygon? shape;
+
   @override
   Widget build(BuildContext context) {
     final theme = context.shellTheme;
     final colors = context.shellColors;
     final level = fraction.clamp(0.0, 1.0).toDouble();
+    final surface = surfaceColor ?? theme.panelColor(colors.surfaceContainer);
+    final strong = contentColor ?? colors.textPrimary;
+    final muted = mutedContentColor ?? colors.textSecondary;
+    final polygon = shape;
 
-    return DecoratedBox(
+    final card = DecoratedBox(
       decoration: BoxDecoration(
-        color: theme.panelColor(colors.surfaceContainer),
-        borderRadius: theme.borderRadius(ShellShapeScale.large),
-        border: Border.all(color: colors.hairlineSoft, width: 1.0),
+        color: surface,
+        borderRadius: polygon == null
+            ? theme.borderRadius(ShellShapeScale.large)
+            : null,
+        border: polygon == null
+            ? Border.all(color: colors.hairlineSoft, width: 1.0)
+            : null,
       ),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        // A polygon surface loses usable corner area, so shaped cards pad a
+        // little deeper than the rectangular ones.
+        padding: polygon == null
+            ? const EdgeInsets.fromLTRB(14, 12, 14, 12)
+            : const EdgeInsets.fromLTRB(20, 16, 20, 16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
@@ -49,7 +86,7 @@ class LiquidMetricCard extends StatelessWidget {
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
-                      color: colors.textSecondary,
+                      color: muted,
                       fontSize: 12,
                       fontWeight: FontWeight.w600,
 
@@ -60,7 +97,7 @@ class LiquidMetricCard extends StatelessWidget {
                 Text(
                   '${(level * 100).round()}%',
                   style: TextStyle(
-                    color: colors.textPrimary,
+                    color: strong,
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
                     decoration: TextDecoration.none,
@@ -69,7 +106,14 @@ class LiquidMetricCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 10),
-            SizedBox(height: 46, child: LiquidFill(fraction: level)),
+            SizedBox(
+              height: 46,
+              child: LiquidFill(
+                fraction: level,
+                color: fillColor,
+                trackColor: fillColor?.withValues(alpha: 0.18),
+              ),
+            ),
             // The bottom line reserves its height even when absent so every
             // card in the two-column grid stays equally tall.
             if (valueLabel != null) ...[
@@ -79,7 +123,7 @@ class LiquidMetricCard extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  color: colors.textTertiary,
+                  color: mutedContentColor ?? colors.textTertiary,
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
                   decoration: TextDecoration.none,
@@ -91,16 +135,61 @@ class LiquidMetricCard extends StatelessWidget {
         ),
       ),
     );
+    if (polygon == null) {
+      return card;
+    }
+    return ClipPath(clipper: _PolygonClipper(polygon), child: card);
   }
+}
+
+/// Clips a normalized [RoundedPolygon] (the `MaterialShapes` catalog works
+/// in a 0-1 square) into the card's tile bounds.
+class _PolygonClipper extends CustomClipper<Path> {
+  const _PolygonClipper(this.polygon);
+
+  final RoundedPolygon polygon;
+
+  @override
+  Path getClip(Size size) {
+    final path = polygon.toPath();
+    final bounds = path.getBounds();
+    if (bounds.width <= 0 || bounds.height <= 0) {
+      return path;
+    }
+    return path.transform(
+      (Matrix4.diagonal3Values(
+                size.width / bounds.width,
+                size.height / bounds.height,
+                1,
+              ) *
+              Matrix4.translationValues(-bounds.left, -bounds.top, 0))
+          .storage,
+    );
+  }
+
+  @override
+  bool shouldReclip(_PolygonClipper oldClipper) =>
+      !identical(oldClipper.polygon, polygon);
 }
 
 /// Bare liquid fill for a container of any size: two overlapping static sine
 /// crests suggest water without an idle ticker animating them.
 class LiquidFill extends StatelessWidget {
-  const LiquidFill({super.key, required this.fraction});
+  const LiquidFill({
+    super.key,
+    required this.fraction,
+    this.color,
+    this.trackColor,
+  });
 
   /// 0-1 fill level.
   final double fraction;
+
+  /// Wave color; defaults to the accent primary.
+  final Color? color;
+
+  /// Empty-track color; defaults to the highest surface role.
+  final Color? trackColor;
 
   @override
   Widget build(BuildContext context) {
@@ -109,7 +198,7 @@ class LiquidFill extends StatelessWidget {
 
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: colors.surfaceContainerHighest,
+        color: trackColor ?? colors.surfaceContainerHighest,
         borderRadius: theme.borderRadius(ShellShapeScale.small),
       ),
       child: ClipRRect(
@@ -117,7 +206,7 @@ class LiquidFill extends StatelessWidget {
         child: CustomPaint(
           painter: _LiquidWavePainter(
             fraction: fraction.clamp(0.0, 1.0).toDouble(),
-            color: theme.accentPalette.primary,
+            color: color ?? theme.accentPalette.primary,
           ),
           size: Size.infinite,
         ),

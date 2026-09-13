@@ -84,7 +84,7 @@ void main() {
     expect(memoryTopLeft.dy, 0);
   });
 
-  testWidgets('long-press drag moves the card and persists the layout', (
+  testWidgets('pointer drag moves the card and persists the layout', (
     tester,
   ) async {
     final store = _MemorySystemCardStore();
@@ -94,12 +94,12 @@ void main() {
     final memoryBefore = tileTopLeft(tester, 'memory');
     expect(memoryBefore.dx, 280);
 
-    // Hold still to arm the long-press drag, then pull memory left onto
-    // the cpu slot.
+    // Immediate drag, the clavis DragHandler equivalent: the session opens
+    // on the first real move — no hold is needed — then pulls memory left
+    // onto the cpu slot.
     final gesture = await tester.startGesture(
       tester.getCenter(find.widgetWithText(SystemCardTile, 'memory')),
     );
-    await tester.pump(const Duration(milliseconds: 600));
     await gesture.moveBy(const Offset(-200, 40));
     await tester.pump();
     await gesture.up();
@@ -153,11 +153,10 @@ void main() {
   testWidgets('a card removed mid-drag resets the session', (tester) async {
     await pumpGrid(tester);
 
-    // Arm the long-press drag on memory and pull it off its slot.
+    // Start a pointer drag on memory and pull it off its slot.
     final gesture = await tester.startGesture(
       tester.getCenter(find.widgetWithText(SystemCardTile, 'memory')),
     );
-    await tester.pump(const Duration(milliseconds: 600));
     await gesture.moveBy(const Offset(-40, 0));
     await tester.pump();
 
@@ -174,7 +173,6 @@ void main() {
     final retry = await tester.startGesture(
       tester.getCenter(find.widgetWithText(SystemCardTile, 'cpu')),
     );
-    await tester.pump(const Duration(milliseconds: 600));
     await retry.moveBy(const Offset(0, 200));
     await tester.pump();
     await retry.up();
@@ -190,7 +188,6 @@ void main() {
     final gesture = await tester.startGesture(
       tester.getCenter(find.widgetWithText(SystemCardTile, 'memory')),
     );
-    await tester.pump(const Duration(milliseconds: 600));
     await gesture.moveBy(const Offset(-40, 0));
     await tester.pump();
     await gesture.up();

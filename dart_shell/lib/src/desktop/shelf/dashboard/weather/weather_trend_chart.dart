@@ -60,6 +60,11 @@ class WeatherTrendChart extends StatelessWidget {
         faintTextColor: colors.textTertiary,
         textDirection: Directionality.of(context),
       ),
+      // A childless CustomPaint sizes to preferredSize (Size.zero): under
+      // the loose width a centered Column hands out the canvas collapsed to
+      // zero width and painted nothing. Expanding a child makes the paint
+      // area fill whatever the parent offers.
+      child: const SizedBox.expand(),
     );
   }
 }

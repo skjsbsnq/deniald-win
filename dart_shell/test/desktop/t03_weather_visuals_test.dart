@@ -10,6 +10,7 @@ import 'package:denial_dart_shell/src/desktop/shelf/dashboard/weather/weather_vi
 import 'package:denial_dart_shell/src/services/weather_service.dart';
 import 'package:denial_dart_shell/src/theme/shell_theme.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 Widget _wrap(Widget child) {
@@ -688,6 +689,68 @@ void main() {
           ),
         ),
       );
+      expect(tester.takeException(), isNull);
+    });
+
+    // Regression for the on-device blank trend cards: the card columns
+    // centre their children, so the childless CustomPaint inside
+    // WeatherTrendChart constrained its preferredSize (Size.zero) to a
+    // zero width and painted nothing. Going through the real card path —
+    // not a tightly-sized bare chart — is what reproduces it.
+    testWidgets('trend cards give the chart real width under loose parent '
+        'constraints', (tester) async {
+      final now = DateTime.now();
+      final hours = List<WeatherHour>.generate(
+        10,
+        (i) => WeatherHour(
+          time: now.add(Duration(hours: i + 1)),
+          temperatureC: 26 + i * 0.3,
+          weatherCode: 3,
+          precipitationProbability: 20 + i * 5,
+        ),
+      );
+      final days = List<WeatherDay>.generate(
+        3,
+        (i) => WeatherDay(
+          date: DateTime(now.year, now.month, now.day + i),
+          weatherCode: 3,
+          maxTemperatureC: 30.0 + i,
+          minTemperatureC: 22.0 + i,
+          sunrise: now,
+          sunset: now,
+        ),
+      );
+      await tester.pumpWidget(
+        _wrap(
+          Scaffold(
+            body: SizedBox(
+              width: 380,
+              child: SingleChildScrollView(
+                child: Column(
+                  children: [
+                    WeatherHourlyTrendCard(hours: hours, days: days),
+                    WeatherDailyTrendCard(days: days, hours: hours),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      final charts = find.descendant(
+        of: find.byType(WeatherTrendCard),
+        matching: find.byType(CustomPaint),
+      );
+      expect(charts, findsNWidgets(2));
+      for (final element in charts.evaluate()) {
+        final render = element.renderObject;
+        expect(render, isA<RenderCustomPaint>());
+        expect(
+          (render! as RenderCustomPaint).size.width,
+          greaterThan(200),
+        );
+      }
       expect(tester.takeException(), isNull);
     });
   });

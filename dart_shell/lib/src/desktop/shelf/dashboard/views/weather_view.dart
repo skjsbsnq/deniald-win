@@ -17,7 +17,6 @@ import '../../../../widgets/shell_hover_pill.dart';
 import '../weather/weather_background.dart';
 import '../weather/weather_daily_forecast.dart';
 import '../weather/weather_hero_section.dart';
-import '../weather/weather_hourly_strip.dart';
 import '../weather/weather_metrics_grid.dart';
 import '../weather/weather_reveal.dart';
 import '../weather/weather_trend_chart.dart';
@@ -279,13 +278,6 @@ class _WeatherViewState extends ConsumerState<WeatherView> {
                             const SizedBox(height: 8),
                             WeatherHourlyTrendCard(
                               key: _firstCardKey,
-                              hours: snapshot.hours,
-                              days: snapshot.days,
-                              temperatureUnit: temperatureUnit,
-                              utcOffsetSeconds: snapshot.utcOffsetSeconds,
-                            ),
-                            const SizedBox(height: 8),
-                            WeatherHourlyStrip(
                               hours: snapshot.hours,
                               days: snapshot.days,
                               temperatureUnit: temperatureUnit,

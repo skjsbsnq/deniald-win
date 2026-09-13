@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:androidx_graphics_shapes/material_shapes.dart';
 import 'package:flutter/material.dart' show Icons, Scrollbar;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,7 +9,6 @@ import '../../../../settings/settings_controller.dart';
 import '../../../../state/system_extended_status.dart';
 import '../../../../localization/denial_localizations.dart';
 import '../../../../state/system_status.dart';
-import '../../../../theme/shell_color_scheme.dart';
 import '../../../../theme/shell_theme.dart';
 import '../../../../theme/tokens.dart';
 import '../system/card_catalog.dart';
@@ -100,8 +100,8 @@ class _CpuUsageCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final colors = context.shellColors;
     final l10n = context.l10n;
+    final palette = context.shellTheme.accentPalette;
     final cpu = ref.watch(
       cpuUsageProvider.select(
         (series) => (
@@ -111,12 +111,19 @@ class _CpuUsageCard extends ConsumerWidget {
         ),
       ),
     );
+    // clavis SystemCardContent: the cpu card sits on the primaryContainer
+    // surface with onContainer content and the primary accent line.
+    final chipBackground = palette.primary.withValues(alpha: 0.12);
 
     return MetricSparklineCard(
       label: l10n.metricCpu,
       usage: cpu.current,
       history: cpu.history,
       showExpressivePolygon: true,
+      surfaceColor: palette.container,
+      contentColor: palette.onContainer,
+      mutedContentColor: palette.onContainerSecondary,
+      accentColor: palette.primary,
       // A 2x1 tile leaves ~84 px next to the sparkline, so the chips wrap
       // to a second line instead of overflowing the row (was a plain Row
       // when this card always rendered at full panel width).
@@ -127,13 +134,15 @@ class _CpuUsageCard extends ConsumerWidget {
           _MetricChip(
             icon: Icons.developer_board_rounded,
             label: l10n.systemCoresLabel(Platform.numberOfProcessors),
-            colors: colors,
+            background: chipBackground,
+            foreground: palette.onContainer,
           ),
           if (cpu.temperatureC != null)
             _MetricChip(
               icon: Icons.device_thermostat_rounded,
               label: '${cpu.temperatureC!.round()}°C',
-              colors: colors,
+              background: chipBackground,
+              foreground: palette.onContainer,
             ),
         ],
       ),
@@ -165,18 +174,25 @@ class _GpuUsageCard extends ConsumerWidget {
       // the next tick removes the tile entirely.
       return const SizedBox.shrink();
     }
-    final colors = context.shellColors;
+    // clavis: the gpu card sits on the secondaryContainer surface with the
+    // secondary accent line (and a Gem shape decoration upstream).
+    final palette = context.shellTheme.accentPalette;
 
     return MetricSparklineCard(
       label: gpu.label,
       usage: gpu.series.current,
       history: gpu.series.history,
+      surfaceColor: palette.secondaryContainer,
+      contentColor: palette.onSecondaryContainer,
+      mutedContentColor: palette.onSecondaryContainer.withValues(alpha: 0.75),
+      accentColor: palette.secondary,
       detail: gpu.series.temperatureC == null
           ? null
           : _MetricChip(
               icon: Icons.device_thermostat_rounded,
               label: '${gpu.series.temperatureC!.round()}°C',
-              colors: colors,
+              background: palette.secondary.withValues(alpha: 0.12),
+              foreground: palette.onSecondaryContainer,
             ),
     );
   }
@@ -190,6 +206,9 @@ class _MemoryUsageCard extends ConsumerWidget {
     final memory = ref.watch(
       systemExtendedStatusProvider.select((status) => status.memory),
     );
+    // clavis memoryUsed: a `MaterialShape.Slanted` surface on
+    // primaryContainer with the tertiary liquid fill.
+    final palette = context.shellTheme.accentPalette;
 
     return LiquidMetricCard(
       label: context.l10n.systemMemory,
@@ -198,6 +217,11 @@ class _MemoryUsageCard extends ConsumerWidget {
           ? null
           : '${formatGigabytes(memory.used)} / '
                 '${formatGigabytes(memory.total)} GB',
+      surfaceColor: palette.container,
+      contentColor: palette.onContainer,
+      mutedContentColor: palette.onContainerSecondary,
+      fillColor: palette.tertiary.withValues(alpha: 0.66),
+      shape: MaterialShapes.slanted,
     );
   }
 }
@@ -215,11 +239,18 @@ class _NetworkUsageCard extends ConsumerWidget {
         ),
       ),
     );
+    // clavis network: the only solid-primary card in the grid — onPrimary
+    // content, onPrimary rate icons.
+    final palette = context.shellTheme.accentPalette;
 
     return NetworkMetricCard(
       label: context.l10n.systemNetwork,
       downloadBytesPerSecond: rates.download,
       uploadBytesPerSecond: rates.upload,
+      surfaceColor: palette.primary,
+      contentColor: palette.onPrimary,
+      mutedContentColor: palette.onPrimary.withValues(alpha: 0.72),
+      accentColor: palette.onPrimary,
     );
   }
 }
@@ -232,8 +263,16 @@ class _StorageUsageCard extends ConsumerWidget {
     final storage = ref.watch(
       systemExtendedStatusProvider.select((status) => status.storage),
     );
+    // clavis storage: solid tertiary surface with onTertiary content.
+    final palette = context.shellTheme.accentPalette;
 
-    return StorageCard(storage: storage);
+    return StorageCard(
+      storage: storage,
+      surfaceColor: palette.tertiary,
+      contentColor: palette.onTertiary,
+      mutedContentColor: palette.onTertiary.withValues(alpha: 0.72),
+      accentColor: palette.onTertiary,
+    );
   }
 }
 
@@ -242,7 +281,15 @@ class _BatteryStatusCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return BatteryTankCard(battery: ref.watch(batteryProvider));
+    // clavis battery: secondaryContainer surface, secondary tank fill.
+    final palette = context.shellTheme.accentPalette;
+    return BatteryTankCard(
+      battery: ref.watch(batteryProvider),
+      surfaceColor: palette.secondaryContainer,
+      contentColor: palette.onSecondaryContainer,
+      mutedContentColor: palette.onSecondaryContainer.withValues(alpha: 0.75),
+      fillColor: palette.secondary,
+    );
   }
 }
 
@@ -250,12 +297,14 @@ class _MetricChip extends StatelessWidget {
   const _MetricChip({
     required this.icon,
     required this.label,
-    required this.colors,
+    required this.background,
+    required this.foreground,
   });
 
   final IconData icon;
   final String label;
-  final ShellColorScheme colors;
+  final Color background;
+  final Color foreground;
 
   @override
   Widget build(BuildContext context) {
@@ -264,13 +313,13 @@ class _MetricChip extends StatelessWidget {
       height: 20,
       padding: const EdgeInsets.symmetric(horizontal: 7),
       decoration: BoxDecoration(
-        color: colors.surfaceContainerHighest,
+        color: background,
         borderRadius: theme.borderRadius(ShellShapeScale.full),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 12, color: colors.textSecondary),
+          Icon(icon, size: 12, color: foreground),
           const SizedBox(width: 4),
           // A 2x1 tile leaves ~68 px inside the chip once the sparkline takes
           // its share, so the label must flex and ellipsize instead of
@@ -281,7 +330,7 @@ class _MetricChip extends StatelessWidget {
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                color: colors.textSecondary,
+                color: foreground,
                 fontSize: 11,
                 fontWeight: FontWeight.w600,
                 decoration: TextDecoration.none,

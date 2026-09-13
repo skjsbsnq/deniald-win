@@ -15,6 +15,10 @@ class MetricSparklineCard extends StatelessWidget {
     required this.history,
     this.detail,
     this.showExpressivePolygon = false,
+    this.surfaceColor,
+    this.contentColor,
+    this.mutedContentColor,
+    this.accentColor,
   });
 
   final String label;
@@ -31,14 +35,28 @@ class MetricSparklineCard extends StatelessWidget {
   /// Whether to draw the expressive corner polygon that blooms with load.
   final bool showExpressivePolygon;
 
+  /// clavis card-surface override; defaults to the panel surface.
+  final Color? surfaceColor;
+
+  /// Strong text inside the card (the percentage readout).
+  final Color? contentColor;
+
+  /// Label text; defaults to the secondary text role.
+  final Color? mutedContentColor;
+
+  /// Sparkline stroke/fill and polygon decoration; defaults to accent
+  /// primary.
+  final Color? accentColor;
+
   @override
   Widget build(BuildContext context) {
     final theme = context.shellTheme;
     final colors = context.shellColors;
+    final accent = accentColor ?? theme.accentPalette.primary;
 
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: theme.panelColor(colors.surfaceContainer),
+        color: surfaceColor ?? theme.panelColor(colors.surfaceContainer),
         borderRadius: theme.borderRadius(ShellShapeScale.large),
         border: Border.all(color: colors.hairlineSoft, width: 1.0),
       ),
@@ -61,7 +79,7 @@ class MetricSparklineCard extends StatelessWidget {
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            color: colors.textSecondary,
+                            color: mutedContentColor ?? colors.textSecondary,
                             fontSize: 12,
                             fontWeight: FontWeight.w600,
 
@@ -72,7 +90,7 @@ class MetricSparklineCard extends StatelessWidget {
                         Text(
                           usage == null ? '--' : '${(usage! * 100).round()}%',
                           style: TextStyle(
-                            color: colors.textPrimary,
+                            color: contentColor ?? colors.textPrimary,
                             fontSize: 30,
                             fontWeight: FontWeight.w700,
                             height: 1.05,
@@ -98,8 +116,8 @@ class MetricSparklineCard extends StatelessWidget {
                     child: RepaintBoundary(
                       child: MetricSparkline(
                         history: history,
-                        lineColor: theme.accentPalette.primary,
-                        fillColor: theme.accentPalette.primary,
+                        lineColor: accent,
+                        fillColor: accent,
                       ),
                     ),
                   ),
@@ -117,7 +135,7 @@ class MetricSparklineCard extends StatelessWidget {
                       // The decoration blooms from a four-point bud at idle to
                       // an eight-point star under full load.
                       complexity: usage ?? 0,
-                      color: theme.accentPalette.primary,
+                      color: accent,
                     ),
                   ),
                 ),
