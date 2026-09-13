@@ -21,21 +21,13 @@ import '../models/display_layout.dart';
 import '../models/denial_window.dart';
 import '../platform/denial_bridge.dart';
 import '../services/audio_service.dart';
-import '../services/bluetooth_service.dart';
-import '../services/desktop_power_modes_service.dart';
 import '../services/haptics_service.dart';
-import '../services/lact_service.dart';
-import '../services/power_profile_service.dart';
 import '../settings/settings_application.dart';
 import '../settings/settings_controller.dart';
 import '../settings/shell_settings.dart';
 import '../settings/widgets/settings_navigation.dart';
 import '../state/app_audio.dart';
-import '../state/audio_devices.dart';
-import '../state/bluetooth.dart';
 import '../state/clipboard_tray.dart';
-import '../state/desktop_power_modes.dart';
-import '../state/desktop_notifications.dart';
 import '../state/desktop_window_close_effect.dart';
 import '../state/desktop_window_switcher.dart';
 import '../state/display_layout.dart';
@@ -51,9 +43,7 @@ import '../widgets/desktop_window_close_animation.dart';
 import '../widgets/desktop_window_switcher.dart';
 import '../widgets/desktop_window_reveal.dart';
 import '../widgets/main_output_centered_surface.dart';
-import '../widgets/notification_center.dart';
 import '../widgets/retained_translation.dart';
-import '../widgets/session/power_session_surface.dart';
 import '../widgets/shell_backdrop_blur.dart';
 import 'window_backdrop_blur_policy.dart';
 import '../widgets/shell_cursor.dart';
@@ -68,16 +58,13 @@ import 'shelf/dashboard/unified_dashboard_panel.dart';
 import 'shelf/unified_tray_bubble.dart';
 import '../wallpaper/widgets/wallpaper_selector_surface.dart';
 import 'desktop_overview_preview_interaction.dart';
-import 'desktop_audio_device_dropdown.dart';
 import 'desktop_overview_layout.dart';
 import 'desktop_overview_target.dart';
 import 'desktop_home_layout.dart';
 import 'desktop_minimize_layer_handoff.dart';
 import 'desktop_panel_hover_controller.dart';
-import 'desktop_panel_transition.dart';
 import 'desktop_pixel_alignment.dart';
 import 'retained_animated_positioned.dart';
-import 'desktop_system_bar.dart';
 import 'system_tray_module.dart';
 import 'desktop_texture_resize.dart';
 import 'desktop_window_coordinator.dart';
@@ -88,10 +75,9 @@ import 'desktop_workspace.dart';
 part 'desktop_application_launcher.dart';
 part 'desktop_application_launcher_components.dart';
 part 'desktop_app_volume_manager.dart';
-part 'desktop_dashboard.dart';
-part 'desktop_dashboard_bluetooth.dart';
+// Kept: _DashboardIconButton/_DashboardValueButton are shared with the
+// per-app volume manager surface (§C6).
 part 'desktop_dashboard_controls.dart';
-part 'desktop_dashboard_power_modes.dart';
 part 'desktop_panel_overlay.dart';
 part 'desktop_scene.dart';
 part 'desktop_scene_layers.dart';
@@ -103,8 +89,6 @@ const desktopApplicationSuggestionsRowKey = ValueKey<String>(
 const desktopApplicationSuggestionsDividerKey = ValueKey<String>(
   'desktop-application-suggestions-divider',
 );
-const desktopDashboardBluetoothMaxHeight = 240.0;
-
 class DesktopShell extends ConsumerStatefulWidget {
   const DesktopShell({super.key});
 
@@ -254,6 +238,7 @@ class _DesktopSceneTopologyCache {
 
 class _DesktopShellState extends ConsumerState<DesktopShell> {
   late final DesktopPanelHoverController _panelHoverController;
+  ProviderSubscription<bool>? _shelfLayoutEnforcement;
   Timer? _wallpaperOpenTimer;
   Timer? _windowSwitcherHoldTimer;
   Timer? _windowSwitcherCleanupTimer;
@@ -268,16 +253,45 @@ class _DesktopShellState extends ConsumerState<DesktopShell> {
   void initState() {
     super.initState();
     _panelHoverController = DesktopPanelHoverController(onClose: _closePanels);
+    // The ChromeOS shelf is the only desktop bar form. The persisted layout
+    // flag stays in the schema for compatibility but no longer has an off
+    // switch, so re-arm it whenever a stored, synced, or reset document
+    // reports false — every reader, including the work-area geometry fed by
+    // the effective system-bar getters, must always see shelf mode.
+    _shelfLayoutEnforcement = ref.listenManual(
+      shellSettingsProvider.select(
+        (settings) => settings.layout.useChromeOsShelf,
+      ),
+      (previous, next) {
+        if (!next) {
+          // fireImmediately runs this callback inside initState, and a synced
+          // settings document can fire it during another widget's build —
+          // provider mutation is forbidden in both phases, so the re-arm
+          // itself must be deferred.
+          unawaited(
+            Future(() {
+              if (!mounted ||
+                  ref.read(shellSettingsProvider).layout.useChromeOsShelf) {
+                return;
+              }
+              ref
+                  .read(shellSettingsProvider.notifier)
+                  .setUseChromeOsShelf(true);
+            }),
+          );
+        }
+      },
+      fireImmediately: true,
+    );
     ref.read(hapticsServiceProvider).prewarm();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) {
         return;
       }
-      // Hardware-backed dashboard state should settle while the desktop is
-      // idle, not during the first panel entrance animation. Deferring it
+      // Hardware-backed quick-settings state should settle while the desktop
+      // is idle, not during the first bubble entrance animation. Deferring it
       // until after the first frame keeps startup's critical frame lean.
       ref.read(quickSettingsProvider);
-      ref.read(desktopPowerModesProvider);
     });
     _shellActionSubscription = ref
         .read(denialBridgeProvider)
@@ -287,6 +301,7 @@ class _DesktopShellState extends ConsumerState<DesktopShell> {
 
   @override
   void dispose() {
+    _shelfLayoutEnforcement?.close();
     _panelHoverController.dispose();
     _wallpaperOpenTimer?.cancel();
     _windowSwitcherHoldTimer?.cancel();
@@ -679,43 +694,11 @@ class _DesktopShellState extends ConsumerState<DesktopShell> {
     _openLauncher();
   }
 
-  void _openDashboard() {
-    _closeTransientSurfaces();
-    var workspace = ref.read(desktopWorkspaceProvider);
-    if (workspace.overviewActive) {
-      // The dashboard hotkey opens over the overview, matching the clipboard
-      // hotkey's behavior; showPanel alone would no-op instead.
-      ref.read(desktopWorkspaceProvider.notifier).closeOverview();
-      workspace = ref.read(desktopWorkspaceProvider);
-    }
-    if (!workspace.overviewActive && !workspace.dashboardOpen) {
-      _panelHoverController.beginOpening();
-    } else {
-      _panelHoverController.cancelClose();
-    }
-    _applicationSearchFocusNode.unfocus();
-    ref
-        .read(desktopWorkspaceProvider.notifier)
-        .showPanel(DesktopPanel.dashboard);
-    // BlueZ is signal-driven and already initialized at the shell root. Power
-    // modes have no equivalent subscription, so only refresh a stale cache.
-    unawaited(ref.read(desktopPowerModesProvider.notifier).refreshIfStale());
-  }
-
   void _toggleDashboard() {
-    // In the ChromeOS shelf layout the unified dashboard bubble owns this
-    // role (COR-4): the hotkey toggles the bubble through the same
-    // mutual-exclusion channel the shelf clock button uses. The legacy path
-    // below is untouched for the non-shelf layout.
-    if (ref.read(shellSettingsProvider).layout.useChromeOsShelf) {
-      _toggleShelfDashboardBubble();
-      return;
-    }
-    if (ref.read(desktopWorkspaceProvider).dashboardOpen) {
-      _closePanels();
-      return;
-    }
-    _openDashboard();
+    // The unified dashboard bubble owns this role (COR-4): the hotkey
+    // toggles the bubble through the same mutual-exclusion channel the shelf
+    // clock button uses.
+    _toggleShelfDashboardBubble();
   }
 
   void _toggleShelfDashboardBubble() {
@@ -755,14 +738,6 @@ class _DesktopShellState extends ConsumerState<DesktopShell> {
         ?.monitorId;
   }
 
-  void _openWallpaperSelector() {
-    _wallpaperOpenTimer?.cancel();
-    _closePanels();
-    _wallpaperOpenTimer = Timer(const Duration(milliseconds: 120), () {
-      unawaited(_showWallpaperSelector());
-    });
-  }
-
   void _openAppVolumeManager() {
     _closePanels();
     ref.read(appAudioProvider.notifier).refresh();
@@ -781,10 +756,6 @@ class _DesktopShellState extends ConsumerState<DesktopShell> {
 
   void _openSettings() {
     _openSettingsPage(null);
-  }
-
-  void _openPowerSettings() {
-    _openSettingsPage(SettingsPageId.power);
   }
 
   void _openSettingsPage(SettingsPageId? page) {
@@ -980,8 +951,6 @@ class _DesktopShellState extends ConsumerState<DesktopShell> {
             desktop: desktop,
             closeEffect: animations.windowCloseEffect,
             minimizedWindowPlacement: minimizedWindowPlacement,
-            panelTravel: animations.panelTravel,
-            panelDurationScale: animations.durationScale,
             windowSwitcher: windowSwitcher,
             displayLayout: displayLayout,
             frameTimingOptions: ref.watch(shellFrameTimingOptionsProvider),
@@ -991,12 +960,8 @@ class _DesktopShellState extends ConsumerState<DesktopShell> {
             applicationSearchFocusNode: _applicationSearchFocusNode,
             onOpenLauncher: _openLauncher,
             onDismissLauncher: _closePanels,
-            onOpenDashboard: _openDashboard,
-            onOpenWallpaperSelector: _openWallpaperSelector,
             onCloseWallpaperSelector: _closeWallpaperSelector,
             onOpenAppVolumeManager: _openAppVolumeManager,
-            onOpenSettings: _openSettings,
-            onOpenPowerSettings: _openPowerSettings,
             onCancelPanelClose: _cancelPanelClose,
             onSchedulePanelClose: _schedulePanelClose,
             onPanelOpened: _panelHoverController.openingCompleted,

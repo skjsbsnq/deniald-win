@@ -13,12 +13,6 @@ const settingsSystemBarPlacementCardKey = ValueKey<String>(
   'settings-system-bar-placement-card',
 );
 
-/// Identifies the edge selector, so tests can assert it is absent while
-/// ChromeOS shelf owns the bar edge (§5.1, 禁令 §E1).
-const settingsSystemBarEdgeSelectorKey = ValueKey<String>(
-  'settings-system-bar-edge-selector',
-);
-
 typedef SystemBarPlacementChanged =
     void Function(SystemBarSide side, List<int> monitorIds);
 
@@ -27,26 +21,10 @@ class SystemBarPlacementCard extends StatelessWidget {
     super.key,
     required this.layout,
     required this.onChanged,
-    this.showEdgeSelector = true,
   });
 
   final DisplayLayout? layout;
   final SystemBarPlacementChanged onChanged;
-
-  /// Whether the top/bottom/left/right edge picker is rendered.
-  ///
-  /// The ChromeOS shelf pins the bar to the bottom edge, so the classic edge
-  /// choice is invalid there and the layout page hides it (§5.1). The display
-  /// selection below stays: every monitor still gets its own shelf.
-  final bool showEdgeSelector;
-
-  void _setSide(SystemBarSide side) {
-    final current = layout;
-    if (current == null) {
-      return;
-    }
-    onChanged(side, current.effectiveSystemBarMonitorIds);
-  }
 
   void _toggleOutput(int monitorId) {
     final current = layout;
@@ -96,17 +74,6 @@ class SystemBarPlacementCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (showEdgeSelector) ...[
-            _SettingLabel(label: l10n.settingsSystemBarEdgeLabel),
-            const SizedBox(height: 10),
-            _EdgeSelector(
-              key: settingsSystemBarEdgeSelectorKey,
-              selected: current?.systemBarSide ?? SystemBarSide.hidden,
-              enabled: current != null,
-              onSelected: _setSide,
-            ),
-            const SizedBox(height: 24),
-          ],
           Row(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
@@ -124,12 +91,9 @@ class SystemBarPlacementCard extends StatelessWidget {
           ),
           const SizedBox(height: 7),
           Text(
-            // With the edge picker gone the shelf owns the bar, and the clone
-            // hint describes shelves rather than classic bars (§5.1). Tying the
-            // two keeps the card's API surface at one new parameter.
-            showEdgeSelector
-                ? l10n.settingsSystemBarCloneHint
-                : l10n.settingsShelfDisplaysHint,
+            // The ChromeOS shelf owns the bottom edge on every selected
+            // display (§5.1).
+            l10n.settingsShelfDisplaysHint,
             style: ShellText.base.copyWith(
               color: context.shellColors.textSecondary,
               height: 1.4,
@@ -163,175 +127,6 @@ class _SettingLabel extends StatelessWidget {
         color: context.shellColors.textTertiary,
         fontSize: 10,
         letterSpacing: 1,
-      ),
-    );
-  }
-}
-
-class _EdgeSelector extends StatelessWidget {
-  const _EdgeSelector({
-    super.key,
-    required this.selected,
-    required this.enabled,
-    required this.onSelected,
-  });
-
-  final SystemBarSide selected;
-  final bool enabled;
-  final ValueChanged<SystemBarSide> onSelected;
-
-  @override
-  Widget build(BuildContext context) {
-    final l10n = context.l10n;
-    final choices = <({SystemBarSide side, IconData icon, String label})>[
-      (
-        side: SystemBarSide.top,
-        icon: Icons.vertical_align_top_rounded,
-        label: l10n.settingsSystemBarEdgeTop,
-      ),
-      (
-        side: SystemBarSide.bottom,
-        icon: Icons.vertical_align_bottom_rounded,
-        label: l10n.settingsSystemBarEdgeBottom,
-      ),
-      (
-        side: SystemBarSide.left,
-        icon: Icons.align_horizontal_left_rounded,
-        label: l10n.settingsSystemBarEdgeLeft,
-      ),
-      (
-        side: SystemBarSide.right,
-        icon: Icons.align_horizontal_right_rounded,
-        label: l10n.settingsSystemBarEdgeRight,
-      ),
-    ];
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final columns = constraints.maxWidth < 430 ? 2 : 4;
-        final width = (constraints.maxWidth - (columns - 1) * 8) / columns;
-        return Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            for (final choice in choices)
-              SizedBox(
-                width: width,
-                child: _EdgeChoice(
-                  side: choice.side,
-                  icon: choice.icon,
-                  label: choice.label,
-                  selected: choice.side == selected,
-                  enabled: enabled,
-                  onPressed: () => onSelected(choice.side),
-                ),
-              ),
-          ],
-        );
-      },
-    );
-  }
-}
-
-class _EdgeChoice extends StatefulWidget {
-  const _EdgeChoice({
-    required this.side,
-    required this.icon,
-    required this.label,
-    required this.selected,
-    required this.enabled,
-    required this.onPressed,
-  });
-
-  final SystemBarSide side;
-  final IconData icon;
-  final String label;
-  final bool selected;
-  final bool enabled;
-  final VoidCallback onPressed;
-
-  @override
-  State<_EdgeChoice> createState() => _EdgeChoiceState();
-}
-
-class _EdgeChoiceState extends State<_EdgeChoice> {
-  var _hovered = false;
-  var _focused = false;
-
-  @override
-  Widget build(BuildContext context) {
-    final accent = ShellTheme.of(context).accent;
-    final highlighted = widget.enabled && (_hovered || _focused);
-    return Semantics(
-      button: true,
-      selected: widget.selected,
-      enabled: widget.enabled,
-      label: widget.label,
-      child: FocusableActionDetector(
-        enabled: widget.enabled,
-        mouseCursor: widget.enabled
-            ? ShellMouseCursors.link
-            : SystemMouseCursors.basic,
-        onShowHoverHighlight: (value) => setState(() => _hovered = value),
-        onShowFocusHighlight: (value) => setState(() => _focused = value),
-        shortcuts: const <ShortcutActivator, Intent>{
-          SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
-          SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
-        },
-        actions: <Type, Action<Intent>>{
-          ActivateIntent: CallbackAction<ActivateIntent>(
-            onInvoke: (_) {
-              widget.onPressed();
-              return null;
-            },
-          ),
-        },
-        child: GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: widget.enabled ? widget.onPressed : null,
-          child: AnimatedContainer(
-            duration: Motion.tile,
-            curve: Motion.standard,
-            height: 52,
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            decoration: BoxDecoration(
-              color: widget.selected
-                  ? context.shellTheme.accentPalette.container
-                  : highlighted
-                  ? context.shellColors.surfaceContainerHighest
-                  : context.shellColors.surfaceContainerHigh,
-              borderRadius: context.shellTheme.borderRadius(ShellRadii.chip),
-              border: Border.all(
-                color: _focused || widget.selected
-                    ? accent
-                    : context.shellColors.hairline,
-              ),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  widget.icon,
-                  size: 17,
-                  color: widget.selected
-                      ? context.shellTheme.accentPalette.onContainer
-                      : context.shellColors.textSecondary,
-                ),
-                const SizedBox(width: 7),
-                Flexible(
-                  child: Text(
-                    widget.label,
-                    overflow: TextOverflow.ellipsis,
-                    style: ShellText.cardTitle.copyWith(
-                      color: widget.selected
-                          ? context.shellTheme.accentPalette.onContainer
-                          : context.shellColors.textSecondary,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
       ),
     );
   }

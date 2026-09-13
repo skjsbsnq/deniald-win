@@ -5,17 +5,13 @@ class _DashboardIconButton extends StatefulWidget {
     required this.semanticLabel,
     required this.icon,
     required this.onTap,
-    this.active = false,
     this.busy = false,
-    this.enabled = true,
   });
 
   final String semanticLabel;
   final IconData icon;
   final VoidCallback onTap;
-  final bool active;
   final bool busy;
-  final bool enabled;
 
   @override
   State<_DashboardIconButton> createState() => _DashboardIconButtonState();
@@ -29,28 +25,23 @@ class _DashboardIconButtonState extends State<_DashboardIconButton> {
     final accent = ShellTheme.of(context).accentPalette;
     return Semantics(
       button: true,
-      enabled: widget.enabled,
       label: widget.semanticLabel,
       child: MouseRegion(
         cursor: widget.busy
             ? ShellMouseCursors.working
-            : widget.enabled
-            ? ShellMouseCursors.link
-            : ShellMouseCursors.normal,
-        onEnter: widget.enabled ? (_) => setState(() => _hovered = true) : null,
-        onExit: widget.enabled ? (_) => setState(() => _hovered = false) : null,
+            : ShellMouseCursors.link,
+        onEnter: (_) => setState(() => _hovered = true),
+        onExit: (_) => setState(() => _hovered = false),
         child: GestureDetector(
           behavior: HitTestBehavior.opaque,
-          onTap: widget.enabled && !widget.busy ? widget.onTap : null,
+          onTap: widget.busy ? null : widget.onTap,
           child: AnimatedContainer(
             duration: Motion.pill,
             curve: Motion.standard,
             width: 34,
             height: 34,
             decoration: BoxDecoration(
-              color: widget.active
-                  ? accent.container
-                  : _hovered
+              color: _hovered
                   ? context.shellColors.surfaceContainerHighest
                   : context.shellColors.surfaceContainerHigh,
               borderRadius: context.shellTheme.borderRadius(
@@ -68,11 +59,7 @@ class _DashboardIconButtonState extends State<_DashboardIconButton> {
                 : Icon(
                     widget.icon,
                     size: 18,
-                    color: widget.enabled
-                        ? widget.active
-                              ? accent.onContainer
-                              : context.shellColors.textPrimary
-                        : context.shellColors.glyphInactive,
+                    color: context.shellColors.textPrimary,
                   ),
           ),
         ),

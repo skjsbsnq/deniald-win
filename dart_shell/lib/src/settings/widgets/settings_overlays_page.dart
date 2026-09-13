@@ -5,12 +5,6 @@ import '../../models/shell_popup_placement.dart';
 import '../shell_settings.dart';
 import 'settings_controls.dart';
 
-Key settingsHoverTriggerToggleKey(ShellOverlaySurface surface) =>
-    ValueKey<String>('settings-${surface.name}-hover-trigger-toggle');
-
-Key settingsOverlayHeightSliderKey(ShellOverlaySurface surface) =>
-    ValueKey<String>('settings-${surface.name}-height-slider');
-
 Key settingsEdgeDistanceSliderKey(ShellOverlaySurface surface) =>
     ValueKey<String>('settings-${surface.name}-edge-distance-slider');
 
@@ -30,11 +24,10 @@ class SettingsOverlaysPage extends StatelessWidget {
   )
   onChanged;
 
-  /// Whether the ChromeOS shelf owns the launcher and dashboard surfaces.
-  ///
-  /// Under the shelf those shells are taken over by shelf bubbles or are not
-  /// rendered at all, so their placement editors are invalid and hidden rather
-  /// than deleted (§5.2, 禁令 §E1). Notifications and the system-level display
+  /// Retained for the host's constructor signature. The ChromeOS shelf is the
+  /// only desktop bar form: the legacy launcher and dashboard surfaces no
+  /// longer render, so their placement editors are permanently gone rather
+  /// than conditionally hidden. Notifications and the system-level display
   /// stay valid either way (禁令 §E3).
   final bool useChromeOsShelf;
 
@@ -51,36 +44,12 @@ class SettingsOverlaysPage extends StatelessWidget {
       children: [
         SettingsCardGroup(
           children: [
-            // Dropping the two invalid editors before they reach the group
-            // keeps the remaining rows adjacent, with no stranded divider.
-            if (!useChromeOsShelf) ...[
-              _PlacementEditor(
-                title: l10n.settingsLauncherOverlayTitle,
-                surface: ShellOverlaySurface.launcher,
-                placement: settings.launcher,
-                onChanged: onChanged,
-                minimumWidth: 420,
-                minimumHeight: launcherOverlayMinimumHeight,
-                showHoverTrigger: true,
-              ),
-              _PlacementEditor(
-                title: l10n.settingsDashboardOverlayTitle,
-                surface: ShellOverlaySurface.dashboard,
-                placement: settings.dashboard,
-                onChanged: onChanged,
-                minimumWidth: 320,
-                minimumHeight: 360,
-                showHoverTrigger: true,
-              ),
-            ],
             _PlacementEditor(
               title: l10n.settingsNotificationOverlayTitle,
               surface: ShellOverlaySurface.notifications,
               placement: settings.notifications,
               onChanged: onChanged,
               minimumWidth: 280,
-              minimumHeight: 200,
-              showHeight: false,
             ),
             _PlacementEditor(
               title: l10n.settingsHudOverlayTitle,
@@ -88,8 +57,6 @@ class SettingsOverlaysPage extends StatelessWidget {
               placement: settings.systemHud,
               onChanged: onChanged,
               minimumWidth: 220,
-              minimumHeight: 64,
-              showHeight: false,
             ),
           ],
         ),
@@ -105,9 +72,6 @@ class _PlacementEditor extends StatelessWidget {
     required this.placement,
     required this.onChanged,
     required this.minimumWidth,
-    required this.minimumHeight,
-    this.showHeight = true,
-    this.showHoverTrigger = false,
   });
 
   final String title;
@@ -119,9 +83,6 @@ class _PlacementEditor extends StatelessWidget {
   )
   onChanged;
   final double minimumWidth;
-  final double minimumHeight;
-  final bool showHeight;
-  final bool showHoverTrigger;
 
   @override
   Widget build(BuildContext context) {
@@ -135,20 +96,6 @@ class _PlacementEditor extends StatelessWidget {
           final controls = Expanded(
             child: Column(
               children: [
-                if (showHoverTrigger) ...[
-                  SettingsToggle(
-                    key: settingsHoverTriggerToggleKey(surface),
-                    label: l10n.settingsHoverTrigger,
-                    description: l10n.settingsHoverTriggerDescription,
-                    value:
-                        placement.hoverTriggerEnabled &&
-                        placement.anchor != ShellPopupAnchor.center,
-                    enabled: placement.anchor != ShellPopupAnchor.center,
-                    onChanged: (value) =>
-                        update(placement.copyWith(hoverTriggerEnabled: value)),
-                  ),
-                  const SizedBox(height: 16),
-                ],
                 SettingsSlider(
                   label: l10n.settingsWidth,
                   value: placement.width,
@@ -159,20 +106,6 @@ class _PlacementEditor extends StatelessWidget {
                   onChanged: (value) =>
                       update(placement.copyWith(width: value)),
                 ),
-                if (showHeight) ...[
-                  const SizedBox(height: 6),
-                  SettingsSlider(
-                    key: settingsOverlayHeightSliderKey(surface),
-                    label: l10n.settingsHeight,
-                    value: placement.height,
-                    minimum: minimumHeight,
-                    maximum: 1200,
-                    divisions: ((1200 - minimumHeight) / 10).round(),
-                    valueLabel: l10n.settingsPixels(placement.height.round()),
-                    onChanged: (value) =>
-                        update(placement.copyWith(height: value)),
-                  ),
-                ],
                 const SizedBox(height: 6),
                 SettingsSlider(
                   key: settingsEdgeDistanceSliderKey(surface),

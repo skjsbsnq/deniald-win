@@ -15,19 +15,22 @@ class _LauncherBubbleMetrics {
       (viewSize.width - 16.0).clamp(320.0, idealWidth).toDouble();
 }
 
+/// Launcher-bubble mount point above the window layer.
+///
+/// Since the ChromeOS shelf is the only desktop bar form, this overlay keeps
+/// exactly three pieces of the legacy panel host: the launcher bubble itself,
+/// its full-scene dismiss barrier, and the legacy edge-hover trigger that
+/// opens the launcher (its rect still follows the persisted
+/// [ShellPopupPlacement], which no longer has a settings editor). The
+/// dashboard surface and its trigger are gone — the unified dashboard bubble
+/// owns that role.
 class _DesktopPanelOverlay extends ConsumerStatefulWidget {
   const _DesktopPanelOverlay({
     required this.viewSize,
     required this.shellOutputRect,
-    required this.panelTravel,
-    required this.panelDurationScale,
     required this.applicationSearchFocusNode,
     required this.onOpenLauncher,
     required this.onDismissLauncher,
-    required this.onOpenDashboard,
-    required this.onOpenWallpaperSelector,
-    required this.onOpenAppVolumeManager,
-    required this.onOpenSettings,
     required this.onCancelPanelClose,
     required this.onSchedulePanelClose,
     required this.onPanelOpened,
@@ -37,17 +40,15 @@ class _DesktopPanelOverlay extends ConsumerStatefulWidget {
 
   final Size viewSize;
   final Rect? shellOutputRect;
-  final double panelTravel;
-  final double panelDurationScale;
   final FocusNode applicationSearchFocusNode;
   final VoidCallback onOpenLauncher;
   final VoidCallback onDismissLauncher;
-  final VoidCallback onOpenDashboard;
-  final VoidCallback onOpenWallpaperSelector;
-  final VoidCallback onOpenAppVolumeManager;
-  final VoidCallback onOpenSettings;
   final VoidCallback onCancelPanelClose;
   final VoidCallback onSchedulePanelClose;
+
+  /// Reports that the launcher finished opening, completing the hover
+  /// controller's open handshake so a pointer that already left can schedule
+  /// its delayed close.
   final VoidCallback onPanelOpened;
   final ValueChanged<DesktopApp> onLaunchApp;
   final ValueChanged<LocalFlutterApplication> onLaunchLocalApp;
@@ -59,7 +60,7 @@ class _DesktopPanelOverlay extends ConsumerStatefulWidget {
 
 class _DesktopPanelOverlayState extends ConsumerState<_DesktopPanelOverlay> {
   DesktopApplicationLauncher? _applicationLauncher;
-  _DesktopDashboard? _dashboard;
+  bool _launcherWasOpen = false;
 
   DesktopApplicationLauncher _cachedApplicationLauncher() {
     final cached = _applicationLauncher;
@@ -82,25 +83,6 @@ class _DesktopPanelOverlayState extends ConsumerState<_DesktopPanelOverlay> {
     );
   }
 
-  _DesktopDashboard _cachedDashboard() {
-    final cached = _dashboard;
-    if (cached != null &&
-        cached.onEnter == widget.onCancelPanelClose &&
-        cached.onExit == widget.onSchedulePanelClose &&
-        cached.onOpenWallpaper == widget.onOpenWallpaperSelector &&
-        cached.onOpenAppVolumeManager == widget.onOpenAppVolumeManager &&
-        cached.onOpenSettings == widget.onOpenSettings) {
-      return cached;
-    }
-    return _dashboard = _DesktopDashboard(
-      onEnter: widget.onCancelPanelClose,
-      onExit: widget.onSchedulePanelClose,
-      onOpenWallpaper: widget.onOpenWallpaperSelector,
-      onOpenAppVolumeManager: widget.onOpenAppVolumeManager,
-      onOpenSettings: widget.onOpenSettings,
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final panelState = ref.watch(
@@ -110,9 +92,6 @@ class _DesktopPanelOverlayState extends ConsumerState<_DesktopPanelOverlay> {
     );
     final overlaySettings = ref.watch(
       shellSettingsProvider.select((settings) => settings.overlays),
-    );
-    final useChromeOsShelf = ref.watch(
-      shellSettingsProvider.select((s) => s.layout.useChromeOsShelf),
     );
     final configuredThickness = ref.watch(
       shellSettingsProvider.select((s) => s.layout.effectiveSystemBarThickness),
@@ -125,7 +104,7 @@ class _DesktopPanelOverlayState extends ConsumerState<_DesktopPanelOverlay> {
       560.0,
       math.max(200.0, widget.viewSize.height - effectiveShelfHeight - 16.0),
     );
-    final shelfBubbleRect = Rect.fromLTWH(
+    final launcherRect = Rect.fromLTWH(
       8.0,
       math.max(
         8.0,
@@ -134,30 +113,25 @@ class _DesktopPanelOverlayState extends ConsumerState<_DesktopPanelOverlay> {
       _LauncherBubbleMetrics.width(widget.viewSize),
       bubbleHeight,
     );
-    final launcherRect = useChromeOsShelf
-        ? shelfBubbleRect
-        : DesktopMetrics.launcherRect(
-            widget.viewSize,
-            outputRect: widget.shellOutputRect,
-            placement: overlaySettings.launcher,
-          );
-    final dashboardRect = DesktopMetrics.dashboardRect(
-      widget.viewSize,
-      outputRect: widget.shellOutputRect,
-      placement: overlaySettings.dashboard,
-    );
     final launcherTriggerRect = DesktopMetrics.launcherTriggerRect(
       widget.viewSize,
       outputRect: widget.shellOutputRect,
       placement: overlaySettings.launcher,
     );
-    final dashboardTriggerRect = DesktopMetrics.dashboardTriggerRect(
-      widget.viewSize,
-      outputRect: widget.shellOutputRect,
-      placement: overlaySettings.dashboard,
-    );
     final launcherOpen = panelState.panel == DesktopPanel.launcher;
-    final dashboardOpen = panelState.panel == DesktopPanel.dashboard;
+
+    // The launcher's own spring owns the entrance, so no transition widget is
+    // left to report completion. Complete the hover controller's open
+    // handshake on the first frame the panel is open instead; otherwise a
+    // pointer that left mid-entrance would keep a pending close forever.
+    if (launcherOpen && !_launcherWasOpen) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          widget.onPanelOpened();
+        }
+      });
+    }
+    _launcherWasOpen = launcherOpen;
 
     return Stack(
       fit: StackFit.expand,
@@ -178,82 +152,27 @@ class _DesktopPanelOverlayState extends ConsumerState<_DesktopPanelOverlay> {
             ),
           ),
         ),
-        if (!launcherRect.isEmpty)
-          Positioned.fromRect(
-            key: const ValueKey<String>('desktop-launcher-position'),
-            rect: launcherRect,
-            child: useChromeOsShelf
-                ? ShellInputRegion(
-                    debugLabel: 'Desktop application launcher',
-                    active: launcherOpen,
-                    pointerPolicy: ShellPointerPolicy.fullScene,
-                    keyboardPolicy: ShellKeyboardPolicy.capture,
-                    child: IgnorePointer(
-                      ignoring: !launcherOpen,
-                      child: _cachedApplicationLauncher(),
-                    ),
-                  )
-                : DesktopPanelTransition(
-                    key: const ValueKey<String>('desktop-launcher-panel'),
-                    inputDebugLabel: 'Desktop application launcher',
-                    keyboardPolicy: ShellKeyboardPolicy.capture,
-                    maintainState: true,
-                    visible: launcherOpen,
-                    entryDirection: _entryDirectionFor(
-                      overlaySettings.launcher.anchor.horizontal,
-                      overlaySettings.launcher.anchor.vertical,
-                    ),
-                    entryDistance: widget.panelTravel,
-                    durationScale: widget.panelDurationScale,
-                    onOpened: widget.onPanelOpened,
-                    child: _cachedApplicationLauncher(),
-                  ),
-          ),
-        // In the ChromeOS shelf layout the unified dashboard panel owns this
-        // role; the legacy dashboard must neither render nor open, so its
-        // surface and edge trigger stay unmounted entirely.
-        if (!useChromeOsShelf && !dashboardRect.isEmpty)
-          Positioned.fromRect(
-            key: const ValueKey<String>('desktop-dashboard-position'),
-            rect: dashboardRect,
-            child: DesktopPanelTransition(
-              key: const ValueKey<String>('desktop-dashboard-panel'),
-              inputDebugLabel: 'Desktop dashboard',
-              keyboardPolicy: ShellKeyboardPolicy.capture,
-              maintainState: true,
-              visible: dashboardOpen,
-              entryDirection: _entryDirectionFor(
-                overlaySettings.dashboard.anchor.horizontal,
-                overlaySettings.dashboard.anchor.vertical,
-              ),
-              entryDistance: widget.panelTravel,
-              durationScale: widget.panelDurationScale,
-              onOpened: widget.onPanelOpened,
-              child: _cachedDashboard(),
+        Positioned.fromRect(
+          key: const ValueKey<String>('desktop-launcher-position'),
+          rect: launcherRect,
+          child: ShellInputRegion(
+            debugLabel: 'Desktop application launcher',
+            active: launcherOpen,
+            pointerPolicy: ShellPointerPolicy.fullScene,
+            keyboardPolicy: ShellKeyboardPolicy.capture,
+            child: IgnorePointer(
+              ignoring: !launcherOpen,
+              child: _cachedApplicationLauncher(),
             ),
           ),
-        if (!useChromeOsShelf &&
-            !panelState.overviewActive &&
-            !launcherTriggerRect.isEmpty)
+        ),
+        if (!panelState.overviewActive && !launcherTriggerRect.isEmpty)
           Positioned.fromRect(
             rect: launcherTriggerRect,
             child: ShellInputRegion(
               debugLabel: 'Desktop launcher edge trigger',
               child: _DesktopPanelEdgeTrigger(
                 onEnter: widget.onOpenLauncher,
-                onExit: widget.onSchedulePanelClose,
-              ),
-            ),
-          ),
-        if (!useChromeOsShelf &&
-            !panelState.overviewActive &&
-            !dashboardTriggerRect.isEmpty)
-          Positioned.fromRect(
-            rect: dashboardTriggerRect,
-            child: ShellInputRegion(
-              debugLabel: 'Desktop dashboard edge trigger',
-              child: _DesktopPanelEdgeTrigger(
-                onEnter: widget.onOpenDashboard,
                 onExit: widget.onSchedulePanelClose,
               ),
             ),

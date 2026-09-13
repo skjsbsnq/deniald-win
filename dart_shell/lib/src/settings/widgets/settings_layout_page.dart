@@ -8,16 +8,13 @@ import '../shell_settings.dart';
 import 'settings_controls.dart';
 import 'system_bar_placement_card.dart';
 
-/// Identifies the system bar / shelf thickness slider (§5.1), so tests can
-/// assert the effective range while its label switches between the two modes.
+/// Identifies the shelf height slider (§5.1), so tests can assert its
+/// effective range.
 const settingsBarThicknessSliderKey = ValueKey<String>(
   'settings-bar-thickness-slider',
 );
 
-/// Floor of the classic system bar thickness slider (§5.1).
-const double settingsBarMinimumHeight = 24;
-
-/// Floor of the shelf height slider when ChromeOS shelf is active (§5.1).
+/// Floor of the shelf height slider (§5.1).
 const double settingsShelfMinimumHeight = 48;
 
 /// Ceiling shared by the classic bar thickness and the shelf height (§5.1).
@@ -53,24 +50,22 @@ class SettingsLayoutPage extends StatelessWidget {
   onMinimizedWindowPlacementChanged;
   final ValueChanged<ClipboardTrayEdge> onClipboardTrayEdgeChanged;
   final ValueChanged<double> onClipboardTrayExtentChanged;
+
+  /// Retained for the host's constructor signature. The ChromeOS shelf is the
+  /// only desktop bar form, so the toggle is permanently hidden and this
+  /// callback is never invoked.
   final ValueChanged<bool>? onUseChromeOsShelfChanged;
   final VoidCallback onReset;
 
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    // Single validity source for the ChromeOS shelf (§E4): the layout settings
-    // are already selected once by the page host, and the card never reads a
-    // provider of its own.
-    final shelfActive = settings.useChromeOsShelf;
-    final thicknessMinimum = shelfActive
-        ? settingsShelfMinimumHeight
-        : settingsBarMinimumHeight;
-    final thickness = shelfActive
-        ? settings.effectiveSystemBarThickness
-              .clamp(settingsShelfMinimumHeight, settingsBarMaximumHeight)
-              .toDouble()
-        : settings.systemBarThickness;
+    // The ChromeOS shelf is the only desktop bar form, so the slider always
+    // carries shelf semantics (§5.1): the effective shelf height on its 48px
+    // floor.
+    final thickness = settings.effectiveSystemBarThickness
+        .clamp(settingsShelfMinimumHeight, settingsBarMaximumHeight)
+        .toDouble();
     return SettingsPageLayout(
       icon: Icons.space_dashboard_outlined,
       eyebrow: l10n.settingsLayoutSection,
@@ -146,35 +141,29 @@ class SettingsLayoutPage extends StatelessWidget {
           children: [
             SettingsSection(
               title: l10n.settingsChromeOsShelfTitle,
-              child: SettingsToggle(
-                key: const ValueKey<String>(
-                  'settings-use-chromeos-shelf-toggle',
+              child: Text(
+                l10n.settingsUseChromeOsShelfDescription,
+                style: ShellText.settingsRowSupport.copyWith(
+                  color: context.shellColors.textSecondary,
                 ),
-                label: l10n.settingsUseChromeOsShelf,
-                description: l10n.settingsUseChromeOsShelfDescription,
-                value: settings.useChromeOsShelf,
-                onChanged: onUseChromeOsShelfChanged ?? (_) {},
-                enabled: onUseChromeOsShelfChanged != null,
               ),
             ),
             SystemBarPlacementCard(
               layout: displayLayout,
               onChanged: onSystemBarChanged,
-              showEdgeSelector: !shelfActive,
             ),
             SettingsSection(
               title: l10n.settingsBarGeometryTitle,
               child: SettingsSlider(
                 key: settingsBarThicknessSliderKey,
-                label: shelfActive
-                    ? l10n.settingsShelfHeight
-                    : l10n.settingsBarThickness,
+                label: l10n.settingsShelfHeight,
                 value: thickness,
-                minimum: thicknessMinimum,
+                minimum: settingsShelfMinimumHeight,
                 maximum: settingsBarMaximumHeight,
                 // One division per logical pixel across the active range.
-                divisions: (settingsBarMaximumHeight - thicknessMinimum)
-                    .round(),
+                divisions:
+                    (settingsBarMaximumHeight - settingsShelfMinimumHeight)
+                        .round(),
                 valueLabel: l10n.settingsPixels(thickness.round()),
                 onChanged: onSystemBarThicknessChanged,
               ),

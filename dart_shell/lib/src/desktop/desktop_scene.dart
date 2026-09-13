@@ -557,8 +557,6 @@ class _DesktopScene extends ConsumerStatefulWidget {
     required this.desktop,
     required this.closeEffect,
     required this.minimizedWindowPlacement,
-    required this.panelTravel,
-    required this.panelDurationScale,
     required this.windowSwitcher,
     required this.displayLayout,
     required this.frameTimingOptions,
@@ -568,12 +566,8 @@ class _DesktopScene extends ConsumerStatefulWidget {
     required this.applicationSearchFocusNode,
     required this.onOpenLauncher,
     required this.onDismissLauncher,
-    required this.onOpenDashboard,
-    required this.onOpenWallpaperSelector,
     required this.onCloseWallpaperSelector,
     required this.onOpenAppVolumeManager,
-    required this.onOpenSettings,
-    required this.onOpenPowerSettings,
     required this.onCancelPanelClose,
     required this.onSchedulePanelClose,
     required this.onPanelOpened,
@@ -594,8 +588,6 @@ class _DesktopScene extends ConsumerStatefulWidget {
   final DesktopWorkspaceState desktop;
   final DesktopWindowCloseEffect closeEffect;
   final MinimizedWindowPlacement minimizedWindowPlacement;
-  final double panelTravel;
-  final double panelDurationScale;
   final DesktopWindowSwitcherState? windowSwitcher;
   final DisplayLayout? displayLayout;
   final ShellFrameTimingOptions frameTimingOptions;
@@ -605,12 +597,11 @@ class _DesktopScene extends ConsumerStatefulWidget {
   final FocusNode applicationSearchFocusNode;
   final VoidCallback onOpenLauncher;
   final VoidCallback onDismissLauncher;
-  final VoidCallback onOpenDashboard;
-  final VoidCallback onOpenWallpaperSelector;
   final VoidCallback onCloseWallpaperSelector;
+
+  /// Kept wired so the per-app volume surface opener stays live; the legacy
+  /// dashboard was its only host, so a T20 shelf entry point must consume it.
   final VoidCallback onOpenAppVolumeManager;
-  final VoidCallback onOpenSettings;
-  final VoidCallback onOpenPowerSettings;
   final VoidCallback onCancelPanelClose;
   final VoidCallback onSchedulePanelClose;
   final VoidCallback onPanelOpened;
@@ -940,12 +931,7 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
     final applicationSearchFocusNode = widget.applicationSearchFocusNode;
     final onOpenLauncher = widget.onOpenLauncher;
     final onDismissLauncher = widget.onDismissLauncher;
-    final onOpenDashboard = widget.onOpenDashboard;
-    final onOpenSettings = widget.onOpenSettings;
-    final onOpenPowerSettings = widget.onOpenPowerSettings;
-    final onOpenWallpaperSelector = widget.onOpenWallpaperSelector;
     final onCloseWallpaperSelector = widget.onCloseWallpaperSelector;
-    final onOpenAppVolumeManager = widget.onOpenAppVolumeManager;
     final onCancelPanelClose = widget.onCancelPanelClose;
     final onSchedulePanelClose = widget.onSchedulePanelClose;
     final onLaunchApp = widget.onLaunchApp;
@@ -984,9 +970,6 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
             ) ??
             false,
       ),
-    );
-    final useChromeOsShelf = ref.watch(
-      shellSettingsProvider.select((s) => s.layout.useChromeOsShelf),
     );
     // The provider (not a local notifier) backs the bubble expansions so the
     // shell's transient-surface helper can close them from outside the scene.
@@ -1102,55 +1085,50 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
                     Positioned.fromRect(
                       key: ValueKey<String>('system-bar-${bar.monitorId}'),
                       rect: bar.rect,
-                      child: useChromeOsShelf
-                          ? ShelfLayer(
-                              height: bar.rect.height,
-                              monitorId: bar.monitorId,
-                              onLauncherPressed: () {
-                                shelfBubbles.close();
-                                onOpenLauncher();
-                              },
-                              trayExpanded: _shelfTrayExpanded,
-                              onTrayPressed: () {
-                                if (!ref
-                                    .read(desktopShelfBubblesProvider)
-                                    .trayExpanded) {
-                                  onDismissLauncher();
-                                  // A bubble owns the screen above the
-                                  // overview, so opening it dismisses the
-                                  // overview instead of stacking on it.
-                                  if (desktop.overviewActive) {
-                                    ref
-                                        .read(desktopWorkspaceProvider.notifier)
-                                        .closeOverview();
-                                  }
-                                }
-                                shelfBubbles.toggleTray(
-                                  anchorMonitorId: bar.monitorId,
-                                );
-                              },
-                              calendarExpanded: _shelfDashboardExpanded,
-                              onClockPressed: () {
-                                if (!ref
-                                    .read(desktopShelfBubblesProvider)
-                                    .dashboardExpanded) {
-                                  onDismissLauncher();
-                                  // Same mutual exclusion as the tray button.
-                                  if (desktop.overviewActive) {
-                                    ref
-                                        .read(desktopWorkspaceProvider.notifier)
-                                        .closeOverview();
-                                  }
-                                }
-                                shelfBubbles.toggleDashboard(
-                                  anchorMonitorId: bar.monitorId,
-                                );
-                              },
-                            )
-                          : DesktopSystemBar(
-                              side: bar.side,
-                              onOpenPowerSettings: onOpenPowerSettings,
-                            ),
+                      child: ShelfLayer(
+                        height: bar.rect.height,
+                        monitorId: bar.monitorId,
+                        onLauncherPressed: () {
+                          shelfBubbles.close();
+                          onOpenLauncher();
+                        },
+                        trayExpanded: _shelfTrayExpanded,
+                        onTrayPressed: () {
+                          if (!ref
+                              .read(desktopShelfBubblesProvider)
+                              .trayExpanded) {
+                            onDismissLauncher();
+                            // A bubble owns the screen above the
+                            // overview, so opening it dismisses the
+                            // overview instead of stacking on it.
+                            if (desktop.overviewActive) {
+                              ref
+                                  .read(desktopWorkspaceProvider.notifier)
+                                  .closeOverview();
+                            }
+                          }
+                          shelfBubbles.toggleTray(
+                            anchorMonitorId: bar.monitorId,
+                          );
+                        },
+                        calendarExpanded: _shelfDashboardExpanded,
+                        onClockPressed: () {
+                          if (!ref
+                              .read(desktopShelfBubblesProvider)
+                              .dashboardExpanded) {
+                            onDismissLauncher();
+                            // Same mutual exclusion as the tray button.
+                            if (desktop.overviewActive) {
+                              ref
+                                  .read(desktopWorkspaceProvider.notifier)
+                                  .closeOverview();
+                            }
+                          }
+                          shelfBubbles.toggleDashboard(
+                            anchorMonitorId: bar.monitorId,
+                          );
+                        },
+                      ),
                     ),
                   Positioned.fill(
                     child: ShellInputRegion(
@@ -1223,83 +1201,75 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
                   _DesktopPanelOverlay(
                     viewSize: viewSize,
                     shellOutputRect: shellOutputRect,
-                    panelTravel: widget.panelTravel,
-                    panelDurationScale: widget.panelDurationScale,
                     applicationSearchFocusNode: applicationSearchFocusNode,
                     onOpenLauncher: onOpenLauncher,
                     onDismissLauncher: onDismissLauncher,
-                    onOpenDashboard: onOpenDashboard,
-                    onOpenWallpaperSelector: onOpenWallpaperSelector,
-                    onOpenAppVolumeManager: onOpenAppVolumeManager,
-                    onOpenSettings: onOpenSettings,
                     onCancelPanelClose: onCancelPanelClose,
                     onSchedulePanelClose: onSchedulePanelClose,
                     onPanelOpened: widget.onPanelOpened,
                     onLaunchApp: onLaunchApp,
                     onLaunchLocalApp: onLaunchLocalApp,
                   ),
-                  if (useChromeOsShelf)
-                    Positioned.fill(
-                      child: ValueListenableBuilder<bool>(
-                        valueListenable: _shelfTrayExpanded,
-                        builder: (context, shelfTrayExpanded, _) {
-                          final trayVisible = shelfTrayExpanded;
-                          return ShellInputRegion(
-                            debugLabel: 'Unified tray bubble',
-                            active: trayVisible,
-                            pointerPolicy: ShellPointerPolicy.fullScene,
-                            keyboardPolicy: trayVisible
-                                ? ShellKeyboardPolicy.capture
-                                : ShellKeyboardPolicy.none,
-                            child: IgnorePointer(
-                              ignoring: !shelfTrayExpanded,
-                              child: UnifiedTrayBubble(
-                                key: const ValueKey<String>(
-                                  'shelf-unified-tray-bubble',
-                                ),
-                                visible: trayVisible,
-                                onDismiss: () => shelfBubbles.close(),
-                                onOpenOverview: () {
-                                  shelfBubbles.close();
-                                  widget.onToggleOverview();
-                                },
-                                shelfHeight: bubbleAnchor.shelfHeight,
-                                outputRect: bubbleAnchor.outputRect,
+                  Positioned.fill(
+                    child: ValueListenableBuilder<bool>(
+                      valueListenable: _shelfTrayExpanded,
+                      builder: (context, shelfTrayExpanded, _) {
+                        final trayVisible = shelfTrayExpanded;
+                        return ShellInputRegion(
+                          debugLabel: 'Unified tray bubble',
+                          active: trayVisible,
+                          pointerPolicy: ShellPointerPolicy.fullScene,
+                          keyboardPolicy: trayVisible
+                              ? ShellKeyboardPolicy.capture
+                              : ShellKeyboardPolicy.none,
+                          child: IgnorePointer(
+                            ignoring: !shelfTrayExpanded,
+                            child: UnifiedTrayBubble(
+                              key: const ValueKey<String>(
+                                'shelf-unified-tray-bubble',
                               ),
+                              visible: trayVisible,
+                              onDismiss: () => shelfBubbles.close(),
+                              onOpenOverview: () {
+                                shelfBubbles.close();
+                                widget.onToggleOverview();
+                              },
+                              shelfHeight: bubbleAnchor.shelfHeight,
+                              outputRect: bubbleAnchor.outputRect,
                             ),
-                          );
-                        },
-                      ),
+                          ),
+                        );
+                      },
                     ),
-                  if (useChromeOsShelf)
-                    Positioned.fill(
-                      child: ValueListenableBuilder<bool>(
-                        valueListenable: _shelfDashboardExpanded,
-                        builder: (context, shelfDashboardExpanded, _) {
-                          final dashboardVisible = shelfDashboardExpanded;
-                          return ShellInputRegion(
-                            debugLabel: 'Unified dashboard panel',
-                            active: dashboardVisible,
-                            pointerPolicy: ShellPointerPolicy.fullScene,
-                            keyboardPolicy: dashboardVisible
-                                ? ShellKeyboardPolicy.capture
-                                : ShellKeyboardPolicy.none,
-                            child: IgnorePointer(
-                              ignoring: !shelfDashboardExpanded,
-                              child: UnifiedDashboardPanel(
-                                key: const ValueKey<String>(
-                                  'shelf-unified-dashboard-panel',
-                                ),
-                                visible: dashboardVisible,
-                                onDismiss: () => shelfBubbles.close(),
-                                shelfHeight: bubbleAnchor.shelfHeight,
-                                outputRect: bubbleAnchor.outputRect,
+                  ),
+                  Positioned.fill(
+                    child: ValueListenableBuilder<bool>(
+                      valueListenable: _shelfDashboardExpanded,
+                      builder: (context, shelfDashboardExpanded, _) {
+                        final dashboardVisible = shelfDashboardExpanded;
+                        return ShellInputRegion(
+                          debugLabel: 'Unified dashboard panel',
+                          active: dashboardVisible,
+                          pointerPolicy: ShellPointerPolicy.fullScene,
+                          keyboardPolicy: dashboardVisible
+                              ? ShellKeyboardPolicy.capture
+                              : ShellKeyboardPolicy.none,
+                          child: IgnorePointer(
+                            ignoring: !shelfDashboardExpanded,
+                            child: UnifiedDashboardPanel(
+                              key: const ValueKey<String>(
+                                'shelf-unified-dashboard-panel',
                               ),
+                              visible: dashboardVisible,
+                              onDismiss: () => shelfBubbles.close(),
+                              shelfHeight: bubbleAnchor.shelfHeight,
+                              outputRect: bubbleAnchor.outputRect,
                             ),
-                          );
-                        },
-                      ),
+                          ),
+                        );
+                      },
                     ),
+                  ),
                   for (final popup in inputMethodPopups)
                     if (popup.geometry case final geometry?)
                       RetainedAnimatedPositioned(

@@ -117,24 +117,31 @@ void main() {
       expect(find.text('Clipboard tray'), findsOneWidget);
     });
 
-    testWidgets('overlays renders all four editors with the shelf off', (
-      tester,
-    ) async {
-      await pumpSettingsApp(
-        tester,
-        initialPage: SettingsPageId.overlays,
-        initialSettings: const ShellSettings(
-          layout: ShellLayoutSettings(useChromeOsShelf: false),
-        ),
-      );
+    testWidgets(
+      'overlays keeps only the notification and HUD editors even when a '
+      'persisted document disables the shelf',
+      (tester) async {
+        await pumpSettingsApp(
+          tester,
+          initialPage: SettingsPageId.overlays,
+          initialSettings: const ShellSettings(
+            layout: ShellLayoutSettings(useChromeOsShelf: false),
+          ),
+        );
 
-      expect(find.text('Put shell controls where they belong.'), findsWidgets);
-      expect(find.text('Applications'), findsOneWidget);
-      expect(find.text('Dashboard'), findsOneWidget);
-      expect(find.text('Notifications'), findsOneWidget);
-      expect(find.text('System level display'), findsOneWidget);
-      expect(find.byType(SettingsAnchorPicker), findsNWidgets(4));
-    });
+        expect(
+          find.text('Put shell controls where they belong.'),
+          findsWidgets,
+        );
+        // The shelf is the only desktop bar form: the launcher and dashboard
+        // placement editors are permanently gone, not conditionally hidden.
+        expect(find.text('Applications'), findsNothing);
+        expect(find.text('Dashboard'), findsNothing);
+        expect(find.text('Notifications'), findsOneWidget);
+        expect(find.text('System level display'), findsOneWidget);
+        expect(find.byType(SettingsAnchorPicker), findsNWidgets(2));
+      },
+    );
 
     testWidgets('lock screen renders its sliders and preview', (tester) async {
       await pumpSettingsApp(
@@ -234,7 +241,7 @@ void main() {
       expect(find.byKey(settingsAccentColorPickerKey), findsNothing);
     });
 
-    testWidgets('overlays reports the picked anchor for the launcher', (
+    testWidgets('overlays reports the picked anchor for notifications', (
       tester,
     ) async {
       _useTallWindow(tester);
@@ -257,13 +264,14 @@ void main() {
         );
         await tester.pump();
 
+        // The first placement editor belongs to the notifications surface.
         await tester.tap(find.bySemanticsLabel('Bottom right').first);
         await tester.pump();
       } finally {
         semantics.dispose();
       }
 
-      expect(surface, ShellOverlaySurface.launcher);
+      expect(surface, ShellOverlaySurface.notifications);
       expect(placement?.anchor, ShellPopupAnchor.bottomRight);
     });
 

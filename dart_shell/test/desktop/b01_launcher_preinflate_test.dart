@@ -1,7 +1,5 @@
 import 'package:denial_dart_shell/l10n/generated/app_localizations.dart';
-import 'package:denial_dart_shell/src/desktop/desktop_panel_transition.dart';
 import 'package:denial_dart_shell/src/desktop/desktop_shell.dart';
-import 'package:denial_dart_shell/src/input/shell_interaction_registry.dart';
 import 'package:denial_dart_shell/src/launcher/controllers/application_recents_controller.dart';
 import 'package:denial_dart_shell/src/launcher/controllers/home_grid_controller.dart';
 import 'package:denial_dart_shell/src/launcher/models/home_grid_item.dart';
@@ -14,10 +12,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-// B01: the launcher bubble and maintainState DesktopPanelTransition panels
-// inflate their subtree offstage during shell idle instead of inside the
-// first open's animation frames. The parked subtree must stay invisible,
-// non-interactive, unfocusable, and out of the semantics tree.
+// B01: the launcher bubble inflates its subtree offstage during shell idle
+// instead of inside the first open's animation frames. The parked subtree
+// must stay invisible, non-interactive, unfocusable, and out of the
+// semantics tree.
 const int _appCount = 20;
 
 LocalFlutterApplication _app(int index) {
@@ -207,107 +205,6 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   });
-
-  group('DesktopPanelTransition maintainState pre-inflate', () {
-    testWidgets(
-      'mounts the child offstage before first open, inert and unfocusable',
-      (tester) async {
-        tester.view.physicalSize = const Size(500, 600);
-        tester.view.devicePixelRatio = 1.0;
-        addTearDown(tester.view.resetPhysicalSize);
-        addTearDown(tester.view.resetDevicePixelRatio);
-        final semantics = tester.ensureSemantics();
-
-        final focusNode = FocusNode(debugLabel: 'parked-field');
-        addTearDown(focusNode.dispose);
-
-        await tester.pumpWidget(
-          _transitionScene(visible: false, focusNode: focusNode),
-        );
-        await tester.pump();
-        expect(find.text('panel-body', skipOffstage: false), findsNothing);
-
-        await tester.pump(const Duration(seconds: 2));
-        await tester.pumpAndSettle();
-
-        expect(find.text('panel-body', skipOffstage: false), findsOneWidget);
-        expect(find.text('panel-body'), findsNothing);
-        final container = ProviderScope.containerOf(
-          tester.element(find.byType(DesktopPanelTransition)),
-        );
-        // The parked ShellInputRegion stays inactive and publishes nothing.
-        expect(
-          container.read(shellInteractionRegistryProvider).surfaces,
-          isEmpty,
-        );
-        // The child's autofocus fired while parked and must have been
-        // blocked by the focus gate.
-        expect(focusNode.hasFocus, isFalse);
-        focusNode.requestFocus();
-        await tester.pump();
-        expect(focusNode.hasFocus, isFalse);
-        semantics.dispose();
-      },
-    );
-
-    testWidgets('first open shows the panel and re-enables focus', (
-      tester,
-    ) async {
-      tester.view.physicalSize = const Size(500, 600);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
-
-      final focusNode = FocusNode(debugLabel: 'parked-field');
-      addTearDown(focusNode.dispose);
-
-      await tester.pumpWidget(
-        _transitionScene(visible: false, focusNode: focusNode),
-      );
-      await tester.pump(const Duration(seconds: 2));
-      await tester.pumpAndSettle();
-
-      await tester.pumpWidget(
-        _transitionScene(visible: true, focusNode: focusNode),
-      );
-      await tester.pumpAndSettle();
-
-      expect(find.text('panel-body'), findsOneWidget);
-      final container = ProviderScope.containerOf(
-        tester.element(find.byType(DesktopPanelTransition)),
-      );
-      expect(
-        container.read(shellInteractionRegistryProvider).capturesKeyboard,
-        isTrue,
-      );
-      focusNode.requestFocus();
-      await tester.pump();
-      expect(focusNode.hasFocus, isTrue);
-    });
-
-    testWidgets('maintainState false keeps the lazy first open', (
-      tester,
-    ) async {
-      tester.view.physicalSize = const Size(500, 600);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.resetPhysicalSize);
-      addTearDown(tester.view.resetDevicePixelRatio);
-
-      final focusNode = FocusNode(debugLabel: 'parked-field');
-      addTearDown(focusNode.dispose);
-
-      await tester.pumpWidget(
-        _transitionScene(
-          visible: false,
-          focusNode: focusNode,
-          maintainState: false,
-        ),
-      );
-      await tester.pump(const Duration(seconds: 2));
-      await tester.pumpAndSettle();
-      expect(find.text('panel-body', skipOffstage: false), findsNothing);
-    });
-  });
 }
 
 Widget _launcherScene(
@@ -344,43 +241,6 @@ Widget _launcherScene(
                 onLaunch: (_) {},
                 onLaunchLocal: onLaunchLocal,
                 visible: visible,
-              ),
-            ),
-          ),
-        ),
-      ),
-    ),
-  );
-}
-
-Widget _transitionScene({
-  required bool visible,
-  required FocusNode focusNode,
-  bool maintainState = true,
-}) {
-  return ProviderScope(
-    child: MaterialApp(
-      localizationsDelegates: AppLocalizations.localizationsDelegates,
-      supportedLocales: AppLocalizations.supportedLocales,
-      locale: const Locale('en'),
-      home: ShellTheme(
-        data: const ShellThemeData(),
-        child: Center(
-          child: SizedBox(
-            width: 400,
-            height: 400,
-            child: DesktopPanelTransition(
-              inputDebugLabel: 'Test panel',
-              keyboardPolicy: ShellKeyboardPolicy.capture,
-              maintainState: maintainState,
-              visible: visible,
-              child: Scaffold(
-                body: Column(
-                  children: [
-                    const Text('panel-body'),
-                    TextField(autofocus: true, focusNode: focusNode),
-                  ],
-                ),
               ),
             ),
           ),

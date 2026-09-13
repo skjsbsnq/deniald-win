@@ -125,6 +125,17 @@ class _LegacyLayoutSettingsController extends ShellSettingsController {
       layout: ShellLayoutSettings(useChromeOsShelf: false),
     );
   }
+
+  // The shelf enforcement re-arms the persisted flag through this mutator.
+  // The inherited `_update` path would schedule a store-write debounce timer
+  // and reach SystemThemePropagation, neither of which a widget test may
+  // touch, so the re-arm is applied directly like the settings harness does.
+  @override
+  void setUseChromeOsShelf(bool value) {
+    state = state.copyWith(
+      layout: state.layout.copyWith(useChromeOsShelf: value),
+    );
+  }
 }
 
 void main() {
@@ -285,7 +296,7 @@ void main() {
   );
 
   testWidgets(
-    'non-shelf mode: dashboard hotkey keeps driving the legacy panel',
+    'persisted useChromeOsShelf=false still toggles the unified bubble',
     (tester) async {
       tester.view.physicalSize = const Size(1200, 800);
       tester.view.devicePixelRatio = 1.0;
@@ -299,22 +310,21 @@ void main() {
         settingsController: _LegacyLayoutSettingsController(),
       );
 
+      // The shelf is the only desktop bar form: the shell normalizes the
+      // persisted flag, so the hotkey still drives the unified bubble and
+      // never the retired panel state machine.
       bridge.emitDashboard();
       await tester.pumpAndSettle();
       expect(
-        container.read(desktopWorkspaceProvider).dashboardOpen,
+        container.read(desktopShelfBubblesProvider).dashboardExpanded,
         isTrue,
       );
-      // The legacy path must not touch the shelf bubble state.
-      expect(
-        container.read(desktopShelfBubblesProvider).dashboardExpanded,
-        isFalse,
-      );
+      expect(container.read(desktopWorkspaceProvider).panel, DesktopPanel.none);
 
       bridge.emitDashboard();
       await tester.pumpAndSettle();
       expect(
-        container.read(desktopWorkspaceProvider).dashboardOpen,
+        container.read(desktopShelfBubblesProvider).dashboardExpanded,
         isFalse,
       );
     },
