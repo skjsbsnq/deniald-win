@@ -3895,6 +3895,14 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsNavGroupSystem => '系统';
 
   @override
+  String get weatherSegmentConditions => '天气';
+
+  @override
+  String weatherHeroHighLow(String high, String low) {
+    return '最高 $high · 最低 $low';
+  }
+
+  @override
   String get shelfOpenLauncher => '打开应用';
 
   @override
@@ -3913,13 +3921,59 @@ class AppLocalizationsZh extends AppLocalizations {
   String get trayAudioSettings => '音频设置';
 
   @override
-  String get weatherSegmentConditions => '天气';
-
-  @override
-  String weatherHeroHighLow(String high, String low) {
-    return '最高 $high · 最低 $low';
-  }
-
-  @override
   String get widgetQuickActionsLabel => '快捷操作';
+
+  @override
+  String get settingsNavigationAboutSupport => '版本与致谢';
+
+  @override
+  String get settingsNavigationAnimationsSupport => '窗口与面板动效';
+
+  @override
+  String get settingsNavigationAppearanceSupport => '壁纸、强调色与字体图标';
+
+  @override
+  String get settingsNavigationAudioSupport => '输出、输入与应用音量';
+
+  @override
+  String get settingsNavigationBluetoothSupport => '射频与已配对设备';
+
+  @override
+  String get settingsNavigationDesktopLayoutSupport => '工作区、系统栏与窗口规则';
+
+  @override
+  String get settingsNavigationDeveloperSupport => '实时界面开发工作区';
+
+  @override
+  String get settingsNavigationDisplaysSupport => '显示器、缩放与排列';
+
+  @override
+  String get settingsNavigationEnvironmentSupport => '启动应用的环境变量';
+
+  @override
+  String get settingsNavigationKeyboardSupport => '布局、重复与切换';
+
+  @override
+  String get settingsNavigationLanguageSupport => '界面语言与地区';
+
+  @override
+  String get settingsNavigationLockScreenSupport => '壁纸、调暗、时钟与状态';
+
+  @override
+  String get settingsNavigationNetworkSupport => 'Wi-Fi 与有线连接';
+
+  @override
+  String get settingsNavigationOverlaysSupport => '启动器、仪表盘与 HUD';
+
+  @override
+  String get settingsNavigationPowerSupport => '闲置锁定、睡眠与显示电源';
+
+  @override
+  String get settingsNavigationShortcutsSupport => 'Shell 操作的按键绑定';
+
+  @override
+  String get settingsNavigationTouchpadSupport => '指针、滚动与手势';
+
+  @override
+  String get settingsNavigationWeatherSupport => '位置与温度单位';
 }

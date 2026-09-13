@@ -123,10 +123,18 @@ void main() {
     );
     expect(decoration.border, isNull);
 
-    final divider = tester.widget<Divider>(
-      find.descendant(of: group, matching: find.byType(Divider)).first,
+    final hairline = find.descendant(
+      of: group,
+      matching: find.byType(SettingsHairline),
     );
-    expect(divider.color, const ShellThemeData().colors.hairlineSoft);
+    expect(hairline, findsWidgets);
+    final dividerFill = tester.widget<ColoredBox>(
+      find.descendant(of: hairline.first, matching: find.byType(ColoredBox)),
+    );
+    expect(
+      dividerFill.color,
+      const ShellThemeData().colors.hairlineSoft,
+    );
   });
 
   testWidgets('section titles use the restrained section header role', (

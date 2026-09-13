@@ -7240,6 +7240,18 @@ abstract class AppLocalizations {
   /// **'System'**
   String get settingsNavGroupSystem;
 
+  /// Segmented-selector entry inside the weather hero card that shows the current conditions pane.
+  ///
+  /// In en, this message translates to:
+  /// **'Conditions'**
+  String get weatherSegmentConditions;
+
+  /// Daily high/low temperatures inside the weather hero card.
+  ///
+  /// In en, this message translates to:
+  /// **'H {high} · L {low}'**
+  String weatherHeroHighLow(String high, String low);
+
   /// Label for the shelf launcher button that opens the application grid.
   ///
   /// In en, this message translates to:
@@ -7276,23 +7288,119 @@ abstract class AppLocalizations {
   /// **'Audio settings'**
   String get trayAudioSettings;
 
-  /// Segmented-selector entry inside the weather hero card that shows the current conditions pane.
-  ///
-  /// In en, this message translates to:
-  /// **'Conditions'**
-  String get weatherSegmentConditions;
-
-  /// Daily high/low temperatures inside the weather hero card.
-  ///
-  /// In en, this message translates to:
-  /// **'H {high} · L {low}'**
-  String weatherHeroHighLow(String high, String low);
-
   /// Accessible label for the desktop widget pill row that hosts quick actions (screenshot, do not disturb, lock, settings, power).
   ///
   /// In en, this message translates to:
   /// **'Quick actions'**
   String get widgetQuickActionsLabel;
+
+  /// Supporting line for the About destination in Settings navigation.
+  ///
+  /// In en, this message translates to:
+  /// **'Version and credits'**
+  String get settingsNavigationAboutSupport;
+
+  /// Supporting line for the Animations destination in Settings navigation.
+  ///
+  /// In en, this message translates to:
+  /// **'Window and panel motion'**
+  String get settingsNavigationAnimationsSupport;
+
+  /// Supporting line for the Appearance destination in Settings navigation.
+  ///
+  /// In en, this message translates to:
+  /// **'Wallpaper, accent, fonts & icons'**
+  String get settingsNavigationAppearanceSupport;
+
+  /// Supporting line for the Audio destination in Settings navigation.
+  ///
+  /// In en, this message translates to:
+  /// **'Output, input and app volume'**
+  String get settingsNavigationAudioSupport;
+
+  /// Supporting line for the Bluetooth destination in Settings navigation.
+  ///
+  /// In en, this message translates to:
+  /// **'Radio and paired devices'**
+  String get settingsNavigationBluetoothSupport;
+
+  /// Supporting line for the Desktop layout destination in Settings navigation.
+  ///
+  /// In en, this message translates to:
+  /// **'Workspaces, bar and window rules'**
+  String get settingsNavigationDesktopLayoutSupport;
+
+  /// Supporting line for the Developer destination in Settings navigation.
+  ///
+  /// In en, this message translates to:
+  /// **'Live UI editing workspace'**
+  String get settingsNavigationDeveloperSupport;
+
+  /// Supporting line for the Displays destination in Settings navigation.
+  ///
+  /// In en, this message translates to:
+  /// **'Monitors, scale and arrangement'**
+  String get settingsNavigationDisplaysSupport;
+
+  /// Supporting line for the App environment destination in Settings navigation.
+  ///
+  /// In en, this message translates to:
+  /// **'Variables for launched apps'**
+  String get settingsNavigationEnvironmentSupport;
+
+  /// Supporting line for the Keyboard destination in Settings navigation.
+  ///
+  /// In en, this message translates to:
+  /// **'Layouts, repeat and switching'**
+  String get settingsNavigationKeyboardSupport;
+
+  /// Supporting line for the Language destination in Settings navigation.
+  ///
+  /// In en, this message translates to:
+  /// **'Interface language and region'**
+  String get settingsNavigationLanguageSupport;
+
+  /// Supporting line for the Lock screen destination in Settings navigation.
+  ///
+  /// In en, this message translates to:
+  /// **'Wallpaper, dim, clock and status'**
+  String get settingsNavigationLockScreenSupport;
+
+  /// Supporting line for the Network destination in Settings navigation.
+  ///
+  /// In en, this message translates to:
+  /// **'Wi-Fi and wired connections'**
+  String get settingsNavigationNetworkSupport;
+
+  /// Supporting line for the Overlays destination in Settings navigation.
+  ///
+  /// In en, this message translates to:
+  /// **'Launcher, dashboard and HUD'**
+  String get settingsNavigationOverlaysSupport;
+
+  /// Supporting line for the Power destination in Settings navigation.
+  ///
+  /// In en, this message translates to:
+  /// **'Idle lock, suspend, display power'**
+  String get settingsNavigationPowerSupport;
+
+  /// Supporting line for the Shortcuts destination in Settings navigation.
+  ///
+  /// In en, this message translates to:
+  /// **'Bindings for shell actions'**
+  String get settingsNavigationShortcutsSupport;
+
+  /// Supporting line for the Mouse & touchpad destination in Settings navigation.
+  ///
+  /// In en, this message translates to:
+  /// **'Pointer, scroll and gestures'**
+  String get settingsNavigationTouchpadSupport;
+
+  /// Supporting line for the Weather destination in Settings navigation.
+  ///
+  /// In en, this message translates to:
+  /// **'Location and temperature unit'**
+  String get settingsNavigationWeatherSupport;
 }
 
 class _AppLocalizationsDelegate

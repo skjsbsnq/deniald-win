@@ -187,7 +187,9 @@ void main() {
         ),
       );
 
-      final divider = tester.widget<Divider>(find.byType(Divider));
+      final divider = tester.widget<SettingsHairline>(
+        find.byType(SettingsHairline),
+      );
       expect(divider.indent, 56.0);
     });
   });

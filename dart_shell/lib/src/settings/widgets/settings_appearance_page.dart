@@ -12,6 +12,7 @@ import '../../theme/shell_theme.dart';
 import '../../theme/tokens.dart';
 import '../../wallpaper/wallpaper.dart';
 import '../../widgets/shell_cursor.dart';
+import 'settings_buttons.dart';
 import 'settings_controls.dart';
 import 'settings_hero_preview_card.dart';
 import 'settings_loading_indicator.dart';
@@ -898,14 +899,12 @@ class _CursorThemeCardState extends State<_CursorThemeCard> {
                         ),
                       ),
                       if (widget.onRemove case final remove?)
-                        Tooltip(
-                          message: context.l10n.settingsCursorRemove,
-                          child: IconButton(
-                            onPressed: enabled ? remove : null,
-                            icon: const Icon(Icons.delete_outline_rounded),
-                            iconSize: 18,
-                            visualDensity: VisualDensity.compact,
-                          ),
+                        SettingsIconButton(
+                          icon: Icons.delete_outline_rounded,
+                          iconSize: 18,
+                          semanticsLabel: context.l10n.settingsCursorRemove,
+                          tooltip: context.l10n.settingsCursorRemove,
+                          onPressed: enabled ? remove : null,
                         )
                       else if (widget.selected)
                         Icon(

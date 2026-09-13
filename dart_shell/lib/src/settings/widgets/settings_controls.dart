@@ -145,6 +145,30 @@ class SettingsSavedBadge extends StatelessWidget {
 /// Indent applied to card row dividers when indented to align with content text (§3.3).
 const double settingsRowDividerIndent = 56;
 
+/// One-device-pixel separator painted with `hairlineSoft` (§1.2 dividers use
+/// `outlineVariant`-class hairlines).
+///
+/// Shared replacement for Material's `Divider` so no Material list/divider
+/// widget leaks into the settings surface.
+class SettingsHairline extends StatelessWidget {
+  const SettingsHairline({this.indent = 0, super.key});
+
+  /// Leading inset aligning the line with row content (see
+  /// [settingsRowDividerIndent]).
+  final double indent;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsetsDirectional.only(start: indent),
+      child: SizedBox(
+        height: 1,
+        child: ColoredBox(color: context.shellColors.hairlineSoft),
+      ),
+    );
+  }
+}
+
 class SettingsCardGroup extends StatelessWidget {
   const SettingsCardGroup({
     required this.children,
@@ -174,12 +198,7 @@ class SettingsCardGroup extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             for (var index = 0; index < children.length; index++) ...[
-              if (index > 0)
-                Divider(
-                  height: 1,
-                  indent: effectiveIndent,
-                  color: context.shellColors.hairlineSoft,
-                ),
+              if (index > 0) SettingsHairline(indent: effectiveIndent),
               children[index],
             ],
           ],
@@ -1045,6 +1064,7 @@ class SettingsRow extends StatefulWidget {
     this.trailing,
     this.onTap,
     this.enabled = true,
+    this.selected = false,
     this.height,
     this.padding,
   });
@@ -1055,6 +1075,11 @@ class SettingsRow extends StatefulWidget {
   final Widget? trailing;
   final VoidCallback? onTap;
   final bool enabled;
+
+  /// Paints the row as the active selection: an `accentPalette.container`
+  /// fill inside the `medium` list-item radius (§2), and `selected` in the
+  /// accessibility semantics. Catalog pickers use this for the current value.
+  final bool selected;
   final double? height;
   final EdgeInsetsGeometry? padding;
 
@@ -1200,7 +1225,23 @@ class _SettingsRowState extends State<SettingsRow> {
             : settingsRowSingleLineHeight);
 
     final Color backgroundColor;
-    if (_pressed && isInteractive) {
+    if (widget.selected) {
+      // M3 state-layer values (hover 8%, pressed 12%) over the accent
+      // container, matching the rest of the control family.
+      var selectedColor = theme.cardColor(theme.accentPalette.container);
+      if (_pressed && isInteractive) {
+        selectedColor = Color.alphaBlend(
+          theme.accentPalette.onContainer.withValues(alpha: 0.12),
+          selectedColor,
+        );
+      } else if ((_hovered || _focused) && isInteractive) {
+        selectedColor = Color.alphaBlend(
+          theme.accentPalette.onContainer.withValues(alpha: 0.08),
+          selectedColor,
+        );
+      }
+      backgroundColor = selectedColor;
+    } else if (_pressed && isInteractive) {
       backgroundColor = theme.cardColor(colors.surfaceContainerHighest);
     } else if ((_hovered || _focused) && isInteractive) {
       backgroundColor = theme.cardColor(colors.surfaceContainerHigh);
@@ -1264,6 +1305,7 @@ class _SettingsRowState extends State<SettingsRow> {
     return Semantics(
       button: isInteractive,
       enabled: enabled,
+      selected: widget.selected ? true : null,
       child: FocusableActionDetector(
         enabled: isInteractive,
         mouseCursor: isInteractive
@@ -1295,7 +1337,15 @@ class _SettingsRowState extends State<SettingsRow> {
           onTap: isInteractive ? widget.onTap : null,
           child: AnimatedContainer(
             duration: motionDuration,
-            color: backgroundColor,
+            decoration: BoxDecoration(
+              color: backgroundColor,
+              // The selected card keeps the spec's medium list-item radius;
+              // unselected rows stay rectangular so grouped hairlines and
+              // card clipping are unchanged (§2 list-item radius).
+              borderRadius: widget.selected
+                  ? theme.borderRadius(ShellShapeScale.medium)
+                  : null,
+            ),
             child: content,
           ),
         ),
@@ -1465,10 +1515,13 @@ class _SettingsToggleRowState extends State<_SettingsToggleRow> {
 }
 
 class SettingsChoice<T> {
-  const SettingsChoice(this.value, this.label);
+  const SettingsChoice(this.value, this.label, {this.icon});
 
   final T value;
   final String label;
+
+  /// Optional leading glyph painted by segmented-style presentations.
+  final IconData? icon;
 }
 
 class SettingsSelect<T> extends StatelessWidget {
@@ -1551,12 +1604,14 @@ class SettingsSegmentedControl<T> extends StatefulWidget {
     required this.value,
     required this.choices,
     required this.onChanged,
+    this.enabled = true,
     super.key,
   });
 
   final T value;
   final List<SettingsChoice<T>> choices;
   final ValueChanged<T> onChanged;
+  final bool enabled;
 
   @override
   State<SettingsSegmentedControl<T>> createState() =>
@@ -1613,7 +1668,9 @@ class _SettingsSegmentedControlState<T>
             for (var index = 0; index < widget.choices.length; index++)
               _SettingsSegment(
                 label: widget.choices[index].label,
+                icon: widget.choices[index].icon,
                 selected: widget.choices[index].value == widget.value,
+                enabled: widget.enabled,
                 focusNode: _focusNodes[index],
                 onSelect: () => widget.onChanged(widget.choices[index].value),
                 onMove: (delta) => _moveFocus(index, delta),
@@ -1647,14 +1704,18 @@ class _SettingsSegmentedControlState<T>
 class _SettingsSegment extends StatelessWidget {
   const _SettingsSegment({
     required this.label,
+    required this.icon,
     required this.selected,
+    required this.enabled,
     required this.focusNode,
     required this.onSelect,
     required this.onMove,
   });
 
   final String label;
+  final IconData? icon;
   final bool selected;
+  final bool enabled;
   final FocusNode focusNode;
   final VoidCallback onSelect;
   final ValueChanged<int> onMove;
@@ -1671,8 +1732,10 @@ class _SettingsSegment extends StatelessWidget {
       height: settingsSegmentHeight,
       pressedRadius: ShellShapeScale.small,
       focusNode: focusNode,
-      onPressed: onSelect,
+      enabled: enabled,
+      onPressed: enabled ? onSelect : null,
       semanticsButton: false,
+      semanticsEnabled: enabled,
       semanticsChecked: selected,
       semanticsInMutuallyExclusiveGroup: true,
       semanticsLabel: label,
@@ -1691,7 +1754,10 @@ class _SettingsSegment extends StatelessWidget {
         ),
       },
       builder: (context, radius, state) {
-        final foreground = selected ? palette.onContainer : colors.textPrimary;
+        var foreground = selected ? palette.onContainer : colors.textPrimary;
+        if (!enabled) {
+          foreground = colors.textTertiary;
+        }
         return Stack(
           alignment: Alignment.center,
           children: <Widget>[
@@ -1711,7 +1777,10 @@ class _SettingsSegment extends StatelessWidget {
               child: IgnorePointer(
                 child: AnimatedOpacity(
                   duration: motionDuration,
-                  opacity: !selected && (state.hovered || state.pressed)
+                  opacity:
+                      enabled &&
+                          !selected &&
+                          (state.hovered || state.pressed)
                       ? 1
                       : 0,
                   child: DecoratedBox(
@@ -1747,6 +1816,9 @@ class _SettingsSegment extends StatelessWidget {
                       size: 16,
                       color: palette.onContainer,
                     ),
+                    const SizedBox(width: 8),
+                  ] else if (icon != null) ...[
+                    Icon(icon, size: 16, color: foreground),
                     const SizedBox(width: 8),
                   ],
                   Flexible(
@@ -2048,4 +2120,459 @@ String _anchorLabel(ShellPopupAnchor anchor, BuildContext context) {
     ShellPopupAnchor.bottomCenter => l10n.anchorBottomCenter,
     ShellPopupAnchor.bottomRight => l10n.anchorBottomRight,
   };
+}
+
+/// M3E text field used across the settings pages in place of
+/// `TextField`/`TextFormField` configured with `OutlineInputBorder`.
+///
+/// The filled container, `medium` corner radius, hairline border and accent
+/// focus ring are painted by this widget; the inner field keeps
+/// `InputBorder.none`, so the Material outline never appears. Floating
+/// labels, hints, helper text, prefixes and `TextFormField` validation all
+/// keep working through the standard [InputDecoration] parameters.
+class SettingsTextField extends StatefulWidget {
+  const SettingsTextField({
+    this.controller,
+    this.focusNode,
+    this.label,
+    this.hint,
+    this.helperText,
+    this.helperMaxLines,
+    this.prefixIcon,
+    this.enabled = true,
+    this.readOnly = false,
+    this.autofocus = false,
+    this.monospace = false,
+    this.floatingLabelAlways = false,
+    this.minLines,
+    this.maxLines = 1,
+    this.keyboardType,
+    this.textInputAction,
+    this.inputFormatters,
+    this.onChanged,
+    this.onSubmitted,
+    this.validator,
+    this.semanticsLabel,
+    this.fieldKey,
+    this.borderRadius = ShellShapeScale.medium,
+    super.key,
+  });
+
+  final TextEditingController? controller;
+  final FocusNode? focusNode;
+
+  /// Floating label inside the field; also the accessibility label.
+  final String? label;
+  final String? hint;
+  final String? helperText;
+  final int? helperMaxLines;
+  final Widget? prefixIcon;
+  final bool enabled;
+  final bool readOnly;
+  final bool autofocus;
+
+  /// Uses the fixed-advance shell font for commands and variable names.
+  final bool monospace;
+
+  /// Keeps the label floating even before input (dense form rows).
+  final bool floatingLabelAlways;
+  final int? minLines;
+  final int? maxLines;
+  final TextInputType? keyboardType;
+  final TextInputAction? textInputAction;
+  final List<TextInputFormatter>? inputFormatters;
+  final ValueChanged<String>? onChanged;
+  final ValueChanged<String>? onSubmitted;
+  final FormFieldValidator<String>? validator;
+
+  /// Accessibility label override; defaults to [label].
+  final String? semanticsLabel;
+
+  /// Key applied to the inner [TextFormField] for tests.
+  final Key? fieldKey;
+
+  /// Container corner radius on the [ShellShapeScale]; defaults to `medium`.
+  final double borderRadius;
+
+  @override
+  State<SettingsTextField> createState() => _SettingsTextFieldState();
+}
+
+class _SettingsTextFieldState extends State<SettingsTextField> {
+  late FocusNode _focusNode;
+  var _focused = false;
+
+  FocusNode get _effectiveFocusNode => widget.focusNode ?? _focusNode;
+
+  @override
+  void initState() {
+    super.initState();
+    _focusNode = FocusNode();
+    _effectiveFocusNode.addListener(_handleFocusChange);
+  }
+
+  @override
+  void didUpdateWidget(covariant SettingsTextField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.focusNode != widget.focusNode) {
+      (oldWidget.focusNode ?? _focusNode).removeListener(_handleFocusChange);
+      _effectiveFocusNode.addListener(_handleFocusChange);
+    }
+  }
+
+  @override
+  void dispose() {
+    _effectiveFocusNode.removeListener(_handleFocusChange);
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  void _handleFocusChange() {
+    setState(() => _focused = _effectiveFocusNode.hasFocus);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = ShellTheme.of(context);
+    final colors = context.shellColors;
+    final palette = theme.accentPalette;
+    final enabled = widget.enabled;
+    final radius = theme.borderRadius(widget.borderRadius);
+    final supportStyle = ShellText.settingsRowSupport.copyWith(
+      color: colors.textSecondary,
+      fontFamily: widget.monospace ? ShellText.systemBarFontFamily : null,
+    );
+    final motionDuration = MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : Motion.pill;
+    return AnimatedContainer(
+      duration: motionDuration,
+      decoration: BoxDecoration(
+        color: colors.surfaceContainerHighest,
+        borderRadius: radius,
+        border: Border.all(
+          color: _focused && enabled ? palette.primary : colors.hairline,
+          width: _focused && enabled ? 2 : 1,
+        ),
+      ),
+      child: Semantics(
+        textField: true,
+        label: widget.semanticsLabel,
+        child: TextFormField(
+          key: widget.fieldKey,
+          controller: widget.controller,
+          focusNode: _effectiveFocusNode,
+          enabled: enabled,
+          readOnly: widget.readOnly,
+          autofocus: widget.autofocus,
+          autocorrect: false,
+          enableSuggestions: false,
+          minLines: widget.minLines,
+          maxLines: widget.maxLines,
+          keyboardType: widget.keyboardType,
+          textInputAction: widget.textInputAction,
+          inputFormatters: widget.inputFormatters,
+          onChanged: widget.onChanged,
+          onFieldSubmitted: widget.onSubmitted,
+          validator: widget.validator,
+          cursorColor: palette.primary,
+          style: ShellText.base.copyWith(
+            color: enabled ? colors.textPrimary : colors.textTertiary,
+            fontFamily: widget.monospace
+                ? ShellText.systemBarFontFamily
+                : null,
+          ),
+          decoration: InputDecoration(
+            isDense: true,
+            labelText: widget.label,
+            hintText: widget.hint,
+            helperText: widget.helperText,
+            helperMaxLines: widget.helperMaxLines,
+            helperStyle: supportStyle,
+            labelStyle: supportStyle,
+            floatingLabelStyle: supportStyle.copyWith(
+              color: _focused ? palette.primary : colors.textSecondary,
+            ),
+            floatingLabelBehavior: widget.floatingLabelAlways
+                ? FloatingLabelBehavior.always
+                : null,
+            hintStyle: supportStyle.copyWith(color: colors.textTertiary),
+            prefixIcon: widget.prefixIcon,
+            filled: false,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: ShellSpacing.lg,
+              vertical: ShellSpacing.md,
+            ),
+            border: InputBorder.none,
+            enabledBorder: InputBorder.none,
+            focusedBorder: InputBorder.none,
+            disabledBorder: InputBorder.none,
+            errorBorder: InputBorder.none,
+            focusedErrorBorder: InputBorder.none,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Linear progress/value bar replacing Material's `LinearProgressIndicator`
+/// (determinate when [value] is set, indeterminate slide otherwise).
+///
+/// Geometry follows the slider track family: `full` radius ends, accent fill
+/// over `surfaceContainerHighest`. The indeterminate cycle reuses
+/// [Motion.wallpaperReveal], the same token the morphing loading indicator
+/// uses, and respects `MediaQuery.disableAnimationsOf`.
+class SettingsProgressBar extends StatefulWidget {
+  const SettingsProgressBar({
+    this.value,
+    this.minHeight = 4,
+    this.semanticsLabel,
+    this.semanticsValue,
+    super.key,
+  });
+
+  /// Progress in `[0, 1]`; `null` paints the indeterminate sliding segment.
+  final double? value;
+
+  /// Track height.
+  final double minHeight;
+  final String? semanticsLabel;
+  final String? semanticsValue;
+
+  @override
+  State<SettingsProgressBar> createState() => _SettingsProgressBarState();
+}
+
+class _SettingsProgressBarState extends State<SettingsProgressBar>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _controller;
+  var _animationsDisabled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: Motion.wallpaperReveal,
+    );
+    if (widget.value == null) {
+      _controller.repeat();
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant SettingsProgressBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.value == null && oldWidget.value != null) {
+      _controller.repeat();
+    } else if (widget.value != null && oldWidget.value == null) {
+      _controller.stop();
+    }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final disabled = MediaQuery.disableAnimationsOf(context);
+    if (disabled == _animationsDisabled) {
+      return;
+    }
+    _animationsDisabled = disabled;
+    if (widget.value == null) {
+      if (disabled) {
+        _controller.stop();
+      } else {
+        _controller.repeat();
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.shellColors;
+    final accent = ShellTheme.of(context).accent;
+    final radius = ShellTheme.of(
+      context,
+    ).borderRadius(ShellShapeScale.full);
+    final value = widget.value;
+    Widget bar;
+    if (value != null) {
+      bar = ClipRRect(
+        borderRadius: radius,
+        child: SizedBox(
+          height: widget.minHeight,
+          child: Stack(
+            fit: StackFit.expand,
+            children: <Widget>[
+              ColoredBox(color: colors.surfaceContainerHighest),
+              FractionallySizedBox(
+                widthFactor: value.clamp(0.0, 1.0),
+                alignment: AlignmentDirectional.centerStart,
+                child: ColoredBox(color: accent),
+              ),
+            ],
+          ),
+        ),
+      );
+    } else {
+      bar = ClipRRect(
+        borderRadius: radius,
+        child: SizedBox(
+          height: widget.minHeight,
+          child: AnimatedBuilder(
+            animation: _controller,
+            builder: (context, _) {
+              return CustomPaint(
+                painter: _IndeterminateBarPainter(
+                  progress: _controller.value,
+                  trackColor: colors.surfaceContainerHighest,
+                  barColor: accent,
+                  static: _animationsDisabled,
+                ),
+              );
+            },
+          ),
+        ),
+      );
+    }
+    return Semantics(
+      label: widget.semanticsLabel,
+      value: widget.semanticsValue,
+      child: bar,
+    );
+  }
+}
+
+class _IndeterminateBarPainter extends CustomPainter {
+  const _IndeterminateBarPainter({
+    required this.progress,
+    required this.trackColor,
+    required this.barColor,
+    required this.static,
+  });
+
+  final double progress;
+  final Color trackColor;
+  final Color barColor;
+  final bool static;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    canvas.drawRect(Offset.zero & size, Paint()..color = trackColor);
+    // A 40%-wide segment sweeping edge to edge; the ramp eases the middle of
+    // the traversal so the pill feels like it accelerates through the track.
+    const fraction = 0.4;
+    final phase = static ? 0.5 : progress;
+    final eased = Motion.md3Emphasized.transform(phase.clamp(0.0, 1.0));
+    final barWidth = size.width * fraction;
+    final left = eased * (size.width + barWidth) - barWidth;
+    canvas.drawRect(
+      Rect.fromLTWH(left, 0, barWidth, size.height),
+      Paint()..color = barColor,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _IndeterminateBarPainter oldDelegate) {
+    return oldDelegate.progress != progress ||
+        oldDelegate.trackColor != trackColor ||
+        oldDelegate.barColor != barColor ||
+        oldDelegate.static != static;
+  }
+}
+
+/// Shared modal backdrop for the settings overlays (`02-VISUAL-SPEC.md` §0
+/// reference photo: scrim + centred panel).
+///
+/// Paints the `overviewScrim` dim, dismisses on outside tap and Escape, and
+/// centres [child] inside [padding]. The scrim claims initial focus so key
+/// events reach the overlay even when none of its descendants autofocus;
+/// content focus nodes attach after the scrim's, so inner `autofocus` fields
+/// still win. On dispose the node focused before the overlay opened is
+/// restored, matching the menu's focus-return behaviour.
+class SettingsModalScrim extends StatefulWidget {
+  const SettingsModalScrim({
+    required this.child,
+    this.onDismiss,
+    this.padding = const EdgeInsets.all(ShellSpacing.lg),
+    super.key,
+  });
+
+  /// The centred modal content (surface, constraints and semantics stay the
+  /// caller's responsibility).
+  final Widget child;
+
+  /// Called on barrier tap and as a fallback for Escape; `null` disables
+  /// both. Content-level Escape handlers (catalog back navigation, busy
+  /// guards) run first because key events bubble outward.
+  final VoidCallback? onDismiss;
+  final EdgeInsetsGeometry padding;
+
+  @override
+  State<SettingsModalScrim> createState() => _SettingsModalScrimState();
+}
+
+class _SettingsModalScrimState extends State<SettingsModalScrim> {
+  final FocusNode _scrimFocus = FocusNode(
+    debugLabel: 'settings-modal-scrim',
+  );
+  FocusNode? _returnFocus;
+
+  @override
+  void initState() {
+    super.initState();
+    _returnFocus = FocusManager.instance.primaryFocus;
+  }
+
+  @override
+  void dispose() {
+    _scrimFocus.dispose();
+    final node = _returnFocus;
+    _returnFocus = null;
+    // Restoring focus during teardown asserts inside the focus manager; wait
+    // one frame so the overlay is gone before the previous node refocuses.
+    if (node != null && node.canRequestFocus) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (node.canRequestFocus) {
+          node.requestFocus();
+        }
+      });
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return CallbackShortcuts(
+      bindings: <ShortcutActivator, VoidCallback>{
+        const SingleActivator(LogicalKeyboardKey.escape): () =>
+            widget.onDismiss?.call(),
+      },
+      child: Focus(
+        focusNode: _scrimFocus,
+        autofocus: true,
+        child: Stack(
+          fit: StackFit.expand,
+          children: <Widget>[
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: widget.onDismiss,
+              child: ColoredBox(color: context.shellColors.overviewScrim),
+            ),
+            Padding(
+              padding: widget.padding,
+              child: Center(child: widget.child),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

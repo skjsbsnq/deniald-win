@@ -5,6 +5,7 @@ import '../../theme/motion.dart';
 import '../../theme/shell_theme.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/shell_cursor.dart';
+import 'settings_loading_indicator.dart';
 
 /// Visual variants of the M3E settings button family.
 ///
@@ -251,6 +252,7 @@ class SettingsButton extends StatelessWidget {
     this.semanticsValue,
     this.semanticsExpanded,
     this.surfaceKey,
+    this.destructive = false,
     super.key,
   });
 
@@ -264,6 +266,10 @@ class SettingsButton extends StatelessWidget {
   final FocusNode? focusNode;
   final Map<ShortcutActivator, Intent>? shortcuts;
   final Map<Type, Action<Intent>>? actions;
+
+  /// Danger/irreversible action styling: the label and state layer take the
+  /// `performanceBad` (error-family) colour on tonal and lower variants.
+  final bool destructive;
 
   /// Optional accessible label; defaults to [label] when omitted.
   final String? semanticsLabel;
@@ -289,9 +295,9 @@ class SettingsButton extends StatelessWidget {
         : ShellShapeScale.medium;
 
     final Color background;
-    final Color foreground;
+    Color foreground;
     final Color? borderColor;
-    final Color stateLayer;
+    Color stateLayer;
     switch (variant) {
       case SettingsButtonVariant.filled:
         background = palette.primary;
@@ -313,6 +319,10 @@ class SettingsButton extends StatelessWidget {
         foreground = palette.primary;
         borderColor = null;
         stateLayer = palette.primary;
+    }
+    if (destructive && variant != SettingsButtonVariant.filled) {
+      foreground = colors.performanceBad;
+      stateLayer = colors.performanceBad;
     }
 
     final motionDuration = MediaQuery.disableAnimationsOf(context)
@@ -411,5 +421,130 @@ class SettingsButton extends StatelessWidget {
         );
       },
     );
+  }
+}
+
+/// M3E icon-only button replacing Material's `IconButton` across the
+/// settings surface (`02-VISUAL-SPEC.md` §3.6 family, §7 touch target).
+///
+/// A 40×40 `full`-radius tonal button that shape-morphs toward `small` while
+/// pressed through [SettingsInteractiveSurface], with the family hover/press
+/// state layer and accent focus ring. [busy] swaps the glyph for a scaled
+/// [SettingsLoadingIndicator] and disables activation.
+class SettingsIconButton extends StatelessWidget {
+  const SettingsIconButton({
+    required this.icon,
+    required this.semanticsLabel,
+    required this.onPressed,
+    this.tooltip,
+    this.busy = false,
+    this.destructive = false,
+    this.iconSize = 20,
+    this.surfaceKey,
+    super.key,
+  });
+
+  final IconData icon;
+
+  /// Accessibility label; also used as the [Tooltip] fallback.
+  final String semanticsLabel;
+  final VoidCallback? onPressed;
+
+  /// Optional tooltip; defaults to [semanticsLabel].
+  final String? tooltip;
+  final bool busy;
+  final bool destructive;
+  final double iconSize;
+
+  /// Optional key applied to the background surface, for tests.
+  final Key? surfaceKey;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = ShellTheme.of(context);
+    final colors = context.shellColors;
+    final palette = theme.accentPalette;
+    final enabled = !busy && onPressed != null;
+    final foreground = !enabled
+        ? colors.textTertiary
+        : destructive
+        ? colors.performanceBad
+        : colors.textSecondary;
+    final motionDuration = MediaQuery.disableAnimationsOf(context)
+        ? Duration.zero
+        : Motion.tile;
+    Widget button = SettingsInteractiveSurface(
+      height: 40,
+      pressedRadius: ShellShapeScale.small,
+      enabled: enabled,
+      onPressed: enabled ? onPressed : null,
+      semanticsLabel: semanticsLabel,
+      builder: (context, radius, state) {
+        return SizedBox.square(
+          dimension: 40,
+          child: Stack(
+            alignment: Alignment.center,
+            children: <Widget>[
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: DecoratedBox(
+                    key: surfaceKey,
+                    decoration: BoxDecoration(
+                      color: colors.surfaceContainerHigh,
+                      borderRadius: radius,
+                      border: Border.all(color: colors.hairline),
+                    ),
+                  ),
+                ),
+              ),
+              Positioned.fill(
+                child: IgnorePointer(
+                  child: AnimatedOpacity(
+                    duration: motionDuration,
+                    opacity: state.hovered || state.pressed ? 1 : 0,
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: palette.primary.withValues(
+                          alpha: state.pressed ? 0.12 : 0.08,
+                        ),
+                        borderRadius: radius,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              if (state.focused)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        borderRadius: radius,
+                        border: Border.all(color: palette.primary, width: 2),
+                      ),
+                    ),
+                  ),
+                ),
+              if (busy)
+                const SizedBox.square(
+                  dimension: 16,
+                  child: FittedBox(
+                    child: SizedBox.square(
+                      dimension: settingsLoadingIndicatorSize,
+                      child: SettingsLoadingIndicator(),
+                    ),
+                  ),
+                )
+              else
+                Icon(icon, size: iconSize, color: foreground),
+            ],
+          ),
+        );
+      },
+    );
+    final message = tooltip ?? semanticsLabel;
+    if (message.isNotEmpty) {
+      button = Tooltip(message: message, child: button);
+    }
+    return button;
   }
 }

@@ -374,37 +374,14 @@ class _ShortcutIconButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final foreground = destructive
-        ? context.shellColors.performanceBad
-        : context.shellColors.textSecondary;
-    return IconButton(
-      tooltip: tooltip,
-      onPressed: busy ? null : onPressed,
+    return SettingsIconButton(
+      icon: icon,
       iconSize: 18,
-      constraints: const BoxConstraints.tightFor(width: 40, height: 40),
-      padding: EdgeInsets.zero,
-      style: IconButton.styleFrom(
-        foregroundColor: foreground,
-        disabledForegroundColor: context.shellColors.textSecondary.withAlpha(86),
-        backgroundColor: context.shellColors.surfaceContainerHigh,
-        disabledBackgroundColor: context.shellColors.surfaceContainerHigh
-            .withAlpha(120),
-        hoverColor: foreground.withAlpha(28),
-        focusColor: foreground.withAlpha(28),
-        shape: RoundedRectangleBorder(
-          borderRadius: context.shellTheme.borderRadius(ShellShapeScale.medium),
-          side: BorderSide(color: context.shellColors.hairline),
-        ),
-      ),
-      icon: busy
-          ? SizedBox.square(
-              dimension: 16,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: foreground,
-              ),
-            )
-          : Icon(icon),
+      semanticsLabel: tooltip,
+      tooltip: tooltip,
+      destructive: destructive,
+      busy: busy,
+      onPressed: onPressed,
     );
   }
 }

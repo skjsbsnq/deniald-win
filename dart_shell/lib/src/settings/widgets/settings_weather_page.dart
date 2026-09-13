@@ -149,42 +149,16 @@ class _CitySearchFieldState extends ConsumerState<_CitySearchField> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        TextField(
-          key: settingsWeatherSearchFieldKey,
+        SettingsTextField(
+          fieldKey: settingsWeatherSearchFieldKey,
           controller: _controller,
+          borderRadius: ShellShapeScale.full,
+          hint: l10n.settingsWeatherSearchPlaceholder,
           onSubmitted: (value) {
             _debounce?.cancel();
             unawaited(_search(value));
           },
           onChanged: _scheduleSearch,
-          style: ShellText.settingsRowSupport.copyWith(
-            color: context.shellColors.textPrimary,
-          ),
-          decoration: InputDecoration(
-            isDense: true,
-            hintText: l10n.settingsWeatherSearchPlaceholder,
-            hintStyle: ShellText.settingsRowSupport.copyWith(
-              color: context.shellColors.textTertiary,
-            ),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 12,
-              vertical: 10,
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: context.shellTheme.borderRadius(
-                ShellShapeScale.full,
-              ),
-              borderSide: BorderSide(color: context.shellColors.hairlineSoft),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: context.shellTheme.borderRadius(
-                ShellShapeScale.full,
-              ),
-              borderSide: BorderSide(
-                color: ShellTheme.of(context).accent.withAlpha(160),
-              ),
-            ),
-          ),
         ),
         if (_searching) ...[
           const SizedBox(height: 10),

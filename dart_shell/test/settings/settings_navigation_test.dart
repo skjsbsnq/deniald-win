@@ -39,39 +39,92 @@ void main() {
     });
   });
 
-  testWidgets('every destination card is a single-line row', (tester) async {
+  testWidgets('every destination card is a two-line row', (tester) async {
     await pumpSettingsApp(tester);
+    final context = tester.element(
+      find.byKey(settingsNavigationListKey),
+    );
 
     for (final page in SettingsPageId.values) {
       final item = _destination(page);
       expect(
         tester.getSize(item).height,
         settingsNavItemHeight,
-        reason: '${page.name} card height is not the 64dp row',
+        reason: '${page.name} card height is not the 72dp row',
       );
+      // Two painted lines: the destination label plus its supporting
+      // summary (§4 reference layout).
       final label = find.descendant(of: item, matching: find.byType(Text));
       expect(
         label,
-        findsOneWidget,
-        reason: '${page.name} must not carry a supporting line',
+        findsNWidgets(2),
+        reason: '${page.name} must paint the title and supporting line',
       );
-      // Dropping the supporting line must not leave the icon or the label
-      // pinned to the top edge: the row centres both in the 64dp card.
-      final center = tester.getRect(item).center.dy;
-      for (final part in <String, Finder>{
-        'icon': find.descendant(
+      expect(
+        find.descendant(
           of: item,
-          matching: find.byType(SettingsNavIconDot),
+          matching: find.text(page.supportLabel(context)),
         ),
-        'label': label,
-      }.entries) {
+        findsOneWidget,
+        reason: '${page.name} supporting line is missing or not localized',
+      );
+      // The icon and the two-line text block stay vertically centred in the
+      // 72dp card: the icon dot centres on the card, and the two lines
+      // straddle the centre (title above, support below).
+      final center = tester.getRect(item).center.dy;
+      final icon = find.descendant(
+        of: item,
+        matching: find.byType(SettingsNavIconDot),
+      );
+      expect(
+        tester.getRect(icon).center.dy,
+        closeTo(center, 0.01),
+        reason: '${page.name} icon is not vertically centred',
+      );
+      final title = find.descendant(
+        of: item,
+        matching: find.text(page.label(context)),
+      );
+      final support = find.descendant(
+        of: item,
+        matching: find.text(page.supportLabel(context)),
+      );
+      expect(
+        tester.getRect(title).center.dy,
+        lessThan(center),
+        reason: '${page.name} title is not above the card centre',
+      );
+      expect(
+        tester.getRect(support).center.dy,
+        greaterThan(center),
+        reason: '${page.name} support line is not below the card centre',
+      );
+    }
+  });
+
+  testWidgets('the accessibility label announces title and support', (
+    tester,
+  ) async {
+    await _withSemantics(tester, () async {
+      await pumpSettingsApp(tester);
+      final context = tester.element(
+        find.byKey(settingsNavigationListKey),
+      );
+
+      for (final page in SettingsPageId.values) {
+        final semantics = tester.getSemantics(_destination(page));
         expect(
-          tester.getRect(part.value).center.dy,
-          closeTo(center, 0.01),
-          reason: '${page.name} ${part.key} is not vertically centred',
+          semantics.label,
+          contains(page.label(context)),
+          reason: '${page.name} label is missing the title',
+        );
+        expect(
+          semantics.label,
+          contains(page.supportLabel(context)),
+          reason: '${page.name} label is missing the supporting line',
         );
       }
-    }
+    });
   });
 
   testWidgets('Tab focuses a destination and Enter activates it', (

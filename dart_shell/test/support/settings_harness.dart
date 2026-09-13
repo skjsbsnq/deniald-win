@@ -22,7 +22,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// Tall enough that the navigation list mounts all eighteen destinations
 /// without scrolling, so navigation tests can assert that every destination is
 /// present rather than only the visible subset. The list is lazy, so this must
-/// clear the 64dp cards plus group headers and gaps.
+/// clear the 72dp two-line cards plus group headers and gaps.
 const Size settingsHarnessWindowSize = Size(1280, 1800);
 
 /// Pumps the real [DenialSettingsApplication] inside a deterministic test

@@ -1,7 +1,6 @@
 import 'dart:convert' show utf8;
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../../launcher/models/desktop_app.dart';
 import '../../localization/denial_localizations.dart';
@@ -9,8 +8,8 @@ import '../../theme/motion.dart';
 import '../../theme/shell_theme.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/app_icon.dart';
-import '../../widgets/shell_cursor.dart';
 import '../shell_settings.dart';
+import 'settings_buttons.dart';
 import 'settings_controls.dart';
 import 'settings_loading_indicator.dart';
 
@@ -519,36 +518,13 @@ class _EnvironmentApplicationScopeList extends StatelessWidget {
           title: context.l10n.settingsEnvironmentApplicationsTitle,
           child: Column(
             children: [
-              TextField(
+              SettingsTextField(
                 controller: searchController,
                 onChanged: onSearchChanged,
-                autocorrect: false,
-                enableSuggestions: false,
-                style: ShellText.base.copyWith(
-                  color: context.shellColors.textPrimary,
-                  fontFamily: ShellText.systemBarFontFamily,
-                ),
-                decoration: InputDecoration(
-                  isDense: true,
-                  prefixIcon: const Icon(Icons.search_rounded, size: 17),
-                  hintText:
-                      context.l10n.settingsEnvironmentApplicationSearchHint,
-                  hintStyle: ShellText.settingsRowSupport.copyWith(
-                    color: context.shellColors.textTertiary,
-                  ),
-                  filled: true,
-                  fillColor: context.shellColors.surfaceContainerHigh,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 10,
-                  ),
-                  border: OutlineInputBorder(
-                    borderRadius: context.shellTheme.borderRadius(
-                      ShellShapeScale.full,
-                    ),
-                    borderSide: BorderSide(color: context.shellColors.hairline),
-                  ),
-                ),
+                monospace: true,
+                borderRadius: ShellShapeScale.full,
+                prefixIcon: const Icon(Icons.search_rounded, size: 17),
+                hint: context.l10n.settingsEnvironmentApplicationSearchHint,
               ),
               const SizedBox(height: 8),
               SizedBox(
@@ -660,66 +636,47 @@ class _EnvironmentScopeTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final accent = ShellTheme.of(context).accent;
-    return Semantics(
-      selected: selected,
-      button: true,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 2),
-        child: Material(
-          color: ShellMediaColors.transparentDark,
-          child: ListTile(
-            selected: selected,
-            selectedTileColor: accent.withValues(alpha: 0.12),
-            shape: RoundedRectangleBorder(
-              borderRadius: context.shellTheme.borderRadius(
-                ShellShapeScale.large,
-              ),
-              side: BorderSide(
-                color: selected
-                    ? accent.withValues(alpha: 0.72)
-                    : ShellMediaColors.transparentDark,
-              ),
-            ),
-            minTileHeight: 56,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 9),
-            mouseCursor: ShellMouseCursors.link,
-            onTap: onPressed,
-            leading: SizedBox.square(
-              dimension: 30,
-              child: unavailable
-                  ? Icon(
-                      Icons.app_blocking_rounded,
-                      color: context.shellColors.textTertiary,
-                      size: 22,
-                    )
-                  : iconPath == null
-                  ? Icon(Icons.layers_rounded, color: accent, size: 21)
-                  : DeferredAppIcon(iconPath: iconPath),
-            ),
-            title: Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: ShellText.settingsRowSupport.copyWith(
-                color: selected
-                    ? context.shellColors.textPrimary
-                    : context.shellColors.textSecondary,
-              ),
-            ),
-            subtitle: Text(
-              desktopFileId,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: ShellText.settingsBadgeLabel.copyWith(
-                color: context.shellColors.textSecondary,
-                fontFamily: ShellText.systemBarFontFamily,
-              ),
-            ),
-            trailing: overrideCount == 0
-                ? null
-                : _EnvironmentCountBadge(count: overrideCount),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: SettingsRow(
+        selected: selected,
+        onTap: onPressed,
+        height: settingsRowTwoLineHeight,
+        padding: const EdgeInsets.symmetric(horizontal: ShellSpacing.md),
+        leading: SizedBox.square(
+          dimension: 30,
+          child: unavailable
+              ? Icon(
+                  Icons.app_blocking_rounded,
+                  color: context.shellColors.textTertiary,
+                  size: 22,
+                )
+              : iconPath == null
+              ? Icon(Icons.layers_rounded, color: accent, size: 21)
+              : DeferredAppIcon(iconPath: iconPath),
+        ),
+        title: Text(
+          label,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: ShellText.settingsRowSupport.copyWith(
+            color: selected
+                ? context.shellColors.textPrimary
+                : context.shellColors.textSecondary,
           ),
         ),
+        subtitle: Text(
+          desktopFileId,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: ShellText.settingsBadgeLabel.copyWith(
+            color: context.shellColors.textSecondary,
+            fontFamily: ShellText.systemBarFontFamily,
+          ),
+        ),
+        trailing: overrideCount == 0
+            ? null
+            : _EnvironmentCountBadge(count: overrideCount),
       ),
     );
   }
@@ -791,12 +748,13 @@ class _EnvironmentScopeHeader extends StatelessWidget {
           child: Row(
             children: [
               if (showBack) ...[
-                IconButton(
+                SettingsIconButton(
                   key: settingsEnvironmentBackToApplicationsKey,
-                  tooltip: context.l10n.settingsEnvironmentBackToApplications,
+                  icon: Icons.arrow_back_rounded,
+                  iconSize: 18,
+                  semanticsLabel:
+                      context.l10n.settingsEnvironmentBackToApplications,
                   onPressed: onBack,
-                  visualDensity: VisualDensity.compact,
-                  icon: const Icon(Icons.arrow_back_rounded, size: 18),
                 ),
                 const SizedBox(width: 4),
               ],
@@ -1048,21 +1006,19 @@ class _VariableRow extends StatelessWidget {
             const SizedBox(width: 6),
           ],
           if (!removed)
-            IconButton(
-              tooltip: context.l10n.settingsEnvironmentEditVariable(name),
+            SettingsIconButton(
+              icon: Icons.edit_outlined,
+              iconSize: 16,
+              semanticsLabel:
+                  context.l10n.settingsEnvironmentEditVariable(name),
               onPressed: onEdit,
-              visualDensity: VisualDensity.compact,
-              constraints: const BoxConstraints.tightFor(width: 32, height: 32),
-              padding: EdgeInsets.zero,
-              icon: const Icon(Icons.edit_outlined, size: 16),
             ),
-          IconButton(
-            tooltip: context.l10n.settingsEnvironmentDeleteVariable(name),
+          SettingsIconButton(
+            icon: Icons.close_rounded,
+            iconSize: 16,
+            semanticsLabel:
+                context.l10n.settingsEnvironmentDeleteVariable(name),
             onPressed: onDelete,
-            visualDensity: VisualDensity.compact,
-            constraints: const BoxConstraints.tightFor(width: 32, height: 32),
-            padding: EdgeInsets.zero,
-            icon: const Icon(Icons.close_rounded, size: 16),
           ),
         ],
       ),
@@ -1132,57 +1088,17 @@ class _EnvironmentTextField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final accent = ShellTheme.of(context).accent;
-    return MouseRegion(
-      cursor: readOnly ? SystemMouseCursors.basic : ShellMouseCursors.text,
-      child: TextFormField(
-        controller: controller,
-        focusNode: focusNode,
-        readOnly: readOnly,
-        autocorrect: false,
-        enableSuggestions: false,
-        textInputAction: inputAction,
-        onFieldSubmitted: onSubmitted,
-        validator: validator,
-        style: ShellText.base.copyWith(
-          color: context.shellColors.textPrimary,
-          fontFamily: ShellText.systemBarFontFamily,
-        ),
-        decoration: InputDecoration(
-          isDense: true,
-          labelText: label,
-          hintText: hint,
-          floatingLabelBehavior: FloatingLabelBehavior.always,
-          hintStyle: ShellText.settingsRowSupport.copyWith(
-            color: context.shellColors.textTertiary.withValues(alpha: 0.58),
-            fontFamily: ShellText.systemBarFontFamily,
-            fontStyle: FontStyle.italic,
-          ),
-          filled: true,
-          fillColor: context.shellColors.surfaceContainerHigh,
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 13,
-            vertical: 12,
-          ),
-          border: OutlineInputBorder(
-            borderRadius: context.shellTheme.borderRadius(
-              ShellShapeScale.medium,
-            ),
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: context.shellTheme.borderRadius(
-              ShellShapeScale.medium,
-            ),
-            borderSide: BorderSide(color: context.shellColors.hairline),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: context.shellTheme.borderRadius(
-              ShellShapeScale.medium,
-            ),
-            borderSide: BorderSide(color: accent),
-          ),
-        ),
-      ),
+    return SettingsTextField(
+      controller: controller,
+      focusNode: focusNode,
+      readOnly: readOnly,
+      monospace: true,
+      floatingLabelAlways: true,
+      textInputAction: inputAction,
+      onSubmitted: onSubmitted,
+      validator: validator,
+      label: label,
+      hint: hint,
     );
   }
 }

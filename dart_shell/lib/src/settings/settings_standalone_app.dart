@@ -14,6 +14,7 @@ import '../theme/shell_theme.dart';
 import '../theme/tokens.dart';
 import '../wallpaper/state/wallpaper_accent.dart';
 import 'settings_application.dart';
+import 'widgets/settings_buttons.dart';
 import 'widgets/settings_loading_indicator.dart';
 import 'widgets/settings_navigation.dart';
 
@@ -257,10 +258,10 @@ class _SettingsSynchronizationFailure extends StatelessWidget {
               style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 16),
-            FilledButton.icon(
+            SettingsButton(
+              label: l10n.commonRetry,
+              icon: Icons.refresh_rounded,
               onPressed: onRetry,
-              icon: Icon(Icons.refresh_rounded),
-              label: Text(l10n.commonRetry),
             ),
           ],
         ),

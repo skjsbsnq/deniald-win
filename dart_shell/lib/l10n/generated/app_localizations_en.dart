@@ -4061,6 +4061,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsNavGroupSystem => 'System';
 
   @override
+  String get weatherSegmentConditions => 'Conditions';
+
+  @override
+  String weatherHeroHighLow(String high, String low) {
+    return 'H $high · L $low';
+  }
+
+  @override
   String get shelfOpenLauncher => 'Open applications';
 
   @override
@@ -4079,13 +4087,69 @@ class AppLocalizationsEn extends AppLocalizations {
   String get trayAudioSettings => 'Audio settings';
 
   @override
-  String get weatherSegmentConditions => 'Conditions';
-
-  @override
-  String weatherHeroHighLow(String high, String low) {
-    return 'H $high · L $low';
-  }
-
-  @override
   String get widgetQuickActionsLabel => 'Quick actions';
+
+  @override
+  String get settingsNavigationAboutSupport => 'Version and credits';
+
+  @override
+  String get settingsNavigationAnimationsSupport => 'Window and panel motion';
+
+  @override
+  String get settingsNavigationAppearanceSupport =>
+      'Wallpaper, accent, fonts & icons';
+
+  @override
+  String get settingsNavigationAudioSupport => 'Output, input and app volume';
+
+  @override
+  String get settingsNavigationBluetoothSupport => 'Radio and paired devices';
+
+  @override
+  String get settingsNavigationDesktopLayoutSupport =>
+      'Workspaces, bar and window rules';
+
+  @override
+  String get settingsNavigationDeveloperSupport => 'Live UI editing workspace';
+
+  @override
+  String get settingsNavigationDisplaysSupport =>
+      'Monitors, scale and arrangement';
+
+  @override
+  String get settingsNavigationEnvironmentSupport =>
+      'Variables for launched apps';
+
+  @override
+  String get settingsNavigationKeyboardSupport =>
+      'Layouts, repeat and switching';
+
+  @override
+  String get settingsNavigationLanguageSupport =>
+      'Interface language and region';
+
+  @override
+  String get settingsNavigationLockScreenSupport =>
+      'Wallpaper, dim, clock and status';
+
+  @override
+  String get settingsNavigationNetworkSupport => 'Wi-Fi and wired connections';
+
+  @override
+  String get settingsNavigationOverlaysSupport => 'Launcher, dashboard and HUD';
+
+  @override
+  String get settingsNavigationPowerSupport =>
+      'Idle lock, suspend, display power';
+
+  @override
+  String get settingsNavigationShortcutsSupport => 'Bindings for shell actions';
+
+  @override
+  String get settingsNavigationTouchpadSupport =>
+      'Pointer, scroll and gestures';
+
+  @override
+  String get settingsNavigationWeatherSupport =>
+      'Location and temperature unit';
 }

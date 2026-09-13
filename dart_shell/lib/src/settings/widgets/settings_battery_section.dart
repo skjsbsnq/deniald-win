@@ -351,18 +351,11 @@ class _BatteryLevelIndicator extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    return Semantics(
-      label: l10n.settingsBatteryChargeLevel,
-      value: l10n.settingsPercent(percentage.round()),
-      child: ClipRRect(
-        borderRadius: context.shellTheme.borderRadius(ShellShapeScale.full),
-        child: LinearProgressIndicator(
-          value: percentage / 100,
-          minHeight: 6,
-          color: ShellTheme.of(context).accent,
-          backgroundColor: context.shellColors.surfaceContainerHighest,
-        ),
-      ),
+    return SettingsProgressBar(
+      value: percentage / 100,
+      minHeight: 6,
+      semanticsLabel: l10n.settingsBatteryChargeLevel,
+      semanticsValue: l10n.settingsPercent(percentage.round()),
     );
   }
 }
