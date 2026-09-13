@@ -15,10 +15,10 @@ import '../../state/system_status.dart';
 import '../../theme/motion.dart';
 import '../../theme/shell_theme.dart';
 import '../../theme/tokens.dart';
-import '../../widgets/notification_media.dart';
 import '../../widgets/shell_backdrop_blur.dart';
 import '../../widgets/shell_expressive_surface.dart';
 import '../../widgets/shell_hover_pill.dart';
+import 'shelf_media_card.dart';
 
 /// The aggregated tray button on the right edge of the shelf.
 class UnifiedTrayButton extends ConsumerWidget {
@@ -146,11 +146,7 @@ class UnifiedTrayButton extends ConsumerWidget {
                       color: foreground,
                     ),
                   ),
-                Icon(
-                  _networkIcon(connectivity),
-                  size: 16,
-                  color: foreground,
-                ),
+                Icon(_networkIcon(connectivity), size: 16, color: foreground),
                 if (hasBattery) ...[
                   const SizedBox(width: ShellSpacing.xs),
                   Icon(
@@ -262,11 +258,7 @@ class _TrayCapsuleState extends State<_TrayCapsule>
           accent.primary,
           t,
         )!;
-        final foreground = Color.lerp(
-          colors.textPrimary,
-          accent.onPrimary,
-          t,
-        )!;
+        final foreground = Color.lerp(colors.textPrimary, accent.onPrimary, t)!;
         return ShellHoverPill.builder(
           onTap: widget.onTap,
           height: 40,
@@ -536,7 +528,9 @@ class _ShelfMediaButtonState extends ConsumerState<_ShelfMediaButton>
   }
 }
 
-/// The floating playback card anchored above the shelf media button.
+/// The floating playback card anchored above the shelf media button. The
+/// layout itself lives in the shared [ShelfMediaCard]; this wrapper only
+/// pins the popup's fixed size.
 class _ShelfMediaPopup extends StatelessWidget {
   const _ShelfMediaPopup({
     required this.playback,
@@ -556,285 +550,14 @@ class _ShelfMediaPopup extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = context.shellTheme;
-    final colors = context.shellColors;
-    final l10n = context.l10n;
-    final radius = theme.borderRadius(ShellShapeScale.extraLarge);
-    final position = playback.positionAt(now);
-    final length = playback.length;
-    final progress = length > Duration.zero
-        ? (position.inMilliseconds / length.inMilliseconds)
-              .clamp(0.0, 1.0)
-              .toDouble()
-        : 0.0;
-    final secondary = playback.artistLabel.isNotEmpty
-        ? playback.artistLabel
-        : playback.album.isNotEmpty
-        ? playback.album
-        : playback.identity;
-    return Material(
-      type: MaterialType.transparency,
-      child: Container(
-        width: size.width,
-        height: size.height,
-        padding: const EdgeInsets.all(ShellSpacing.lg),
-        decoration: BoxDecoration(
-          color: theme.panelColor(colors.surfaceContainerLow),
-          borderRadius: radius,
-        ),
-        child: Row(
-          children: [
-            _ShelfMediaArtwork(playback: playback),
-            const SizedBox(width: ShellSpacing.lg),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(
-                        Icons.graphic_eq_rounded,
-                        size: 14,
-                        color: theme.accent,
-                      ),
-                      const SizedBox(width: ShellSpacing.xs),
-                      Text(
-                        l10n.mediaNowPlaying.toUpperCase(),
-                        style: ShellText.systemBarCaption.copyWith(
-                          color: theme.accent,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: ShellSpacing.xs),
-                  Text(
-                    playback.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: ShellText.titleMedium.copyWith(
-                      color: colors.textPrimary,
-                    ),
-                  ),
-                  Text(
-                    secondary,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: ShellText.labelSmall.copyWith(
-                      color: colors.textSecondary,
-                    ),
-                  ),
-                  const Spacer(),
-                  Semantics(
-                    value:
-                        '${_formatMediaTime(position)} / '
-                        '${_formatMediaTime(length)}',
-                    child: ClipRRect(
-                      borderRadius: theme.borderRadius(ShellShapeScale.full),
-                      child: LinearProgressIndicator(
-                        minHeight: 4,
-                        value: progress,
-                        color: theme.accent,
-                        backgroundColor: colors.surfaceContainerHighest,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: ShellSpacing.xs),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          _formatMediaTime(position),
-                          style: ShellText.systemBarCaption.copyWith(
-                            color: colors.textTertiary,
-                          ),
-                        ),
-                      ),
-                      Text(
-                        _formatMediaTime(length),
-                        style: ShellText.systemBarCaption.copyWith(
-                          color: colors.textTertiary,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: ShellSpacing.xs),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      _ShelfMediaControlButton(
-                        label: l10n.mediaPrevious,
-                        icon: Icons.skip_previous_rounded,
-                        enabled: playback.canGoPrevious,
-                        onPressed: onPrevious,
-                      ),
-                      const SizedBox(width: ShellSpacing.sm),
-                      _ShelfMediaControlButton(
-                        label: playback.playing
-                            ? l10n.mediaPause
-                            : l10n.mediaPlay,
-                        icon: playback.playing
-                            ? Icons.pause_rounded
-                            : Icons.play_arrow_rounded,
-                        prominent: true,
-                        enabled: playback.playing
-                            ? playback.canPause
-                            : playback.canPlay,
-                        onPressed: onPlayPause,
-                      ),
-                      const SizedBox(width: ShellSpacing.sm),
-                      _ShelfMediaControlButton(
-                        label: l10n.mediaNext,
-                        icon: Icons.skip_next_rounded,
-                        enabled: playback.canGoNext,
-                        onPressed: onNext,
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
+    return ShelfMediaCard(
+      playback: playback,
+      now: now,
+      onPrevious: onPrevious,
+      onPlayPause: onPlayPause,
+      onNext: onNext,
+      width: size.width,
+      height: size.height,
     );
   }
-}
-
-/// One round transport button inside the media popup.
-class _ShelfMediaControlButton extends StatelessWidget {
-  const _ShelfMediaControlButton({
-    required this.label,
-    required this.icon,
-    required this.enabled,
-    required this.onPressed,
-    this.prominent = false,
-  });
-
-  final String label;
-  final IconData icon;
-  final bool enabled;
-  final VoidCallback onPressed;
-  final bool prominent;
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.shellColors;
-    final accent = context.shellTheme.accentPalette;
-    final size = prominent ? 32.0 : 28.0;
-    return ShellExpressiveSurface(
-      onPressed: onPressed,
-      enabled: enabled,
-      shape: ShellShapeScale.full,
-      pressedShape: ShellShapeScale.medium,
-      width: size,
-      height: size,
-      color: prominent ? accent.primary : colors.surfaceContainerHigh,
-      tooltip: label,
-      semanticLabel: label,
-      child: Icon(
-        icon,
-        size: prominent ? 20 : 17,
-        color: enabled
-            ? prominent
-                  ? accent.onPrimary
-                  : colors.textPrimary
-            : colors.glyphInactive,
-      ),
-    );
-  }
-}
-
-class _ShelfMediaArtwork extends ConsumerWidget {
-  const _ShelfMediaArtwork({required this.playback});
-
-  final MprisPlaybackState playback;
-
-  static const double _size = 140;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final uri = Uri.tryParse(playback.artUrl);
-    Widget artwork = const _ShelfMediaArtworkFallback();
-    if (uri?.scheme == 'file') {
-      String? path;
-      try {
-        path = uri!.toFilePath();
-      } on UnsupportedError {
-        path = null;
-      }
-      if (path != null) {
-        final bytes = ref.watch(notificationStaticImageProvider(path)).value;
-        if (bytes != null) {
-          artwork = Image.memory(
-            bytes,
-            fit: BoxFit.cover,
-            filterQuality: FilterQuality.medium,
-            cacheWidth: 320,
-            cacheHeight: 320,
-            gaplessPlayback: true,
-            errorBuilder: (_, _, _) => const _ShelfMediaArtworkFallback(),
-          );
-        }
-      }
-    } else if (uri?.scheme == 'http' || uri?.scheme == 'https') {
-      artwork = Image.network(
-        playback.artUrl,
-        fit: BoxFit.cover,
-        filterQuality: FilterQuality.medium,
-        cacheWidth: 320,
-        cacheHeight: 320,
-        gaplessPlayback: true,
-        errorBuilder: (_, _, _) => const _ShelfMediaArtworkFallback(),
-      );
-    }
-    return RepaintBoundary(
-      child: SizedBox.square(
-        dimension: _size,
-        child: ClipRRect(
-          borderRadius: context.shellTheme.borderRadius(ShellShapeScale.large),
-          child: artwork,
-        ),
-      ),
-    );
-  }
-}
-
-class _ShelfMediaArtworkFallback extends StatelessWidget {
-  const _ShelfMediaArtworkFallback();
-
-  @override
-  Widget build(BuildContext context) {
-    final colors = context.shellColors;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            context.shellTheme.accentPalette.container,
-            colors.surfaceContainerHighest,
-          ],
-        ),
-      ),
-      child: Center(
-        child: Icon(
-          Icons.music_note_rounded,
-          size: 48,
-          color: colors.textPrimary,
-        ),
-      ),
-    );
-  }
-}
-
-String _formatMediaTime(Duration value) {
-  final seconds = value.inSeconds.clamp(0, 7 * 24 * 60 * 60);
-  final hours = seconds ~/ 3600;
-  final minutes = (seconds ~/ 60) % 60;
-  final remainder = seconds % 60;
-  if (hours > 0) {
-    return '$hours:${minutes.toString().padLeft(2, '0')}:'
-        '${remainder.toString().padLeft(2, '0')}';
-  }
-  return '$minutes:${remainder.toString().padLeft(2, '0')}';
 }

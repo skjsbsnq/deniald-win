@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../desktop_workspace.dart';
 import '../../localization/denial_localizations.dart';
+import '../../services/media_player_service.dart';
 import '../../services/network_backend.dart';
 import '../../settings/settings_application.dart';
 import '../../settings/widgets/settings_navigation.dart';
@@ -26,6 +27,7 @@ import '../../widgets/shade/range_bar.dart';
 import '../../widgets/shell_backdrop_blur.dart';
 import '../../widgets/shell_hover_pill.dart';
 import '../../widgets/shell_surface_host.dart';
+import 'shelf_media_card.dart';
 
 /// The popup bubble originating from the unified tray on the shelf.
 class UnifiedTrayBubble extends ConsumerStatefulWidget {
@@ -313,6 +315,7 @@ class _TrayBubbleContent extends ConsumerWidget {
         _TrayHeader(onDismiss: onDismiss),
         const SizedBox(height: 10.0),
         _TrayStatusChips(onDismiss: onDismiss, onOpenOverview: onOpenOverview),
+        const _TrayMediaCard(),
         const SizedBox(height: 10.0),
         QuickSettingsTiles(
           wifi:
@@ -362,6 +365,107 @@ class _TrayBubbleContent extends ConsumerWidget {
         const SizedBox(height: 8.0),
         _VolumeRangeBar(onDismiss: onDismiss),
       ],
+    );
+  }
+}
+
+/// The media section of the tray bubble: the shared [ShelfMediaCard] docked
+/// between the status chips and the quick settings tiles. It takes no space
+/// while no player reports an active track — the chip-to-tile gap then stays
+/// exactly the historical 10 px — and refreshes its read-only progress on
+/// the same 1 Hz wall-clock tick the shelf popup uses.
+class _TrayMediaCard extends ConsumerStatefulWidget {
+  const _TrayMediaCard();
+
+  @override
+  ConsumerState<_TrayMediaCard> createState() => _TrayMediaCardState();
+}
+
+class _TrayMediaCardState extends ConsumerState<_TrayMediaCard> {
+  static const Duration _positionInterval = Duration(seconds: 1);
+
+  StreamSubscription<MprisPlaybackState>? _playbackSubscription;
+  MprisPlaybackState _playback = MprisPlaybackState.unavailable();
+  Timer? _positionTimer;
+  bool _tickersEnabled = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _bind(ref.read(mediaPlayerServiceProvider));
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _tickersEnabled = TickerMode.valuesOf(context).enabled;
+  }
+
+  @override
+  void dispose() {
+    _positionTimer?.cancel();
+    unawaited(_playbackSubscription?.cancel());
+    super.dispose();
+  }
+
+  /// The card only mirrors ambient playback state: the shelf media module's
+  /// `mediaPlaybackProvider` watch owns starting the MPRIS service, so an
+  /// inflating or parked bubble never spins up session-bus work by itself.
+  void _bind(MediaPlayerService service) {
+    unawaited(_playbackSubscription?.cancel());
+    _playback = service.current;
+    _playbackSubscription = service.snapshots.listen(_handlePlayback);
+    _syncTicker(_playback.playing);
+  }
+
+  void _handlePlayback(MprisPlaybackState playback) {
+    _playback = playback;
+    _syncTicker(playback.playing);
+    // While parked, stash the snapshot without rebuilding: the TickerMode
+    // dependency already rebuilds the card with fresh state on reopen.
+    if (mounted && _tickersEnabled) {
+      setState(() {});
+    }
+  }
+
+  /// Pairs the position tick with the playing state. While the bubble is
+  /// parked (TickerMode disabled) the tick skips its rebuild so a hidden
+  /// media card never repaints; reopening rebuilds through the TickerMode
+  /// dependency and lands on a fresh wall-clock position.
+  void _syncTicker(bool playing) {
+    if (playing == (_positionTimer != null)) {
+      return;
+    }
+    if (playing) {
+      _positionTimer = Timer.periodic(_positionInterval, (_) {
+        if (mounted && _tickersEnabled) {
+          setState(() {});
+        }
+      });
+    } else {
+      _positionTimer?.cancel();
+      _positionTimer = null;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final service = ref.watch(mediaPlayerServiceProvider);
+    ref.listen(mediaPlayerServiceProvider, (previous, next) => _bind(next));
+    final playback = _playback;
+    if (!playback.available) {
+      return const SizedBox.shrink();
+    }
+    return Padding(
+      padding: const EdgeInsets.only(top: 10.0),
+      child: ShelfMediaCard(
+        playback: playback,
+        now: DateTime.now(),
+        compact: true,
+        onPrevious: () => unawaited(service.previous()),
+        onPlayPause: () => unawaited(service.playPause()),
+        onNext: () => unawaited(service.next()),
+      ),
     );
   }
 }
