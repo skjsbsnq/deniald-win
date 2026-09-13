@@ -323,37 +323,44 @@ class _ManagedShellSurfaceLayerState
         child: Semantics(
           scopesRoute: true,
           explicitChildNodes: true,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              // Only the scrim fades. The surface subtree usually contains a
-              // ShellBackdropBlur, and fading it composites the blurred glass
-              // at partial alpha — the panel reads as transparent first and
-              // the blur appears to arrive late. The surface therefore opens
-              // at full opacity (scale still carries the entrance motion) and
-              // keeps the fade only on the way out.
-              FadeTransition(
-                opacity: _opacity,
-                child: GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onTap: dismissOnOutside ? handle.close : null,
-                  child: ColoredBox(
-                    color:
-                        surface.barrierColor ??
-                        context.shellColors.overviewScrim,
+          // While closing, scrim + surface share this single opacity layer:
+          // a separate fade made the backdrop-blurred panel composite at
+          // partial alpha against the dimming scrim and flash black. During
+          // opening the layer stays pinned at 1 so the blurred glass is
+          // fully opaque from the first frame.
+          child: FadeTransition(
+            opacity: surface.closing
+                ? _opacity
+                : const AlwaysStoppedAnimation<double>(1.0),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                // Only the scrim fades on the way in — the surface subtree
+                // usually contains a ShellBackdropBlur, and fading it made
+                // the panel read as transparent glass before the blur
+                // became visible. Scale still carries the entrance motion.
+                // While closing it stays pinned so the shared outer fade
+                // reproduces the original single-layer composite exactly.
+                FadeTransition(
+                  opacity: surface.closing
+                      ? const AlwaysStoppedAnimation<double>(1.0)
+                      : _opacity,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: dismissOnOutside ? handle.close : null,
+                    child: ColoredBox(
+                      color:
+                          surface.barrierColor ??
+                          context.shellColors.overviewScrim,
+                    ),
                   ),
                 ),
-              ),
-              FadeTransition(
-                opacity: surface.closing
-                    ? _opacity
-                    : const AlwaysStoppedAnimation<double>(1.0),
-                child: ScaleTransition(
+                ScaleTransition(
                   scale: _scale,
                   child: surface.builder(context, handle),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

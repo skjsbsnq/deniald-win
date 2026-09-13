@@ -59,11 +59,6 @@ void main() {
           matching: find.byType(FadeTransition),
         ),
       );
-      expect(
-        surfaceFades,
-        isNotEmpty,
-        reason: 'the closing fade should still wrap the surface',
-      );
       for (final fade in surfaceFades) {
         expect(
           fade.opacity.value,
@@ -72,6 +67,65 @@ void main() {
               'glass before the blur becomes visible',
         );
       }
+    },
+  );
+
+  testWidgets(
+    'closing surface shares a single opacity layer with its scrim',
+    (tester) async {
+      final container = ProviderContainer();
+      addTearDown(container.dispose);
+      await tester.pumpWidget(
+        UncontrolledProviderScope(
+          container: container,
+          child: Directionality(
+            textDirection: TextDirection.ltr,
+            child: ShellTheme(
+              data: const ShellThemeData(),
+              child: const ShellSurfaceHost(child: SizedBox.expand()),
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+
+      final controller = container.read(
+        shellSurfaceControllerProvider.notifier,
+      );
+      final handle = controller.show(
+        debugLabel: 'probe',
+        builder: (context, handle) => Center(
+          child: SizedBox(
+            width: 200,
+            height: 200,
+            child: ShellBackdropBlur(
+              borderRadius: context.shellTheme.borderRadius(
+                ShellShapeScale.large,
+              ),
+              child: const SizedBox.expand(),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      handle.close();
+      // Mid-close frame: the panel must not sit in its own opacity layer —
+      // a separate fade composites the blurred glass against the dimming
+      // scrim and reads as a black flash.
+      await tester.pump(const Duration(milliseconds: 80));
+
+      final fades = tester.widgetList<FadeTransition>(
+        find.ancestor(
+          of: find.byType(BackdropFilter),
+          matching: find.byType(FadeTransition),
+        ),
+      );
+      expect(
+        fades.length,
+        1,
+        reason: 'the closing panel must fade in the same layer as the scrim',
+      );
     },
   );
 }
