@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart' show Icons;
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -81,18 +82,21 @@ class _DashboardNotificationListState
         else
           for (final entry in groups.entries)
             RepaintBoundary(
-              child: _NotificationGroupCard(
-                key: ValueKey('dashboard-group-${entry.key}'),
-                label: entry.key,
-                records: entry.value,
-                onDismissGroup: () {
-                  for (final record in entry.value) {
-                    controller.dismissFromHistory(record.notification.id);
-                  }
-                },
-                onDismissRecord: controller.dismissFromHistory,
-                onDefaultAction: (record) =>
-                    controller.invokeDefaultAction(record.notification.id),
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: _NotificationGroupCard(
+                  key: ValueKey('dashboard-group-${entry.key}'),
+                  label: entry.key,
+                  records: entry.value,
+                  onDismissGroup: () {
+                    for (final record in entry.value) {
+                      controller.dismissFromHistory(record.notification.id);
+                    }
+                  },
+                  onDismissRecord: controller.dismissFromHistory,
+                  onDefaultAction: (record) =>
+                      controller.invokeDefaultAction(record.notification.id),
+                ),
               ),
             ),
         const SizedBox(height: 10),
@@ -186,155 +190,178 @@ class _NotificationGroupCardState extends State<_NotificationGroupCard>
     final latestSummary = _latestSummary(latest.notification);
     final hasUnread = widget.records.any((record) => record.unread);
 
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: theme.panelColor(colors.surfaceContainer),
-        borderRadius: theme.borderRadius(ShellShapeScale.large),
-        border: Border.all(color: colors.hairlineSoft, width: 1.0),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          AnimatedBuilder(
-            animation: _drag,
-            builder: (context, child) => Transform.translate(
-              offset: Offset(_drag.value, 0),
-              child: child,
-            ),
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: () => setState(() {
-                _expanded = !_expanded;
-                if (_expanded) {
-                  _visibleCount = _expandedChunk;
-                }
-              }),
-              onHorizontalDragUpdate: _handleDragUpdate,
-              onHorizontalDragEnd: _handleDragEnd,
-              child: SizedBox(
-                height: 52,
-                child: Row(
-                  children: [
-                    NotificationArtwork(
-                      notification: latest.notification,
-                      size: 38,
-                      preferContentImage: false,
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.start,
+    // Android-16 stacked group: one tonal container whose segments carry
+    // linked corners — the header and the outer children take the extraLarge
+    // outer radius while inner seams stay small, separated by 2 dp gaps.
+    final groupRadius = theme.borderRadius(ShellShapeScale.extraLarge);
+    final headerRadius = _expanded
+        ? BorderRadius.vertical(
+            top: theme.radius(ShellShapeScale.extraLarge),
+            bottom: theme.radius(ShellShapeScale.small),
+          )
+        : groupRadius;
+    final childCount = widget.records.length.clamp(0, _visibleCount);
+
+    return AnimatedBuilder(
+      animation: _drag,
+      builder: (context, child) =>
+          Transform.translate(offset: Offset(_drag.value, 0), child: child),
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: theme.panelColor(colors.surfaceContainer),
+          borderRadius: groupRadius,
+        ),
+        child: ClipRRect(
+          borderRadius: groupRadius,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: () => setState(() {
+                  _expanded = !_expanded;
+                  if (_expanded) {
+                    _visibleCount = _expandedChunk;
+                  }
+                }),
+                onHorizontalDragUpdate: _handleDragUpdate,
+                onHorizontalDragEnd: _handleDragEnd,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: theme.cardColor(colors.surfaceContainerHigh),
+                    borderRadius: headerRadius,
+                  ),
+                  child: SizedBox(
+                    height: 52,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      child: Row(
                         children: [
-                          Row(
-                            children: [
-                              Flexible(
-                                child: Text(
-                                  widget.label,
+                          NotificationArtwork(
+                            notification: latest.notification,
+                            size: 38,
+                            preferContentImage: false,
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Flexible(
+                                      child: Text(
+                                        widget.label,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: theme.text.titleSmallEmphasized
+                                            .copyWith(
+                                              color: colors.textPrimary,
+                                            ),
+                                      ),
+                                    ),
+                                    if (hasUnread) ...[
+                                      const SizedBox(width: 6),
+                                      DecoratedBox(
+                                        decoration: BoxDecoration(
+                                          color: theme.accentPalette.primary,
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: const SizedBox.square(
+                                          dimension: 6,
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                                const SizedBox(height: 3),
+                                Text(
+                                  latestSummary,
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    color: colors.textPrimary,
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w700,
-                                    decoration: TextDecoration.none,
+                                  style: theme.text.bodySmall.copyWith(
+                                    color: colors.textSecondary,
                                   ),
-                                ),
-                              ),
-                              if (hasUnread) ...[
-                                const SizedBox(width: 6),
-                                DecoratedBox(
-                                  decoration: BoxDecoration(
-                                    color: theme.accentPalette.primary,
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const SizedBox.square(dimension: 6),
                                 ),
                               ],
-                            ],
-                          ),
-                          const SizedBox(height: 3),
-                          Text(
-                            latestSummary,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              color: colors.textSecondary,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              decoration: TextDecoration.none,
                             ),
+                          ),
+                          const SizedBox(width: 10),
+                          _GroupCountCapsule(
+                            label: widget.records.length == 1
+                                ? context.l10n.notificationsOneNotification
+                                : context.l10n.notificationsGroupCount(
+                                    widget.records.length,
+                                  ),
+                            expanded: _expanded,
                           ),
                         ],
                       ),
                     ),
-                    const SizedBox(width: 10),
-                    _GroupCountCapsule(
-                      label: widget.records.length == 1
-                          ? context.l10n.notificationsOneNotification
-                          : context.l10n.notificationsGroupCount(
-                              widget.records.length,
-                            ),
-                      expanded: _expanded,
-                    ),
-                  ],
+                  ),
                 ),
               ),
-            ),
-          ),
-          AnimatedSize(
-            duration: Motion.cardSettle,
-            curve: Motion.standard,
-            alignment: Alignment.topCenter,
-            child: _expanded
-                ? Padding(
-                    padding: const EdgeInsets.only(top: 10),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        for (
-                          var index = 0;
-                          index < widget.records.length &&
-                              index < _visibleCount;
-                          index += 1
-                        ) ...[
-                          if (index > 0) const SizedBox(height: 6),
-                          () {
-                            final record = widget.records[index];
-                            return NotificationCard(
-                              key: ValueKey(
-                                'dashboard-notification-${record.notification.id}',
+              AnimatedSize(
+                duration: Motion.cardSettle,
+                curve: Motion.standard,
+                alignment: Alignment.topCenter,
+                child: _expanded
+                    ? Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          for (
+                            var index = 0;
+                            index < childCount;
+                            index += 1
+                          ) ...[
+                            const SizedBox(height: 2),
+                            () {
+                              final record = widget.records[index];
+                              final last =
+                                  index == childCount - 1 &&
+                                  widget.records.length <= _visibleCount;
+                              return NotificationCard(
+                                key: ValueKey(
+                                  'dashboard-notification-${record.notification.id}',
+                                ),
+                                notification: record.notification,
+                                compact: true,
+                                // The header segment owns the top corners;
+                                // the final card (or the show-more segment
+                                // below it) owns the bottom ones.
+                                groupEdge: last
+                                    ? NotificationGroupEdge.bottom
+                                    : NotificationGroupEdge.middle,
+                                onDismiss: () => widget.onDismissRecord(
+                                  record.notification.id,
+                                ),
+                                onDefaultAction: record.active
+                                    ? () => widget.onDefaultAction(record)
+                                    : null,
+                              );
+                            }(),
+                          ],
+                          if (widget.records.length > _visibleCount) ...[
+                            const SizedBox(height: 2),
+                            _ShowMoreSegment(
+                              label: context.l10n.notificationsShowAll(
+                                widget.records.length,
                               ),
-                              notification: record.notification,
-                              compact: true,
-                              onDismiss: () => widget.onDismissRecord(
-                                record.notification.id,
+                              onPressed: () => setState(
+                                () => _visibleCount += _expandedChunk,
                               ),
-                              onDefaultAction: record.active
-                                  ? () => widget.onDefaultAction(record)
-                                  : null,
-                            );
-                          }(),
-                        ],
-                        if (widget.records.length > _visibleCount) ...[
-                          const SizedBox(height: 6),
-                          _ShowMoreCapsule(
-                            label: context.l10n.notificationsShowAll(
-                              widget.records.length,
                             ),
-                            onPressed: () =>
-                                setState(() => _visibleCount += _expandedChunk),
-                          ),
+                          ],
                         ],
-                      ],
-                    ),
-                  )
-                : const SizedBox(width: double.infinity),
+                      )
+                    : const SizedBox(width: double.infinity),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -371,12 +398,7 @@ class _GroupCountCapsule extends StatelessWidget {
         children: [
           Text(
             label,
-            style: TextStyle(
-              color: colors.textSecondary,
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              decoration: TextDecoration.none,
-            ),
+            style: theme.text.labelSmall.copyWith(color: colors.textSecondary),
           ),
           const SizedBox(width: 2),
           AnimatedRotation(
@@ -395,31 +417,71 @@ class _GroupCountCapsule extends StatelessWidget {
   }
 }
 
-/// Centered capsule that raises a capped group's visible card count.
-class _ShowMoreCapsule extends StatelessWidget {
-  const _ShowMoreCapsule({required this.label, required this.onPressed});
+/// Full-width bottom segment that raises a capped group's visible card
+/// count. It owns the group's lower corners, so its shape is small on top
+/// and extraLarge below, matching the stacked children above it.
+class _ShowMoreSegment extends StatefulWidget {
+  const _ShowMoreSegment({required this.label, required this.onPressed});
 
   final String label;
   final VoidCallback onPressed;
 
   @override
+  State<_ShowMoreSegment> createState() => _ShowMoreSegmentState();
+}
+
+class _ShowMoreSegmentState extends State<_ShowMoreSegment> {
+  bool _hovered = false;
+
+  @override
   Widget build(BuildContext context) {
+    final theme = context.shellTheme;
     final colors = context.shellColors;
 
-    return Center(
-      child: ShellHoverPill(
-        onTap: onPressed,
-        height: 26,
-        padding: const EdgeInsets.symmetric(horizontal: 12),
-        color: colors.surfaceContainerHighest,
-        hoverColor: colors.panelHighlight,
-        child: Text(
-          label,
-          style: TextStyle(
-            color: colors.textSecondary,
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-            decoration: TextDecoration.none,
+    return Semantics(
+      button: true,
+      label: widget.label,
+      child: FocusableActionDetector(
+        onShowHoverHighlight: (hovered) => setState(() => _hovered = hovered),
+        onShowFocusHighlight: (_) {},
+        shortcuts: const <ShortcutActivator, Intent>{
+          SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+          SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
+        },
+        actions: <Type, Action<Intent>>{
+          ActivateIntent: CallbackAction<ActivateIntent>(
+            onInvoke: (_) {
+              widget.onPressed();
+              return null;
+            },
+          ),
+        },
+        mouseCursor: SystemMouseCursors.click,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: widget.onPressed,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: _hovered
+                  ? colors.surfaceContainerHighest
+                  : theme.cardColor(colors.surfaceContainerHigh),
+              borderRadius: BorderRadius.vertical(
+                top: theme.radius(ShellShapeScale.small),
+                bottom: theme.radius(ShellShapeScale.extraLarge),
+              ),
+            ),
+            child: SizedBox(
+              height: 36,
+              child: Center(
+                child: Text(
+                  widget.label,
+                  style: theme.text.labelSmall.copyWith(
+                    color: colors.textSecondary,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ),
           ),
         ),
       ),
@@ -462,11 +524,8 @@ class _NotificationListStatusBar extends StatelessWidget {
               count == 1
                   ? l10n.notificationsOneNotification
                   : l10n.notificationsGroupCount(count),
-              style: TextStyle(
+              style: context.shellTheme.text.labelSmall.copyWith(
                 color: context.shellColors.textTertiary,
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                decoration: TextDecoration.none,
               ),
             ),
           ),
@@ -530,11 +589,9 @@ class _DoNotDisturbCapsule extends StatelessWidget {
             const SizedBox(width: 6),
             Text(
               context.l10n.notificationsDndShort,
-              style: TextStyle(
+              style: theme.text.labelSmall.copyWith(
                 color: fg,
-                fontSize: 11,
                 fontWeight: FontWeight.w700,
-                decoration: TextDecoration.none,
               ),
             ),
           ],
@@ -590,8 +647,9 @@ class _DashboardNotificationEmptyState extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 26),
         decoration: BoxDecoration(
           color: context.shellTheme.panelColor(colors.surfaceContainer),
-          borderRadius: context.shellTheme.borderRadius(ShellShapeScale.large),
-          border: Border.all(color: colors.hairlineSoft, width: 1.0),
+          borderRadius: context.shellTheme.borderRadius(
+            ShellShapeScale.extraLarge,
+          ),
         ),
         child: Center(
           child: Column(
@@ -605,21 +663,15 @@ class _DashboardNotificationEmptyState extends StatelessWidget {
               const SizedBox(height: 8),
               Text(
                 l10n.notificationsAllQuiet,
-                style: TextStyle(
+                style: context.shellTheme.text.titleSmallEmphasized.copyWith(
                   color: colors.textSecondary,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  decoration: TextDecoration.none,
                 ),
               ),
               const SizedBox(height: 3),
               Text(
                 l10n.notificationsEmptyDescription,
-                style: TextStyle(
+                style: context.shellTheme.text.labelSmall.copyWith(
                   color: colors.textTertiary,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
-                  decoration: TextDecoration.none,
                 ),
               ),
             ],

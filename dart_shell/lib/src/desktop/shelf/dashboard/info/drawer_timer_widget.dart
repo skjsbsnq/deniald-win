@@ -130,13 +130,11 @@ class _TimerToolButton extends StatelessWidget {
             const SizedBox(width: 5),
             Text(
               label,
-              style: TextStyle(
+              style: theme.text.labelMedium.copyWith(
                 color: selected
                     ? theme.accentPalette.onContainer
                     : colors.textSecondary,
-                fontSize: 12,
                 fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
-                decoration: TextDecoration.none,
               ),
             ),
           ],
@@ -201,25 +199,20 @@ class _PomodoroPane extends StatelessWidget {
                   children: [
                     Text(
                       _formatDuration(remaining),
-                      style: TextStyle(
-                        color: colors.textPrimary,
-                        fontSize: 27,
-                        fontWeight: FontWeight.w700,
-                        height: 1.1,
-                        letterSpacing: 0,
-                        decoration: TextDecoration.none,
-                      ),
+                      style: context.shellTheme.text.headlineMediumEmphasized
+                          .copyWith(
+                            color: colors.textPrimary,
+                            fontWeight: FontWeight.w700,
+                            height: 1.1,
+                          ),
                     ),
                     const SizedBox(height: 4),
                     Text(
                       state.mode == TimerMode.pomodoroBreak
                           ? l10n.timerBreakLabel
                           : l10n.timerFocusLabel,
-                      style: TextStyle(
+                      style: context.shellTheme.text.labelSmall.copyWith(
                         color: colors.textSecondary,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        decoration: TextDecoration.none,
                       ),
                     ),
                   ],
@@ -290,13 +283,11 @@ class _PomodoroModeChip extends StatelessWidget {
           : colors.panelHighlight,
       child: Text(
         label,
-        style: TextStyle(
+        style: theme.text.labelMedium.copyWith(
           color: selected
               ? theme.accentPalette.onContainer
               : colors.textSecondary,
-          fontSize: 12,
           fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
-          decoration: TextDecoration.none,
         ),
       ),
     );
@@ -320,13 +311,9 @@ class _StopwatchPane extends StatelessWidget {
         Center(
           child: Text(
             _formatDuration(state.elapsed),
-            style: TextStyle(
+            style: context.shellTheme.text.headlineLargeEmphasized.copyWith(
               color: colors.textPrimary,
-              fontSize: 30,
-              fontWeight: FontWeight.w700,
               height: 1.1,
-
-              decoration: TextDecoration.none,
             ),
           ),
         ),
@@ -360,12 +347,8 @@ class _StopwatchPane extends StatelessWidget {
               ? Center(
                   child: Text(
                     context.l10n.timerNoLaps,
-                    style: TextStyle(
-                      color: colors.textTertiary,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      decoration: TextDecoration.none,
-                    ),
+                    style: context.shellTheme.text.labelMediumEmphasized
+                        .copyWith(color: colors.textTertiary),
                   ),
                 )
               : ListView.builder(
@@ -387,22 +370,15 @@ class _StopwatchPane extends StatelessWidget {
                         children: [
                           Text(
                             context.l10n.timerLapNumber(lapNumber),
-                            style: TextStyle(
+                            style: context.shellTheme.text.labelMedium.copyWith(
                               color: colors.textSecondary,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                              decoration: TextDecoration.none,
                             ),
                           ),
                           const Spacer(),
                           Text(
                             _formatDuration(laps[index]),
-                            style: TextStyle(
-                              color: colors.textPrimary,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              decoration: TextDecoration.none,
-                            ),
+                            style: context.shellTheme.text.labelMediumEmphasized
+                                .copyWith(color: colors.textPrimary),
                           ),
                         ],
                       ),

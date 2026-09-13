@@ -1,5 +1,10 @@
 part of 'notification_banner.dart';
 
+/// Where a compact [NotificationCard] sits inside an Android-16-style
+/// stacked group: `top` carries the group's upper corners, `bottom` the
+/// lower ones, `middle` is flush on both ends, and `single` rounds all four.
+enum NotificationGroupEdge { single, top, middle, bottom }
+
 class NotificationCard extends StatelessWidget {
   const NotificationCard({
     required this.notification,
@@ -7,6 +12,7 @@ class NotificationCard extends StatelessWidget {
     this.previewMode = NotificationPreviewMode.full,
     this.announce = false,
     this.compact = false,
+    this.groupEdge,
     this.onDismiss,
     this.onDefaultAction,
     this.onAction,
@@ -16,6 +22,10 @@ class NotificationCard extends StatelessWidget {
   final NotificationPreviewMode previewMode;
   final bool announce;
   final bool compact;
+
+  /// Stacked-group position for compact cards; null keeps the standalone
+  /// notification rounding and hairline. Only meaningful with [compact].
+  final NotificationGroupEdge? groupEdge;
   final VoidCallback? onDismiss;
   final VoidCallback? onDefaultAction;
   final ValueChanged<String>? onAction;
@@ -47,24 +57,53 @@ class NotificationCard extends StatelessWidget {
         ? l10n.notificationSemantics(appName, summary)
         : l10n.notificationSemanticsWithBody(appName, summary, body);
     final banner = !compact;
+    // Inside a stacked group the segment trades the standalone notification
+    // rounding for linked corners and drops its hairline: the 2 dp seams and
+    // the tonal step to surfaceContainerHigh carry the separation instead.
+    final grouped = compact && groupEdge != null;
+    final BorderRadius cardRadius;
+    if (grouped) {
+      final outer = theme.radius(ShellShapeScale.extraLarge);
+      final inner = theme.radius(ShellShapeScale.small);
+      cardRadius = switch (groupEdge!) {
+        NotificationGroupEdge.single => BorderRadius.all(outer),
+        NotificationGroupEdge.top => BorderRadius.vertical(
+          top: outer,
+          bottom: inner,
+        ),
+        NotificationGroupEdge.middle => BorderRadius.all(inner),
+        NotificationGroupEdge.bottom => BorderRadius.vertical(
+          top: inner,
+          bottom: outer,
+        ),
+      };
+    } else {
+      cardRadius = theme.borderRadius(ShellRadii.notification);
+    }
 
     final content = DecoratedBox(
       decoration: BoxDecoration(
         color: banner
             ? null
-            : theme.cardColor(context.shellColors.surfaceContainerLow),
+            : theme.cardColor(
+                grouped
+                    ? context.shellColors.surfaceContainerHigh
+                    : context.shellColors.surfaceContainerLow,
+              ),
         gradient: banner
             ? theme.panelGradient(
                 context.shellColors.panelBackground,
                 context.shellColors.panelBackgroundBottom,
               )
             : null,
-        borderRadius: theme.borderRadius(ShellRadii.notification),
-        border: Border.all(
-          color: banner
-              ? context.shellColors.hairline
-              : context.shellColors.hairlineSoft,
-        ),
+        borderRadius: cardRadius,
+        border: grouped
+            ? null
+            : Border.all(
+                color: banner
+                    ? context.shellColors.hairline
+                    : context.shellColors.hairlineSoft,
+              ),
       ),
       child: Padding(
         padding: EdgeInsets.fromLTRB(
@@ -230,7 +269,9 @@ class _NotificationBody extends StatelessWidget {
           maxLines: 2,
           overflow: TextOverflow.ellipsis,
           style: ShellText.cardTitle.copyWith(
-            fontSize: compact ? 13.5 : 14.5,
+            // Compact rows sit on the M3E typescale (§D5); the banner path
+            // keeps its legacy 14.5 step until its own card.
+            fontSize: compact ? 14 : 14.5,
             height: 1.2,
             letterSpacing: 0,
           ),

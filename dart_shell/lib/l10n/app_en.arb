@@ -5504,5 +5504,15 @@
   "trayDisplaySettings": "Display settings",
   "@trayDisplaySettings": {"description": "Accessible label for the brightness slider button that opens display settings."},
   "trayAudioSettings": "Audio settings",
-  "@trayAudioSettings": {"description": "Accessible label for the volume slider button that opens audio settings."}
+  "@trayAudioSettings": {"description": "Accessible label for the volume slider button that opens audio settings."},
+  "weatherSegmentConditions": "Conditions",
+  "@weatherSegmentConditions": {"description": "Segmented-selector entry inside the weather hero card that shows the current conditions pane."},
+  "weatherHeroHighLow": "H {high} · L {low}",
+  "@weatherHeroHighLow": {
+    "description": "Daily high/low temperatures inside the weather hero card.",
+    "placeholders": {
+      "high": {"type": "String"},
+      "low": {"type": "String"}
+    }
+  }
 }

@@ -4077,4 +4077,12 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get trayAudioSettings => 'Audio settings';
+
+  @override
+  String get weatherSegmentConditions => 'Conditions';
+
+  @override
+  String weatherHeroHighLow(String high, String low) {
+    return 'H $high · L $low';
+  }
 }

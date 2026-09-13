@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 
 import '../../../../theme/shell_theme.dart';
 import '../../../../theme/tokens.dart';
+import '../dashboard_card_tone.dart';
 
 /// One-column metric card whose fill level renders as a liquid wave. Shared
 /// by the System memory card and the Weather humidity card.
@@ -13,6 +14,7 @@ class LiquidMetricCard extends StatelessWidget {
     required this.label,
     required this.fraction,
     this.valueLabel,
+    this.tone = DashboardCardTone.surface,
   });
 
   final String label;
@@ -23,17 +25,20 @@ class LiquidMetricCard extends StatelessWidget {
   /// Optional bottom line with the raw figures, e.g. `7.8 / 15.4 GB`.
   final String? valueLabel;
 
+  /// Tonal family of the card fill and its foreground roles.
+  final DashboardCardTone tone;
+
   @override
   Widget build(BuildContext context) {
     final theme = context.shellTheme;
     final colors = context.shellColors;
+    final toneColors = dashboardCardToneColors(theme, colors, tone);
     final level = fraction.clamp(0.0, 1.0).toDouble();
 
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: theme.panelColor(colors.surfaceContainer),
+        color: theme.panelColor(toneColors.container),
         borderRadius: theme.borderRadius(ShellShapeScale.large),
-        border: Border.all(color: colors.hairlineSoft, width: 1.0),
       ),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
@@ -48,28 +53,24 @@ class LiquidMetricCard extends StatelessWidget {
                     label,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: colors.textSecondary,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-
-                      decoration: TextDecoration.none,
+                    style: theme.text.labelMediumEmphasized.copyWith(
+                      color: toneColors.foregroundSecondary,
                     ),
                   ),
                 ),
                 Text(
                   '${(level * 100).round()}%',
-                  style: TextStyle(
-                    color: colors.textPrimary,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    decoration: TextDecoration.none,
+                  style: theme.text.titleSmallEmphasized.copyWith(
+                    color: toneColors.foreground,
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 10),
-            SizedBox(height: 46, child: LiquidFill(fraction: level)),
+            SizedBox(
+              height: 46,
+              child: LiquidFill(fraction: level, color: toneColors.accent),
+            ),
             // The bottom line reserves its height even when absent so every
             // card in the two-column grid stays equally tall.
             if (valueLabel != null) ...[
@@ -78,11 +79,8 @@ class LiquidMetricCard extends StatelessWidget {
                 valueLabel!,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: colors.textTertiary,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  decoration: TextDecoration.none,
+                style: theme.text.labelSmall.copyWith(
+                  color: toneColors.foregroundSecondary,
                 ),
               ),
             ] else
@@ -97,10 +95,13 @@ class LiquidMetricCard extends StatelessWidget {
 /// Bare liquid fill for a container of any size: two overlapping static sine
 /// crests suggest water without an idle ticker animating them.
 class LiquidFill extends StatelessWidget {
-  const LiquidFill({super.key, required this.fraction});
+  const LiquidFill({super.key, required this.fraction, this.color});
 
   /// 0-1 fill level.
   final double fraction;
+
+  /// Wave color; defaults to the accent primary when omitted.
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
@@ -117,7 +118,7 @@ class LiquidFill extends StatelessWidget {
         child: CustomPaint(
           painter: _LiquidWavePainter(
             fraction: fraction.clamp(0.0, 1.0).toDouble(),
-            color: theme.accentPalette.primary,
+            color: color ?? theme.accentPalette.primary,
           ),
           size: Size.infinite,
         ),

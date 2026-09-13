@@ -3911,4 +3911,12 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get trayAudioSettings => '音频设置';
+
+  @override
+  String get weatherSegmentConditions => '天气';
+
+  @override
+  String weatherHeroHighLow(String high, String low) {
+    return '最高 $high · 最低 $low';
+  }
 }

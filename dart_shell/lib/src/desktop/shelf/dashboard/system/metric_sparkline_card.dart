@@ -1,12 +1,16 @@
-import 'dart:math' as math;
-
 import 'package:flutter/widgets.dart';
 
 import '../../../../theme/shell_theme.dart';
 import '../../../../theme/tokens.dart';
+import '../dashboard_card_tone.dart';
+import 'expressive_polygon.dart';
 
 /// Usage card with a large live percentage and a smoothed history sparkline
 /// under a gradient fill, shared by the CPU card and every GPU card.
+///
+/// The [tone] picks the card's tonal family: quiet `surfaceContainer` for the
+/// load cards, or a secondary/tertiary container when the card should read as
+/// a different widget kind in the mixed-emphasis grid.
 class MetricSparklineCard extends StatelessWidget {
   const MetricSparklineCard({
     super.key,
@@ -15,6 +19,7 @@ class MetricSparklineCard extends StatelessWidget {
     required this.history,
     this.detail,
     this.showExpressivePolygon = false,
+    this.tone = DashboardCardTone.surface,
   });
 
   final String label;
@@ -31,19 +36,26 @@ class MetricSparklineCard extends StatelessWidget {
   /// Whether to draw the expressive corner polygon that blooms with load.
   final bool showExpressivePolygon;
 
+  /// Tonal family of the card fill and its foreground roles.
+  final DashboardCardTone tone;
+
   @override
   Widget build(BuildContext context) {
     final theme = context.shellTheme;
-    final colors = context.shellColors;
+    final toneColors = dashboardCardToneColors(
+      theme,
+      context.shellColors,
+      tone,
+    );
+    final radius = theme.borderRadius(ShellShapeScale.large);
 
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: theme.panelColor(colors.surfaceContainer),
-        borderRadius: theme.borderRadius(ShellShapeScale.large),
-        border: Border.all(color: colors.hairlineSoft, width: 1.0),
+        color: theme.panelColor(toneColors.container),
+        borderRadius: radius,
       ),
       child: ClipRRect(
-        borderRadius: theme.borderRadius(ShellShapeScale.large),
+        borderRadius: radius,
         child: Stack(
           children: [
             Padding(
@@ -60,26 +72,19 @@ class MetricSparklineCard extends StatelessWidget {
                           label,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            color: colors.textSecondary,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-
-                            decoration: TextDecoration.none,
+                          style: theme.text.labelMediumEmphasized.copyWith(
+                            color: toneColors.foregroundSecondary,
                           ),
                         ),
                         const SizedBox(height: 6),
                         Text(
                           usage == null ? '--' : '${(usage! * 100).round()}%',
-                          style: TextStyle(
-                            color: colors.textPrimary,
-                            fontSize: 30,
-                            fontWeight: FontWeight.w700,
+                          style: theme.text.headlineLargeEmphasized.copyWith(
+                            color: toneColors.foreground,
                             height: 1.05,
                             fontFeatures: const <FontFeature>[
                               FontFeature.tabularFigures(),
                             ],
-                            decoration: TextDecoration.none,
                           ),
                         ),
                         if (detail != null) ...[
@@ -98,8 +103,8 @@ class MetricSparklineCard extends StatelessWidget {
                     child: RepaintBoundary(
                       child: MetricSparkline(
                         history: history,
-                        lineColor: theme.accentPalette.primary,
-                        fillColor: theme.accentPalette.primary,
+                        lineColor: toneColors.accent,
+                        fillColor: toneColors.accent,
                       ),
                     ),
                   ),
@@ -112,13 +117,11 @@ class MetricSparklineCard extends StatelessWidget {
                 bottom: -18,
                 child: SizedBox.square(
                   dimension: 96,
-                  child: CustomPaint(
-                    painter: _ExpressivePolygonPainter(
-                      // The decoration blooms from a four-point bud at idle to
-                      // an eight-point star under full load.
-                      complexity: usage ?? 0,
-                      color: theme.accentPalette.primary,
-                    ),
+                  child: ExpressivePolygon(
+                    // The decoration blooms from a four-point bud at idle to
+                    // an eight-point star under full load.
+                    complexity: usage ?? 0,
+                    color: toneColors.accent,
                   ),
                 ),
               ),
@@ -246,54 +249,4 @@ class _MetricSparklinePainter extends CustomPainter {
       oldDelegate.lineColor != lineColor ||
       oldDelegate.fillColor != fillColor ||
       oldDelegate.strokeWidth != strokeWidth;
-}
-
-/// Decorative expressive star whose vertex count grows with the metric, per
-/// the M3E "shape as state" idea. Purely static: no idle ticker runs for it.
-class _ExpressivePolygonPainter extends CustomPainter {
-  const _ExpressivePolygonPainter({
-    required this.complexity,
-    required this.color,
-  });
-
-  /// 0-1 load fraction driving 4 -> 8 points.
-  final double complexity;
-  final Color color;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final radius = size.shortestSide / 2;
-    final points = 4 + (complexity.clamp(0.0, 1.0) * 4).round();
-    final inner = radius * 0.44;
-
-    final path = Path();
-    for (var i = 0; i < points * 2; i++) {
-      final angle = -math.pi / 2 + i * math.pi / points;
-      final r = i.isEven ? radius : inner;
-      final point = Offset(
-        center.dx + math.cos(angle) * r,
-        center.dy + math.sin(angle) * r,
-      );
-      if (i == 0) {
-        path.moveTo(point.dx, point.dy);
-      } else {
-        path.lineTo(point.dx, point.dy);
-      }
-    }
-    path.close();
-
-    canvas.drawPath(path, Paint()..color = color.withValues(alpha: 0.10));
-    canvas.drawPath(
-      path,
-      Paint()
-        ..color = color.withValues(alpha: 0.28)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.5,
-    );
-  }
-
-  @override
-  bool shouldRepaint(_ExpressivePolygonPainter oldDelegate) =>
-      oldDelegate.complexity != complexity || oldDelegate.color != color;
 }

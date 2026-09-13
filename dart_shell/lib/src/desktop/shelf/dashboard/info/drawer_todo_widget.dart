@@ -172,13 +172,11 @@ class _TodoTabButton extends StatelessWidget {
           label,
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: TextStyle(
+          style: theme.text.labelMedium.copyWith(
             color: selected
                 ? theme.accentPalette.onContainer
                 : colors.textSecondary,
-            fontSize: 12,
             fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
-            decoration: TextDecoration.none,
           ),
         ),
       ),
@@ -270,10 +268,8 @@ class _TodoQuickAddFieldState extends State<_TodoQuickAddField> {
                       IgnorePointer(
                         child: Text(
                           context.l10n.todoAddHint,
-                          style: TextStyle(
+                          style: context.shellTheme.text.bodyMedium.copyWith(
                             color: colors.textTertiary,
-                            fontSize: 13,
-                            decoration: TextDecoration.none,
                           ),
                         ),
                       ),
@@ -286,7 +282,7 @@ class _TodoQuickAddFieldState extends State<_TodoQuickAddField> {
                       textInputAction: TextInputAction.done,
                       onEditingComplete: widget.onSubmit,
                       onSubmitted: (_) => widget.onSubmit(),
-                      style: theme.text.base.copyWith(fontSize: 13),
+                      style: theme.text.bodyMedium,
                       cursorColor: accent.primary,
                       backgroundCursorColor: colors.textSecondary,
                       selectionColor: accent.selection,
@@ -351,6 +347,7 @@ class _TodoRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = context.shellTheme;
     final colors = context.shellColors;
 
     return Row(
@@ -362,10 +359,8 @@ class _TodoRow extends StatelessWidget {
             item.title,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(
+            style: theme.text.bodyMedium.copyWith(
               color: item.done ? colors.textTertiary : colors.textPrimary,
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
               decoration: item.done ? TextDecoration.lineThrough : null,
               decorationColor: colors.textTertiary,
             ),
@@ -462,11 +457,8 @@ class _TodoEmptyState extends StatelessWidget {
           const SizedBox(height: 8),
           Text(
             title,
-            style: TextStyle(
+            style: context.shellTheme.text.labelMediumEmphasized.copyWith(
               color: colors.textTertiary,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              decoration: TextDecoration.none,
             ),
           ),
         ],
@@ -501,11 +493,8 @@ class _ClearCompletedButton extends StatelessWidget {
           const SizedBox(width: 6),
           Text(
             context.l10n.todoClearCompleted,
-            style: TextStyle(
+            style: context.shellTheme.text.labelMediumEmphasized.copyWith(
               color: colors.textSecondary,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              decoration: TextDecoration.none,
             ),
           ),
         ],

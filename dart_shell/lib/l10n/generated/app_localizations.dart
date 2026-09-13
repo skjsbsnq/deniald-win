@@ -7275,6 +7275,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Audio settings'**
   String get trayAudioSettings;
+
+  /// Segmented-selector entry inside the weather hero card that shows the current conditions pane.
+  ///
+  /// In en, this message translates to:
+  /// **'Conditions'**
+  String get weatherSegmentConditions;
+
+  /// Daily high/low temperatures inside the weather hero card.
+  ///
+  /// In en, this message translates to:
+  /// **'H {high} · L {low}'**
+  String weatherHeroHighLow(String high, String low);
 }
 
 class _AppLocalizationsDelegate

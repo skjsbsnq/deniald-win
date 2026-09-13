@@ -262,12 +262,7 @@ class _MetricChip extends StatelessWidget {
             label,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: colors.textSecondary,
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
-              decoration: TextDecoration.none,
-            ),
+            style: theme.text.labelSmall.copyWith(color: colors.textSecondary),
           ),
         ],
       ),
