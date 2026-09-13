@@ -1199,5 +1199,9 @@
   "settingsNavGroupInput": "输入",
   "settingsNavGroupSystem": "系统",
   "shelfOpenLauncher": "打开应用",
-  "@shelfOpenLauncher": {"description": "Shelf 启动器按钮的无障碍/提示文案，点击打开应用网格。"}
+  "@shelfOpenLauncher": {"description": "Shelf 启动器按钮的无障碍/提示文案，点击打开应用网格。"},
+  "wsWorkspaceLabel": "工作区 {index}",
+  "@wsWorkspaceLabel": {"description": "Shelf 工作区圆点的无障碍标签与提示名称。"},
+  "wsWorkspaceWindows": "{count, plural, other{{count} 个窗口}}",
+  "@wsWorkspaceWindows": {"description": "Shelf 工作区圆点提示中显示的窗口数量。"}
 }

@@ -5502,5 +5502,9 @@
   "settingsNavGroupSystem": "System",
   "@settingsNavGroupSystem": {"description": "Navigation group heading for power, language, environment, developer, and about pages."},
   "shelfOpenLauncher": "Open applications",
-  "@shelfOpenLauncher": {"description": "Label for the shelf launcher button that opens the application grid."}
+  "@shelfOpenLauncher": {"description": "Label for the shelf launcher button that opens the application grid."},
+  "wsWorkspaceLabel": "Workspace {index}",
+  "@wsWorkspaceLabel": {"description": "Accessible label and tooltip name for one workspace dot in the shelf.", "placeholders": {"index": {"type": "int"}}},
+  "wsWorkspaceWindows": "{count, plural, =0 {No windows} =1 {1 window} other {{count} windows}}",
+  "@wsWorkspaceWindows": {"description": "Window count shown in a shelf workspace dot tooltip.", "placeholders": {"count": {"type": "int"}}}
 }

@@ -7257,6 +7257,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Open applications'**
   String get shelfOpenLauncher;
+
+  /// Accessible label and tooltip name for one workspace dot in the shelf.
+  ///
+  /// In en, this message translates to:
+  /// **'Workspace {index}'**
+  String wsWorkspaceLabel(int index);
+
+  /// Window count shown in a shelf workspace dot tooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =0 {No windows} =1 {1 window} other {{count} windows}}'**
+  String wsWorkspaceWindows(int count);
 }
 
 class _AppLocalizationsDelegate

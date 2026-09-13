@@ -4069,4 +4069,21 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get shelfOpenLauncher => 'Open applications';
+
+  @override
+  String wsWorkspaceLabel(int index) {
+    return 'Workspace $index';
+  }
+
+  @override
+  String wsWorkspaceWindows(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count windows',
+      one: '1 window',
+      zero: 'No windows',
+    );
+    return '$_temp0';
+  }
 }

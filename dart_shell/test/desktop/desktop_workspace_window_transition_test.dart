@@ -2,6 +2,7 @@ import 'package:denial_dart_shell/l10n/generated/app_localizations.dart';
 import 'package:denial_dart_shell/src/desktop/desktop_shell.dart';
 import 'package:denial_dart_shell/src/desktop/desktop_workspace.dart';
 import 'package:denial_dart_shell/src/desktop/shelf/shelf_workspace_button.dart';
+import 'package:denial_dart_shell/src/desktop/shelf/shelf_workspace_dots.dart';
 import 'package:denial_dart_shell/src/platform/denial_bridge.dart';
 import 'package:denial_dart_shell/src/settings/settings_controller.dart';
 import 'package:denial_dart_shell/src/settings/shell_settings.dart';
@@ -177,11 +178,15 @@ void main() {
       ),
     );
 
-    expect(find.text('Desk 1'), findsNothing);
+    expect(find.byType(ShelfWorkspaceDots), findsNothing);
+    expect(
+      find.byKey(const ValueKey<String>('shelf-workspace-dot-1')),
+      findsNothing,
+    );
     expect(bridge.switches, isEmpty);
   });
 
-  testWidgets('the Desk button requests the monitor\'s next workspace', (
+  testWidgets('a workspace dot requests its own workspace directly', (
     tester,
   ) async {
     final bridge = _RecordingBridge();
@@ -212,13 +217,23 @@ void main() {
       ),
     );
 
-    expect(find.text('Desk 1'), findsOneWidget);
+    // One dot per configured workspace replaces the old "Desk N" label.
+    for (var id = 1; id <= 4; id++) {
+      expect(
+        find.byKey(ValueKey<String>('shelf-workspace-dot-$id')),
+        findsOneWidget,
+      );
+    }
 
-    await tester.tap(find.byType(ShelfWorkspaceButton));
+    // Dot 3 jumps straight to workspace 3 rather than cycling forward from
+    // the monitor's active workspace.
+    await tester.tap(
+      find.byKey(const ValueKey<String>('shelf-workspace-dot-3')),
+    );
     await tester.pump();
 
     expect(bridge.switches, <({int monitorId, int workspaceId})>[
-      (monitorId: 7, workspaceId: 2),
+      (monitorId: 7, workspaceId: 3),
     ]);
   });
 

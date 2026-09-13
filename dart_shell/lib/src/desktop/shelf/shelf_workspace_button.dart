@@ -1,24 +1,22 @@
-import 'package:flutter/material.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../localization/denial_localizations.dart';
 import '../../settings/settings_controller.dart';
 import '../../state/shell_controller.dart';
-import '../../theme/shell_theme.dart';
 import '../../theme/tokens.dart';
-import '../../widgets/shell_expressive_surface.dart';
 import '../desktop_workspace.dart';
+import 'shelf_workspace_dots.dart';
 
-/// ChromeOS-style Desk button on the left edge of the shelf.
+/// Clavis-style workspace dot capsule on the left edge of the shelf.
 ///
 /// It sits between the launcher and the application strip and only appears
-/// while monitor-local workspaces are enabled. A tap advances the monitor to
-/// its next workspace; the compositor stays authoritative and echoes the new
-/// active workspace back through the shell action channel.
+/// while monitor-local workspaces are enabled. Each dot jumps straight to its
+/// workspace; the compositor stays authoritative and echoes the new active
+/// workspace back through the shell action channel.
 class ShelfWorkspaceButton extends ConsumerWidget {
   const ShelfWorkspaceButton({this.monitorId, super.key});
 
-  /// Output whose workspace this button controls. Null keeps the control
+  /// Output whose workspaces this indicator controls. Null keeps the control
   /// hidden because a workspace switch is always monitor-local.
   final int? monitorId;
 
@@ -37,48 +35,41 @@ class ShelfWorkspaceButton extends ConsumerWidget {
       return const SizedBox.shrink();
     }
     final workspaceCount = ref.watch(
-      shellSettingsProvider.select((s) => s.layout.workspaceCount),
+      desktopWorkspaceProvider.select((state) => state.workspaceCount),
     );
     final active = ref.watch(
       desktopWorkspaceProvider.select(
         (state) => state.activeWorkspaceFor(monitorId),
       ),
     );
+    final placements = ref.watch(
+      desktopWorkspaceProvider.select((state) => state.placements),
+    );
+    final windowCounts = workspaceWindowCounts(
+      placements.values,
+      monitorId,
+      workspaceCount,
+    );
 
-    final theme = context.shellTheme;
-    final colors = context.shellColors;
-    final l10n = context.l10n;
-    final label = '${l10n.desktopWorkspaceDesk} $active';
-
-    return ShellExpressiveSurface(
-      onPressed: () {
-        final next = active >= workspaceCount ? 1 : active + 1;
-        ref
-            .read(denialBridgeProvider)
-            .switchWorkspace(monitorId: monitorId, workspaceId: next);
-      },
-      shape: ShellShapeScale.full,
+    return SizedBox(
       height: height,
-      padding: const EdgeInsets.symmetric(horizontal: ShellSpacing.md),
-      tooltip: l10n.desktopWorkspaceSwitch,
-      semanticLabel: '${l10n.desktopWorkspaceSwitch}, $label',
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(
-            Icons.space_dashboard_outlined,
-            size: 18,
-            color: colors.textPrimary,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: ShellSpacing.md),
+        child: Center(
+          child: ShelfWorkspaceDots(
+            workspaceCount: workspaceCount,
+            activeWorkspace: active,
+            windowCounts: windowCounts,
+            onSelect: (workspaceId) {
+              ref
+                  .read(denialBridgeProvider)
+                  .switchWorkspace(
+                    monitorId: monitorId,
+                    workspaceId: workspaceId,
+                  );
+            },
           ),
-          const SizedBox(width: ShellSpacing.sm),
-          Text(
-            label,
-            style: theme.text.systemBarValue.copyWith(
-              color: colors.textPrimary,
-            ),
-            maxLines: 1,
-          ),
-        ],
+        ),
       ),
     );
   }

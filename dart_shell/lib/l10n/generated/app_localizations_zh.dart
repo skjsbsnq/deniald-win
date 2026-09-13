@@ -3902,4 +3902,19 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get shelfOpenLauncher => '打开应用';
+
+  @override
+  String wsWorkspaceLabel(int index) {
+    return '工作区 $index';
+  }
+
+  @override
+  String wsWorkspaceWindows(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个窗口',
+    );
+    return '$_temp0';
+  }
 }
