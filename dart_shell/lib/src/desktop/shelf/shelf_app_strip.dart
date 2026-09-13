@@ -10,6 +10,7 @@ import '../../localization/denial_localizations.dart';
 import '../../models/denial_window.dart';
 import '../../state/pinned_apps.dart';
 import '../../state/shell_controller.dart';
+import '../../theme/tokens.dart';
 import '../../widgets/shell_menu.dart';
 import '../../state/display_layout.dart';
 import '../desktop_workspace.dart';
@@ -447,7 +448,7 @@ class _ShelfAppStripState extends ConsumerState<ShelfAppStrip> {
       mainAxisSize: MainAxisSize.min,
       children: [
         for (var i = 0; i < entries.length; i++) ...[
-          if (i > 0) const SizedBox(width: 8),
+          if (i > 0) const SizedBox(width: ShellSpacing.sm),
           ShelfAppButton(
             key: ValueKey('shelf-app-${entries[i].canonicalId}'),
             appId: entries[i].appId,

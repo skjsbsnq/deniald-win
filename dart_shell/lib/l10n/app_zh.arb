@@ -1195,5 +1195,7 @@
   "settingsNavGroupConnectivity": "连接与设备",
   "settingsNavGroupPersonalization": "个性化",
   "settingsNavGroupInput": "输入",
-  "settingsNavGroupSystem": "系统"
+  "settingsNavGroupSystem": "系统",
+  "shelfOpenLauncher": "打开应用",
+  "@shelfOpenLauncher": {"description": "Shelf 启动器按钮的无障碍/提示文案，点击打开应用网格。"}
 }

@@ -3893,4 +3893,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get settingsNavGroupSystem => '系统';
+
+  @override
+  String get shelfOpenLauncher => '打开应用';
 }

@@ -5492,5 +5492,7 @@
   "settingsNavGroupInput": "Input",
   "@settingsNavGroupInput": {"description": "Navigation group heading for keyboard, touchpad, and shortcut pages."},
   "settingsNavGroupSystem": "System",
-  "@settingsNavGroupSystem": {"description": "Navigation group heading for power, language, environment, developer, and about pages."}
+  "@settingsNavGroupSystem": {"description": "Navigation group heading for power, language, environment, developer, and about pages."},
+  "shelfOpenLauncher": "Open applications",
+  "@shelfOpenLauncher": {"description": "Label for the shelf launcher button that opens the application grid."}
 }

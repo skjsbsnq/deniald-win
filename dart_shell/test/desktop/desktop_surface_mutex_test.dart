@@ -8,6 +8,7 @@ import 'package:denial_dart_shell/src/desktop/desktop_workspace.dart';
 import 'package:denial_dart_shell/src/models/denial_window.dart';
 import 'package:denial_dart_shell/src/models/system_tray_item.dart';
 import 'package:denial_dart_shell/src/platform/denial_bridge.dart';
+import 'package:denial_dart_shell/src/services/media_player_service.dart';
 import 'package:denial_dart_shell/src/settings/settings_controller.dart';
 import 'package:denial_dart_shell/src/settings/shell_settings.dart';
 import 'package:denial_dart_shell/src/state/bluetooth.dart';
@@ -192,6 +193,11 @@ void main() {
         // static fake keeps the pending-timer invariant checkable now that
         // the dashboard hotkey expands the unified bubble (A04).
         systemIdentityProvider.overrideWith(_FakeSystemIdentity.new),
+        // The shelf media module would otherwise spin up the real MPRIS
+        // service and its session-bus refresh loop inside fake async.
+        mediaPlaybackProvider.overrideWith(
+          (ref) => const Stream<MprisPlaybackState>.empty(),
+        ),
         clockProvider.overrideWith(
           (ref) => Stream<DateTime>.value(DateTime(2026, 9, 8, 14, 30)),
         ),

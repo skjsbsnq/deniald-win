@@ -6,6 +6,7 @@ import '../../theme/motion.dart';
 import '../../theme/shell_theme.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/app_icon.dart';
+import '../../widgets/shell_expressive_surface.dart';
 import '../../widgets/shell_menu.dart';
 
 /// An individual application button with running indicator on the shelf.
@@ -40,27 +41,28 @@ class ShelfAppButton extends StatefulWidget {
 }
 
 class _ShelfAppButtonState extends State<ShelfAppButton>
-    with TickerProviderStateMixin {
-  late final AnimationController _hoverController;
-  late final AnimationController _pressController;
+    with SingleTickerProviderStateMixin {
   late final AnimationController _indicatorWidthController;
   late final MenuController _menuController;
-  bool _hovered = false;
-  bool _pressed = false;
   bool _menuOpen = false;
+
+  // Indicator geometry (02-VISUAL-SPEC §4): a running app gets a Ø4 dot, the
+  // active app a stretched 16x4 capsule, and multiple windows a pair of dots
+  // whose gap is the spacing `xs` tier. Pinned-but-closed apps show nothing.
+  static const double _dotDiameter = ShellSpacing.xs;
+  static const double _activePillWidth = ShellSpacing.lg;
+  static const double _multiDotWidth =
+      _dotDiameter * 2 + ShellSpacing.xs;
 
   double _targetIndicatorWidth() {
     if (widget.windowCount > 1) {
-      return 14.0;
+      return _multiDotWidth;
     }
     if (widget.isActive) {
-      return 12.0;
+      return _activePillWidth;
     }
     if (widget.windowCount > 0) {
-      return 6.0;
-    }
-    if (widget.isPinned) {
-      return 4.0;
+      return _dotDiameter;
     }
     return 0.0;
   }
@@ -68,8 +70,6 @@ class _ShelfAppButtonState extends State<ShelfAppButton>
   @override
   void initState() {
     super.initState();
-    _hoverController = AnimationController.unbounded(vsync: this, value: 0.0);
-    _pressController = AnimationController.unbounded(vsync: this, value: 0.0);
     _indicatorWidthController = AnimationController.unbounded(
       vsync: this,
       value: _targetIndicatorWidth(),
@@ -84,6 +84,10 @@ class _ShelfAppButtonState extends State<ShelfAppButton>
     if (oldWidget.windowCount != widget.windowCount ||
         oldWidget.isActive != widget.isActive ||
         oldWidget.isPinned != widget.isPinned) {
+      if (MediaQuery.disableAnimationsOf(context)) {
+        _indicatorWidthController.value = target;
+        return;
+      }
       springTo(
         _indicatorWidthController,
         target,
@@ -95,49 +99,8 @@ class _ShelfAppButtonState extends State<ShelfAppButton>
 
   @override
   void dispose() {
-    _hoverController.dispose();
-    _pressController.dispose();
     _indicatorWidthController.dispose();
     super.dispose();
-  }
-
-  void _updateHover(bool hovered) {
-    if (_hovered == hovered) return;
-    setState(() => _hovered = hovered);
-    _settleInteractionSpring(
-      _hoverController,
-      hovered ? 1.0 : 0.0,
-      telemetryLabel: 'shelf_app_hover',
-    );
-  }
-
-  void _updatePress(bool pressed) {
-    if (_pressed == pressed) return;
-    setState(() => _pressed = pressed);
-    _settleInteractionSpring(
-      _pressController,
-      pressed ? 1.0 : 0.0,
-      telemetryLabel: 'shelf_app_press',
-    );
-  }
-
-  void _settleInteractionSpring(
-    AnimationController controller,
-    double target, {
-    required String telemetryLabel,
-  }) {
-    if (MediaQuery.disableAnimationsOf(context)) {
-      // Reduced motion skips the spring entirely so the state change lands
-      // instantly instead of animating hover and press feedback.
-      controller.value = target;
-      return;
-    }
-    springTo(
-      controller,
-      target,
-      spring: Motion.expressiveSpatialFast,
-      telemetryLabel: telemetryLabel,
-    );
   }
 
   void _handleMenuOpen() {
@@ -162,74 +125,82 @@ class _ShelfAppButtonState extends State<ShelfAppButton>
     }
   }
 
+  Widget _buildIndicator(BuildContext context) {
+    final theme = context.shellTheme;
+    final dotColor = widget.isActive
+        ? theme.accentPalette.primary
+        : theme.accentPalette.subtle;
+    final dotDecoration = BoxDecoration(
+      color: dotColor,
+      borderRadius: theme.borderRadius(ShellShapeScale.full),
+    );
+    return AnimatedBuilder(
+      animation: _indicatorWidthController,
+      builder: (context, _) {
+        final currentWidth = math.max(
+          0.0,
+          _indicatorWidthController.value,
+        );
+        return SizedBox(
+          key: const ValueKey('shelf-app-indicator'),
+          width: currentWidth,
+          height: _dotDiameter,
+          child: widget.windowCount > 1
+              // Two anchored dots slide apart as the spring widens the lane;
+              // a Stack keeps them legal even mid-flight below their natural
+              // separation.
+              ? Stack(
+                  clipBehavior: Clip.hardEdge,
+                  children: [
+                    Positioned(
+                      left: 0,
+                      top: 0,
+                      bottom: 0,
+                      width: _dotDiameter,
+                      child: DecoratedBox(decoration: dotDecoration),
+                    ),
+                    Positioned(
+                      right: 0,
+                      top: 0,
+                      bottom: 0,
+                      width: _dotDiameter,
+                      child: DecoratedBox(decoration: dotDecoration),
+                    ),
+                  ],
+                )
+              : DecoratedBox(decoration: dotDecoration),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    final theme = context.shellTheme;
     final colors = context.shellColors;
-    final borderRadius = theme.borderRadius(ShellShapeScale.medium);
+    final tooltipMessage = widget.title ?? widget.appId;
 
-    final buttonContent = MouseRegion(
-      cursor: SystemMouseCursors.click,
-      onEnter: (_) => _updateHover(true),
-      onExit: (_) => _updateHover(false),
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTapDown: (_) => _updatePress(true),
-        onTapUp: (_) => _updatePress(false),
-        onTapCancel: () => _updatePress(false),
-        onTap: widget.onPressed,
-        onSecondaryTapDown: _handleSecondaryTapDown,
-        child: SizedBox(
-          width: 40,
-          height: 40,
-          child: AnimatedBuilder(
-            animation: Listenable.merge([_hoverController, _pressController]),
-            builder: (context, child) {
-              final hoverT = _hoverController.value.clamp(0.0, 1.0);
-              final pressT = _pressController.value.clamp(0.0, 1.0);
-              final hoverColor = Color.lerp(
-                Colors.transparent,
-                colors.panelHighlight,
-                hoverT,
-              );
-              final backgroundColor = Color.lerp(
-                hoverColor,
-                theme.accentPalette.subtle,
-                pressT,
-              );
-              final scale = 1.0 - 0.08 * _pressController.value;
-
-              return Transform.scale(
-                scale: scale,
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    color: backgroundColor,
-                    borderRadius: borderRadius,
-                  ),
-                  child: child,
-                ),
-              );
-            },
-            child: Center(
-              child: SizedBox(
-                width: 28,
-                height: 28,
-                child: widget.icon != null
-                    ? Icon(widget.icon, size: 28, color: colors.textPrimary)
-                    : AppIconImage(iconPath: widget.iconPath),
-              ),
-            ),
+    final buttonContent = GestureDetector(
+      onSecondaryTapDown: _handleSecondaryTapDown,
+      child: ShellExpressiveSurface(
+        onPressed: widget.onPressed,
+        shape: ShellShapeScale.full,
+        // The circle morphs toward a squarer token while pressed, the M3E
+        // press shape-morph already used by SettingsButton.
+        pressedShape: ShellShapeScale.small,
+        width: 40,
+        height: 40,
+        semanticLabel: tooltipMessage,
+        child: Center(
+          child: SizedBox(
+            width: 28,
+            height: 28,
+            child: widget.icon != null
+                ? Icon(widget.icon, size: 28, color: colors.textPrimary)
+                : AppIconImage(iconPath: widget.iconPath),
           ),
         ),
       ),
     );
-
-    final tooltipMessage = widget.title ?? widget.appId;
-    final indicatorColor = widget.isActive
-        ? theme.accent
-        : widget.windowCount > 0
-        ? theme.accent.withValues(alpha: 0.5)
-        : theme.accent.withValues(alpha: 0.35);
 
     return MenuAnchor(
       controller: _menuController,
@@ -248,31 +219,15 @@ class _ShelfAppButtonState extends State<ShelfAppButton>
         message: tooltipMessage,
         textStyle: ShellText.shelfTooltip,
         waitDuration: const Duration(milliseconds: 500),
+        // The 40px circle, an `xs` gap and the Ø4 indicator fill the 48px
+        // button cell exactly, so the column cannot overflow its track.
         child: Column(
           mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const SizedBox(height: 5),
             buttonContent,
-            const SizedBox(height: 3),
-            AnimatedBuilder(
-              animation: _indicatorWidthController,
-              builder: (context, _) {
-                final currentWidth = math.max(
-                  0.0,
-                  _indicatorWidthController.value,
-                );
-
-                return Container(
-                  width: currentWidth,
-                  height: 2,
-                  decoration: BoxDecoration(
-                    color: indicatorColor,
-                    borderRadius: theme.borderRadius(ShellShapeScale.full),
-                  ),
-                );
-              },
-            ),
+            const SizedBox(height: ShellSpacing.xs),
+            _buildIndicator(context),
           ],
         ),
       ),

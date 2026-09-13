@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../settings/settings_controller.dart';
 import '../../state/system_tray.dart';
 import '../../theme/shell_theme.dart';
+import '../../theme/tokens.dart';
 import '../../widgets/shell_backdrop_blur.dart';
 import '../system_tray_module.dart';
 import 'shelf_app_strip.dart';
@@ -53,72 +54,81 @@ class ShelfLayer extends ConsumerWidget {
     final effectiveHeight =
         height ??
         (configuredThickness > 0 ? configuredThickness : defaultThickness);
+    // The floating bar keeps the full thickness track so work-area geometry is
+    // unchanged; it only visually insets itself from the screen edges.
+    final barRadius = theme.borderRadius(ShellShapeScale.extraLarge);
 
     return SizedBox(
       height: effectiveHeight,
       width: double.infinity,
-      child: ShellBackdropBlur(
-        borderRadius: BorderRadius.zero,
-        separateChild: true,
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            color: theme.panelColor(colors.surfaceContainer),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8.0),
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                const Positioned.fill(
-                  child: Center(
+      child: Padding(
+        padding: const EdgeInsets.only(
+          left: ShellSpacing.sm,
+          right: ShellSpacing.sm,
+          bottom: ShellSpacing.sm,
+        ),
+        child: ShellBackdropBlur(
+          borderRadius: barRadius,
+          separateChild: true,
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: theme.panelColor(colors.surfaceContainer),
+              borderRadius: barRadius,
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: ShellSpacing.sm,
+              ),
+              child: Row(
+                children: [
+                  ShelfLauncherButton(
+                    key: const ValueKey('shelf-launcher-button'),
+                    onPressed: onLauncherPressed,
+                  ),
+                  const SizedBox(width: ShellSpacing.sm),
+                  // The Desk button lives on the shelf's left edge, between
+                  // the launcher and the application strip, so it never
+                  // competes with the app icons for space.
+                  ShelfWorkspaceButton(
+                    key: const ValueKey('shelf-workspace-button'),
+                    monitorId: monitorId,
+                  ),
+                  // The strip owns the leftover span: it centers itself while
+                  // everything fits and shrinks into a horizontal scroll view
+                  // when the launcher and tray clusters squeeze it, instead of
+                  // painting underneath them.
+                  const Expanded(
                     child: ShelfAppStrip(key: ValueKey('shelf-app-strip')),
                   ),
-                ),
-                Row(
-                  children: [
-                    ShelfLauncherButton(
-                      key: const ValueKey('shelf-launcher-button'),
-                      onPressed: onLauncherPressed,
-                    ),
-                    const SizedBox(width: 8.0),
-                    // The Desk button lives on the shelf's left edge, between
-                    // the launcher and the centered application strip, so it
-                    // never competes with the app icons for space.
-                    ShelfWorkspaceButton(
-                      key: const ValueKey('shelf-workspace-button'),
-                      monitorId: monitorId,
-                    ),
-                    const Spacer(),
-                    const _ShelfSystemTrayModule(),
-                    const SizedBox(width: 8.0),
-                    ValueListenableBuilder<bool>(
-                      valueListenable: trayExpanded,
-                      builder: (context, expanded, _) {
-                        final calendar = calendarExpanded;
-                        if (calendar != null) {
-                          return ValueListenableBuilder<bool>(
-                            valueListenable: calendar,
-                            builder: (context, clockExpanded, _) =>
-                                UnifiedTrayButton(
-                                  key: const ValueKey('shelf-tray-button'),
-                                  expanded: expanded,
-                                  clockExpanded: clockExpanded,
-                                  onPressed: onTrayPressed ?? () {},
-                                  onClockPressed: onClockPressed,
-                                ),
-                          );
-                        }
-                        return UnifiedTrayButton(
-                          key: const ValueKey('shelf-tray-button'),
-                          expanded: expanded,
-                          onPressed: onTrayPressed ?? () {},
-                          onClockPressed: onClockPressed,
+                  const _ShelfSystemTrayModule(),
+                  const SizedBox(width: ShellSpacing.sm),
+                  ValueListenableBuilder<bool>(
+                    valueListenable: trayExpanded,
+                    builder: (context, expanded, _) {
+                      final calendar = calendarExpanded;
+                      if (calendar != null) {
+                        return ValueListenableBuilder<bool>(
+                          valueListenable: calendar,
+                          builder: (context, clockExpanded, _) =>
+                              UnifiedTrayButton(
+                                key: const ValueKey('shelf-tray-button'),
+                                expanded: expanded,
+                                clockExpanded: clockExpanded,
+                                onPressed: onTrayPressed ?? () {},
+                                onClockPressed: onClockPressed,
+                              ),
                         );
-                      },
-                    ),
-                  ],
-                ),
-              ],
+                      }
+                      return UnifiedTrayButton(
+                        key: const ValueKey('shelf-tray-button'),
+                        expanded: expanded,
+                        onPressed: onTrayPressed ?? () {},
+                        onClockPressed: onClockPressed,
+                      );
+                    },
+                  ),
+                ],
+              ),
             ),
           ),
         ),

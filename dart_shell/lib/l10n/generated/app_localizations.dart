@@ -7239,6 +7239,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'System'**
   String get settingsNavGroupSystem;
+
+  /// Label for the shelf launcher button that opens the application grid.
+  ///
+  /// In en, this message translates to:
+  /// **'Open applications'**
+  String get shelfOpenLauncher;
 }
 
 class _AppLocalizationsDelegate

@@ -16,6 +16,7 @@ import '../services/background_worker.dart';
 import '../state/system_tray.dart';
 import '../theme/motion.dart';
 import '../theme/shell_theme.dart';
+import '../theme/tokens.dart';
 import '../widgets/app_icon.dart';
 import '../widgets/shell_cursor.dart';
 import '../widgets/shell_menu.dart';
@@ -260,7 +261,10 @@ class SystemTrayModule extends ConsumerWidget {
         children: <Widget>[
           for (var index = 0; index < items.length; index += 1) ...[
             if (index > 0)
-              SizedBox(width: horizontal ? 4 : 0, height: horizontal ? 0 : 4),
+              SizedBox(
+                width: horizontal ? ShellSpacing.xs : 0,
+                height: horizontal ? 0 : ShellSpacing.xs,
+              ),
             _SystemTrayButton(
               key: systemTrayItemButtonKey(items[index].id),
               item: items[index],
@@ -491,13 +495,15 @@ class _SystemTrayButtonState extends ConsumerState<_SystemTrayButton> {
     required bool reserveSpace,
   }) {
     if (entry.toggleType == SystemTrayMenuToggleType.none) {
-      return reserveSpace ? const SizedBox(width: 16, height: 16) : null;
+      return reserveSpace
+          ? const SizedBox.square(dimension: ShellSpacing.lg)
+          : null;
     }
     if (entry.toggleState < 0) {
-      return Icon(Icons.remove, size: 16);
+      return const Icon(Icons.remove, size: ShellSpacing.lg);
     }
     if (entry.toggleState == 0) {
-      return const SizedBox(width: 16, height: 16);
+      return const SizedBox.square(dimension: ShellSpacing.lg);
     }
     return Icon(
       entry.toggleType == SystemTrayMenuToggleType.radio
@@ -571,7 +577,7 @@ class _SystemTrayButtonState extends ConsumerState<_SystemTrayButton> {
                     unawaited(_openContextMenu(details.globalPosition)),
                 child: AnimatedContainer(
                   duration: Motion.tile,
-                  curve: Curves.easeOut,
+                  curve: Motion.standard,
                   width: 28,
                   height: 28,
                   alignment: Alignment.center,

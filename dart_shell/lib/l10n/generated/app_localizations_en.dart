@@ -4059,4 +4059,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get settingsNavGroupSystem => 'System';
+
+  @override
+  String get shelfOpenLauncher => 'Open applications';
 }
