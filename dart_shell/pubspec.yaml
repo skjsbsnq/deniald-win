@@ -10,6 +10,7 @@ environment:
   flutter: 3.44.7
 
 dependencies:
+  androidx_graphics_shapes: 1.6.1
   archive: ^3.6.1
   crypto: ^3.0.5
   dbus: ^0.7.14
@@ -22,6 +23,7 @@ dependencies:
   flutter_riverpod: ^3.3.2
   flutter_svg: ^2.3.0
   intl: ^0.20.2
+  lottie: 3.3.0
   material_color_utilities: 0.13.0
   path: ^1.9.1
   denial_wire_protocol:
@@ -57,7 +59,12 @@ flutter:
     - assets/branding/denial-dark.svg
     - assets/icons/application-default-icon.svg
     - assets/wallpapers/trails-h-accent-9-dark.png
+    - assets/weather/meteocons/lottie/
+    - assets/weather/meteocons/svg/
   fonts:
+    - family: GoogleSansFlex
+      fonts:
+        - asset: assets/fonts/GoogleSansFlex.ttf
     - family: JetBrainsMono
       fonts:
         - asset: assets/fonts/JetBrainsMono-Regular.ttf
