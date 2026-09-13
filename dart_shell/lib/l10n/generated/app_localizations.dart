@@ -7245,6 +7245,36 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Open applications'**
   String get shelfOpenLauncher;
+
+  /// Quick settings tile that switches the shell between dark and light color schemes.
+  ///
+  /// In en, this message translates to:
+  /// **'Dark theme'**
+  String get qsDarkTheme;
+
+  /// Accessible label for the tray bubble button that opens the Settings application.
+  ///
+  /// In en, this message translates to:
+  /// **'Open settings'**
+  String get trayOpenSettings;
+
+  /// Accessible label for the tray bubble button that opens the appearance settings page.
+  ///
+  /// In en, this message translates to:
+  /// **'Appearance settings'**
+  String get trayAppearanceSettings;
+
+  /// Accessible label for the brightness slider button that opens display settings.
+  ///
+  /// In en, this message translates to:
+  /// **'Display settings'**
+  String get trayDisplaySettings;
+
+  /// Accessible label for the volume slider button that opens audio settings.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio settings'**
+  String get trayAudioSettings;
 }
 
 class _AppLocalizationsDelegate

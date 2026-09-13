@@ -5494,5 +5494,15 @@
   "settingsNavGroupSystem": "System",
   "@settingsNavGroupSystem": {"description": "Navigation group heading for power, language, environment, developer, and about pages."},
   "shelfOpenLauncher": "Open applications",
-  "@shelfOpenLauncher": {"description": "Label for the shelf launcher button that opens the application grid."}
+  "@shelfOpenLauncher": {"description": "Label for the shelf launcher button that opens the application grid."},
+  "qsDarkTheme": "Dark theme",
+  "@qsDarkTheme": {"description": "Quick settings tile that switches the shell between dark and light color schemes."},
+  "trayOpenSettings": "Open settings",
+  "@trayOpenSettings": {"description": "Accessible label for the tray bubble button that opens the Settings application."},
+  "trayAppearanceSettings": "Appearance settings",
+  "@trayAppearanceSettings": {"description": "Accessible label for the tray bubble button that opens the appearance settings page."},
+  "trayDisplaySettings": "Display settings",
+  "@trayDisplaySettings": {"description": "Accessible label for the brightness slider button that opens display settings."},
+  "trayAudioSettings": "Audio settings",
+  "@trayAudioSettings": {"description": "Accessible label for the volume slider button that opens audio settings."}
 }

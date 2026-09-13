@@ -4062,4 +4062,19 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get shelfOpenLauncher => 'Open applications';
+
+  @override
+  String get qsDarkTheme => 'Dark theme';
+
+  @override
+  String get trayOpenSettings => 'Open settings';
+
+  @override
+  String get trayAppearanceSettings => 'Appearance settings';
+
+  @override
+  String get trayDisplaySettings => 'Display settings';
+
+  @override
+  String get trayAudioSettings => 'Audio settings';
 }

@@ -3896,4 +3896,19 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get shelfOpenLauncher => '打开应用';
+
+  @override
+  String get qsDarkTheme => '深色主题';
+
+  @override
+  String get trayOpenSettings => '打开设置';
+
+  @override
+  String get trayAppearanceSettings => '外观设置';
+
+  @override
+  String get trayDisplaySettings => '显示设置';
+
+  @override
+  String get trayAudioSettings => '音频设置';
 }

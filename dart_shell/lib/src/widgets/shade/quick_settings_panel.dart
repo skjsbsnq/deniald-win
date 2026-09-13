@@ -8,6 +8,8 @@ import '../../../l10n/generated/app_localizations.dart';
 import '../../input/input_layout.dart';
 import '../../localization/denial_localizations.dart';
 import '../../services/network_backend.dart';
+import '../../settings/settings_controller.dart';
+import '../../settings/shell_settings.dart';
 import '../../state/bluetooth.dart';
 import '../../state/desktop_notifications.dart';
 import '../../state/network_connectivity.dart';
@@ -136,11 +138,12 @@ class _ControlContents extends StatelessWidget {
       padding: EdgeInsets.zero,
       children: const [
         _QuickSettingsTilesSection(),
-        SizedBox(height: 14),
+        QuickSettingsModesSection(),
+        SizedBox(height: ShellSpacing.sm),
         _BrightnessRangeBar(),
-        SizedBox(height: 10),
+        SizedBox(height: ShellSpacing.sm),
         _VolumeRangeBar(),
-        SizedBox(height: 12),
+        SizedBox(height: ShellSpacing.md),
         _ShadePowerFooter(),
       ],
     );
@@ -154,7 +157,11 @@ class _QuickSettingsTilesSection extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final quickSettings = ref.watch(
       quickSettingsProvider.select(
-        (state) => (rotationLock: state.rotationLock, profile: state.profile),
+        (state) => (
+          rotationLock: state.rotationLock,
+          profile: state.profile,
+          screenshotRunning: state.screenshotRunning,
+        ),
       ),
     );
     final quickSettingsController = ref.read(quickSettingsProvider.notifier);
@@ -197,9 +204,11 @@ class _QuickSettingsTilesSection extends ConsumerWidget {
       bluetoothEnabled: bluetoothToggleEnabled,
       bluetoothBusy: bluetooth.powerChanging,
       rotationLock: quickSettings.rotationLock,
+      darkTheme: context.shellTheme.brightness == Brightness.dark,
       dnd: notificationPolicy.doNotDisturb,
       dndReady: notificationPolicy.loaded,
       profile: quickSettings.profile,
+      screenshotBusy: quickSettings.screenshotRunning,
       onToggleWifi: networkController.toggleWireless,
       onOpenWifi: () {
         ref
@@ -222,6 +231,16 @@ class _QuickSettingsTilesSection extends ConsumerWidget {
             );
       },
       onToggleRotation: quickSettingsController.toggleRotation,
+      onToggleDarkTheme: () {
+        final darkTheme = context.shellTheme.brightness == Brightness.dark;
+        ref
+            .read(shellSettingsProvider.notifier)
+            .setColorSchemePreference(
+              darkTheme
+                  ? DesktopColorSchemePreference.preferLight
+                  : DesktopColorSchemePreference.preferDark,
+            );
+      },
       onToggleDnd: notificationController.toggleDoNotDisturb,
       onCycleProfile: quickSettingsController.cycleProfile,
       onScreenshot: () {
@@ -245,13 +264,14 @@ class _BrightnessRangeBar extends ConsumerWidget {
     final controller = ref.read(quickSettingsProvider.notifier);
     return RangeBar(
       icon: Icons.brightness_6_rounded,
+      leadingIcon: Icons.brightness_6_rounded,
       value: brightness.value,
       enabled: brightness.loaded,
       activeColor: ShellTheme.of(context).accent,
       inactiveColor: context.shellColors.brightnessTrack,
       onChanged: controller.setBrightness,
       onChangeEnd: controller.commitBrightness,
-      height: 56,
+      height: 48,
     );
   }
 }
@@ -269,6 +289,7 @@ class _VolumeRangeBar extends ConsumerWidget {
     final controller = ref.read(quickSettingsProvider.notifier);
     return RangeBar(
       icon: Icons.volume_up_rounded,
+      leadingIcon: Icons.volume_up_rounded,
       value: volume.value,
       enabled: volume.loaded,
       activeColor: ShellTheme.of(context).accent,
@@ -276,7 +297,7 @@ class _VolumeRangeBar extends ConsumerWidget {
       onChangeStart: controller.beginVolumeInteraction,
       onChanged: controller.setVolume,
       onChangeEnd: controller.commitVolume,
-      height: 56,
+      height: 48,
     );
   }
 }
@@ -351,7 +372,6 @@ class _StatusPill extends StatelessWidget {
         borderRadius: context.shellTheme.borderRadius(
           ShellShapeScale.largeIncreased,
         ),
-        border: Border.all(color: context.shellColors.hairlineSoft),
       ),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),

@@ -1197,5 +1197,15 @@
   "settingsNavGroupInput": "输入",
   "settingsNavGroupSystem": "系统",
   "shelfOpenLauncher": "打开应用",
-  "@shelfOpenLauncher": {"description": "Shelf 启动器按钮的无障碍/提示文案，点击打开应用网格。"}
+  "@shelfOpenLauncher": {"description": "Shelf 启动器按钮的无障碍/提示文案，点击打开应用网格。"},
+  "qsDarkTheme": "深色主题",
+  "@qsDarkTheme": {"description": "快捷设置瓦片，切换系统深色/浅色配色。"},
+  "trayOpenSettings": "打开设置",
+  "@trayOpenSettings": {"description": "托盘气泡中打开设置应用按钮的无障碍标签。"},
+  "trayAppearanceSettings": "外观设置",
+  "@trayAppearanceSettings": {"description": "托盘气泡中打开外观设置页按钮的无障碍标签。"},
+  "trayDisplaySettings": "显示设置",
+  "@trayDisplaySettings": {"description": "亮度滑条尾端打开显示设置按钮的无障碍标签。"},
+  "trayAudioSettings": "音频设置",
+  "@trayAudioSettings": {"description": "音量滑条尾端打开音频设置按钮的无障碍标签。"}
 }
