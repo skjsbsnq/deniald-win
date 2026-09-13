@@ -7,6 +7,7 @@ import '../../../../services/weather_service.dart';
 import '../../../../settings/shell_settings.dart';
 import '../../../../theme/shell_theme.dart';
 import 'weather_hero_section.dart';
+import 'weather_meteo_icon.dart';
 import 'weather_temperature.dart';
 
 /// Horizontal scrolling forecast band: one column per upcoming hour with the
@@ -126,15 +127,25 @@ class WeatherHourlyStrip extends StatelessWidget {
                           SizedBox(
                             height: _iconZoneHeight,
                             child: Center(
-                              child: Icon(
-                                weatherConditionFor(hour.weatherCode).icon(
-                                  day: isDaylight(
-                                    hour.time,
-                                    _dayFor(hour, dayByDate),
-                                  ),
+                              child: WeatherMeteoIcon(
+                                weatherCode: hour.weatherCode,
+                                night: !isDaylight(
+                                  hour.time,
+                                  _dayFor(hour, dayByDate),
                                 ),
                                 size: 20,
-                                color: colors.textSecondary,
+                                // 24 animated players per strip is wasted
+                                // ticker pressure; the static SVG channel is
+                                // the same glyph family.
+                                animated: false,
+                                fallbackIcon:
+                                    weatherConditionFor(hour.weatherCode).icon(
+                                      day: isDaylight(
+                                        hour.time,
+                                        _dayFor(hour, dayByDate),
+                                      ),
+                                    ),
+                                fallbackIconColor: colors.textSecondary,
                               ),
                             ),
                           ),

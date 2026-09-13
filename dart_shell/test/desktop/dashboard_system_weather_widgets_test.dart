@@ -186,9 +186,10 @@ void main() {
     expect(find.text('NE'), findsOneWidget);
     expect(find.text('3 · 4.5 m/s'), findsOneWidget);
     expect(find.text('3.2'), findsOneWidget);
-    expect(find.text('Moderate'), findsOneWidget);
-    expect(find.text('42'), findsOneWidget);
-    expect(find.text('Good'), findsOneWidget);
+    // UV 3.2 and the clavis-scale AQI 35 both land in the 'Moderate' band —
+    // one chip per metric card.
+    expect(find.text('Moderate'), findsNWidgets(2));
+    expect(find.text('35'), findsOneWidget);
     expect(find.text('PM2.5 10 · PM10 20'), findsOneWidget);
     expect(find.text('1013 hPa'), findsOneWidget);
     expect(find.text('24 km'), findsOneWidget);
@@ -526,8 +527,11 @@ void main() {
     });
 
     test('airQualityIndex takes the worst sub-index', () {
-      expect(airQualityIndex(const AirQuality(pm10: 20, pm2_5: 10)), 42);
-      expect(airQualityIndex(const AirQuality(pm10: 160, pm2_5: 5)), 103);
+      // Clavis `aqiSummary`: each pollutant maps piecewise-linearly onto the
+      // [0,20,50,100,150,250] scale and the worst wins — not the US EPA
+      // sub-index table.
+      expect(airQualityIndex(const AirQuality(pm10: 20, pm2_5: 10)), 35);
+      expect(airQualityIndex(const AirQuality(pm10: 160, pm2_5: 5)), 150);
     });
 
     test('rating labels localize', () {
@@ -537,8 +541,13 @@ void main() {
       expect(uvRating(3.2, l10n, colors).$1, 'Moderate');
       expect(uvRating(6.5, l10n, colors).$1, 'High');
       expect(uvRating(11, l10n, colors).$1, 'Extreme');
-      expect(airQualityRating(42, l10n, colors).$1, 'Good');
-      expect(airQualityRating(120, l10n, colors).$1, 'Light pollution');
+      // Clavis six-band thresholds [0,20,50,100,150,250].
+      expect(airQualityRating(19, l10n, colors).$1, 'Good');
+      expect(airQualityRating(42, l10n, colors).$1, 'Moderate');
+      expect(airQualityRating(120, l10n, colors).$1, 'Unhealthy');
+      // …and the ported WeatherBlob/AQI palette hex colors.
+      expect(uvRating(3.2, l10n, colors).$2, const Color(0xFFFCC934));
+      expect(airQualityRating(42, l10n, colors).$2, const Color(0xFFFFC302));
     });
 
     test('formatVisibility switches to kilometres above 1 km', () {

@@ -3817,6 +3817,33 @@ class AppLocalizationsEn extends AppLocalizations {
   String get weatherTomorrow => 'Tomorrow';
 
   @override
+  String get weatherTrendHourly => 'Hourly trend';
+
+  @override
+  String get weatherTrendDaily => 'Daily trend';
+
+  @override
+  String get weatherUvVeryHigh => 'Very high';
+
+  @override
+  String get weatherVisibilityVeryPoor => 'Very poor';
+
+  @override
+  String get weatherVisibilityPoor => 'Poor';
+
+  @override
+  String get weatherVisibilityModerate => 'Moderate';
+
+  @override
+  String get weatherVisibilityGood => 'Good';
+
+  @override
+  String get weatherVisibilityClear => 'Clear';
+
+  @override
+  String get weatherVisibilityExcellent => 'Excellent';
+
+  @override
   String get weekdayShortMonday => 'Mo';
 
   @override

@@ -6802,6 +6802,60 @@ abstract class AppLocalizations {
   /// **'Tomorrow'**
   String get weatherTomorrow;
 
+  /// Title of the hourly forecast trend card.
+  ///
+  /// In en, this message translates to:
+  /// **'Hourly trend'**
+  String get weatherTrendHourly;
+
+  /// Title of the daily forecast trend card.
+  ///
+  /// In en, this message translates to:
+  /// **'Daily trend'**
+  String get weatherTrendDaily;
+
+  /// UV rating band.
+  ///
+  /// In en, this message translates to:
+  /// **'Very high'**
+  String get weatherUvVeryHigh;
+
+  /// Visibility rating band.
+  ///
+  /// In en, this message translates to:
+  /// **'Very poor'**
+  String get weatherVisibilityVeryPoor;
+
+  /// Visibility rating band.
+  ///
+  /// In en, this message translates to:
+  /// **'Poor'**
+  String get weatherVisibilityPoor;
+
+  /// Visibility rating band.
+  ///
+  /// In en, this message translates to:
+  /// **'Moderate'**
+  String get weatherVisibilityModerate;
+
+  /// Visibility rating band.
+  ///
+  /// In en, this message translates to:
+  /// **'Good'**
+  String get weatherVisibilityGood;
+
+  /// Visibility rating band.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear'**
+  String get weatherVisibilityClear;
+
+  /// Visibility rating band.
+  ///
+  /// In en, this message translates to:
+  /// **'Excellent'**
+  String get weatherVisibilityExcellent;
+
   /// Compact weekday symbol.
   ///
   /// In en, this message translates to:

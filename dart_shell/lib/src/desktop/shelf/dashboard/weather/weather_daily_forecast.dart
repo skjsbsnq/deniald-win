@@ -9,6 +9,7 @@ import '../../../../settings/shell_settings.dart';
 import '../../../../theme/shell_theme.dart';
 import '../../../../theme/tokens.dart';
 import 'weather_hero_section.dart';
+import 'weather_meteo_icon.dart';
 import 'weather_temperature.dart';
 
 /// Seven-day forecast list: weekday, condition icon, and a temperature range
@@ -68,10 +69,15 @@ class WeatherDailyForecast extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 8),
-                Icon(
-                  weatherConditionFor(days[i].weatherCode).icon(day: true),
-                  size: 19,
-                  color: colors.textSecondary,
+                WeatherMeteoIcon(
+                  weatherCode: days[i].weatherCode,
+                  night: false,
+                  size: 20,
+                  animated: false,
+                  fallbackIcon: weatherConditionFor(
+                    days[i].weatherCode,
+                  ).icon(day: true),
+                  fallbackIconColor: colors.textSecondary,
                 ),
                 const SizedBox(width: 10),
                 SizedBox(

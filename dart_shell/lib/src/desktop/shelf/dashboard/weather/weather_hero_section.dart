@@ -6,6 +6,8 @@ import '../../../../localization/denial_localizations.dart';
 import '../../../../services/weather_service.dart';
 import '../../../../settings/shell_settings.dart';
 import '../../../../theme/shell_theme.dart';
+import 'weather_animated_value.dart';
+import 'weather_meteo_icon.dart';
 import 'weather_temperature.dart';
 
 /// One WMO 4677 weather-code family with the icons the dashboard renders
@@ -179,15 +181,22 @@ class WeatherHeroSection extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                formatTemperature(current.temperatureC, temperatureUnit),
-                style: TextStyle(
-                  color: colors.textPrimary,
-                  fontSize: 64,
-                  fontWeight: FontWeight.w600,
-                  height: 1.0,
-
-                  decoration: TextDecoration.none,
+              // The headline temperature counts up like the clavis hero's
+              // WeatherAnimatedValue — snapped instantly while the page is
+              // parked or reduce-motion is on.
+              WeatherAnimatedValue(
+                value: current.temperatureC,
+                builder: (context, value) => Text(
+                  value == null
+                      ? '--'
+                      : formatTemperature(value, temperatureUnit),
+                  style: TextStyle(
+                    color: colors.textPrimary,
+                    fontSize: 64,
+                    fontWeight: FontWeight.w600,
+                    height: 1.0,
+                    decoration: TextDecoration.none,
+                  ),
                 ),
               ),
               const SizedBox(height: 6),
@@ -219,10 +228,13 @@ class WeatherHeroSection extends StatelessWidget {
           ),
         ),
         const SizedBox(width: 12),
-        Icon(
-          condition.icon(day: isDay),
-          size: 72,
-          color: theme.accentPalette.primary,
+        WeatherMeteoIcon(
+          weatherCode: current.weatherCode,
+          night: !isDay,
+          size: 88,
+          semanticLabel: weatherConditionLabel(l10n, current.weatherCode),
+          fallbackIcon: condition.icon(day: isDay),
+          fallbackIconColor: theme.accentPalette.primary,
         ),
       ],
     );

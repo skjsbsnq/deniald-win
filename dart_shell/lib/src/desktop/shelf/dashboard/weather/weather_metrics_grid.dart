@@ -9,7 +9,70 @@ import '../../../../services/weather_service.dart';
 import '../../../../theme/shell_color_scheme.dart';
 import '../../../../theme/shell_theme.dart';
 import '../../../../theme/tokens.dart';
-import '../system/liquid_metric_card.dart';
+import 'weather_animated_value.dart';
+import 'weather_arc_gauge.dart';
+
+// Wind severity accents, the `windAccent` six-band table of
+// `Modules/Sidebars/Dashboard/WeatherView.qml` (invalid → muted teal).
+const Color _windAccentInvalid = Color(0xFF4D8D7B);
+const List<Color> _windAccentBands = <Color>[
+  Color(0xFF72D572),
+  Color(0xFFFFCA28),
+  Color(0xFFFFA726),
+  Color(0xFFE52F35),
+  Color(0xFF99004C),
+  Color(0xFF7E0023),
+];
+
+// AQI banding, the `aqiThresholds`/`aqiPalette` tables of
+// `Modules/Sidebars/Dashboard/WeatherView.qml`.
+const List<double> _aqiThresholds = <double>[0, 20, 50, 100, 150, 250];
+const List<Color> _aqiPalette = <Color>[
+  Color(0xFF00E59B),
+  Color(0xFFFFC302),
+  Color(0xFFFF712B),
+  Color(0xFFF62A55),
+  Color(0xFFC72EAA),
+  Color(0xFF9930FF),
+];
+
+// Concentration breakpoints of the clavis `aqiSummary` pollutant table for
+// the pollutants the provider reports (ozone/NO2 have no data source here).
+const List<double> _pm25Breakpoints = <double>[0, 5, 15, 30, 60, 150];
+const List<double> _pm10Breakpoints = <double>[0, 15, 45, 80, 160, 400];
+
+// UV severity dots of `Modules/Sidebars/Dashboard/WeatherBlob.qml` — five
+// buckets (`uvIndexBucket`: <3, <6, <8, <11, else).
+const List<Color> _uvPalette = <Color>[
+  Color(0xFF6DD58C),
+  Color(0xFFFCC934),
+  Color(0xFFFA903E),
+  Color(0xFFEE675C),
+  Color(0xFFAF5CF7),
+];
+
+/// Accent color for a wind speed in m/s — six bands like the reference.
+Color weatherWindAccent(double metersPerSecond) {
+  if (!metersPerSecond.isFinite) {
+    return _windAccentInvalid;
+  }
+  if (metersPerSecond < 4) {
+    return _windAccentBands[0];
+  }
+  if (metersPerSecond < 6) {
+    return _windAccentBands[1];
+  }
+  if (metersPerSecond < 8) {
+    return _windAccentBands[2];
+  }
+  if (metersPerSecond < 10) {
+    return _windAccentBands[3];
+  }
+  if (metersPerSecond < 12) {
+    return _windAccentBands[4];
+  }
+  return _windAccentBands[5];
+}
 
 /// Six metric cards of the Weather view arranged in a two-column grid:
 /// humidity, wind, UV, air quality, pressure and visibility, sunrise and
@@ -31,9 +94,9 @@ class WeatherMetricsGrid extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
-              child: LiquidMetricCard(
+              child: _WeatherMetricCard(
                 label: l10n.weatherMetricHumidity,
-                fraction: current.humidityPercent / 100,
+                child: _HumidityPane(humidityPercent: current.humidityPercent),
               ),
             ),
             const SizedBox(width: 8),
@@ -145,6 +208,82 @@ class _WeatherMetricCard extends StatelessWidget {
   }
 }
 
+/// Ring gauge + centered rolling readout — the clavis `Weather*Card`
+/// composition (`WeatherArcGauge` + `WeatherAnimatedValue`) shrunk into the
+/// fixed 67 dp card zone. [detail] docks extra content (rating chip, units)
+/// on the right; without it the gauge centers itself.
+class _GaugePane extends StatelessWidget {
+  const _GaugePane({
+    required this.value,
+    required this.maximum,
+    required this.color,
+    required this.center,
+    this.detail,
+  });
+
+  final double value;
+  final double maximum;
+  final Color color;
+
+  /// Center content of the ring — the rolling value readout.
+  final Widget center;
+  final Widget? detail;
+
+  @override
+  Widget build(BuildContext context) {
+    final gauge = SizedBox(
+      width: 62,
+      height: 62,
+      child: WeatherArcGauge(
+        value: value,
+        maximum: maximum,
+        progressColor: color,
+        child: Padding(padding: const EdgeInsets.all(6), child: center),
+      ),
+    );
+    final detail = this.detail;
+    if (detail == null) {
+      return Center(child: gauge);
+    }
+    return Row(
+      children: [
+        gauge,
+        const SizedBox(width: 10),
+        Expanded(child: detail),
+      ],
+    );
+  }
+}
+
+class _HumidityPane extends StatelessWidget {
+  const _HumidityPane({required this.humidityPercent});
+
+  final int humidityPercent;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = context.shellTheme;
+    final colors = context.shellColors;
+    return WeatherAnimatedValue(
+      value: humidityPercent.toDouble(),
+      builder: (context, value) => _GaugePane(
+        value: value ?? 0,
+        maximum: 100,
+        color: theme.accentPalette.primary,
+        center: Text(
+          value == null ? '--' : '${value.round()}%',
+          style: TextStyle(
+            color: colors.textPrimary,
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            decoration: TextDecoration.none,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _WindPane extends StatelessWidget {
   const _WindPane({
     required this.windSpeedMs,
@@ -158,8 +297,8 @@ class _WindPane extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = context.shellTheme;
     final colors = context.shellColors;
+    final accent = weatherWindAccent(windSpeedMs);
 
     return Row(
       children: [
@@ -168,18 +307,14 @@ class _WindPane extends StatelessWidget {
           height: 38,
           decoration: BoxDecoration(
             shape: BoxShape.circle,
-            color: colors.surfaceContainerHighest,
+            color: accent.withValues(alpha: 0.18),
           ),
           child: Center(
             child: Transform.rotate(
               // Meteorological degrees say where the wind comes from; the
               // arrow points where it is blowing to.
               angle: (windDirectionDeg + 180) * math.pi / 180,
-              child: Icon(
-                Icons.navigation_rounded,
-                size: 18,
-                color: theme.accentPalette.primary,
-              ),
+              child: Icon(Icons.navigation_rounded, size: 18, color: accent),
             ),
           ),
         ),
@@ -234,25 +369,27 @@ class _UvPane extends StatelessWidget {
     final colors = context.shellColors;
     final (label, color) = uvRating(uvIndex, l10n, colors);
 
-    // Stacked so the widest rating chip can never overflow the half-width
-    // card.
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          uvIndex.toStringAsFixed(1),
+    return WeatherAnimatedValue(
+      value: uvIndex,
+      builder: (context, value) => _GaugePane(
+        value: value ?? 0,
+        maximum: 11,
+        color: color,
+        center: Text(
+          value == null ? '--' : value.toStringAsFixed(1),
           style: TextStyle(
             color: colors.textPrimary,
-            fontSize: 22,
+            fontSize: 14,
             fontWeight: FontWeight.w700,
-            height: 1.05,
             decoration: TextDecoration.none,
           ),
         ),
-        const SizedBox(height: 4),
-        _RatingChip(label: label, color: color),
-      ],
+        detail: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [_RatingChip(label: label, color: color)],
+        ),
+      ),
     );
   }
 }
@@ -281,36 +418,43 @@ class _AirQualityPane extends StatelessWidget {
     final index = airQualityIndex(airQuality!);
     final (label, color) = airQualityRating(index, l10n, colors);
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          '$index',
+    return WeatherAnimatedValue(
+      value: index.toDouble(),
+      builder: (context, value) => _GaugePane(
+        value: value ?? 0,
+        // The clavis AQI gauge saturates at the top of its 0–250 scale.
+        maximum: 250,
+        color: color,
+        center: Text(
+          value == null ? '--' : '${value.round()}',
           style: TextStyle(
             color: colors.textPrimary,
-            fontSize: 22,
+            fontSize: 14,
             fontWeight: FontWeight.w700,
-            height: 1.05,
             decoration: TextDecoration.none,
           ),
         ),
-        const SizedBox(height: 4),
-        _RatingChip(label: label, color: color),
-        const SizedBox(height: 4),
-        Text(
-          'PM2.5 ${airQuality!.pm2_5.toStringAsFixed(0)} · '
-          'PM10 ${airQuality!.pm10.toStringAsFixed(0)}',
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            color: colors.textTertiary,
-            fontSize: 11,
-            fontWeight: FontWeight.w600,
-            decoration: TextDecoration.none,
-          ),
+        detail: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _RatingChip(label: label, color: color),
+            const SizedBox(height: 4),
+            Text(
+              'PM2.5 ${airQuality!.pm2_5.toStringAsFixed(0)} · '
+              'PM10 ${airQuality!.pm10.toStringAsFixed(0)}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: colors.textTertiary,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                decoration: TextDecoration.none,
+              ),
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 }
@@ -346,6 +490,20 @@ class _PressureVisibilityPane extends StatelessWidget {
           label: l10n.weatherMetricVisibility,
           value: formatVisibility(visibilityM),
           colors: colors,
+        ),
+        const SizedBox(height: 4),
+        // Six-band wording of the clavis WeatherVisibilityCard; monochrome —
+        // the reference assigns no severity color to visibility.
+        Text(
+          visibilityRating(visibilityM, l10n),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            color: colors.textTertiary,
+            fontSize: 11,
+            fontWeight: FontWeight.w600,
+            decoration: TextDecoration.none,
+          ),
         ),
       ],
     );
@@ -511,84 +669,135 @@ int beaufortLevel(double metersPerSecond) {
   return level;
 }
 
-/// UV severity band and its semantic color.
+/// `uvIndexBucket`: <3 → 0, <6 → 1, <8 → 2, <11 → 3, else 4; -1 for
+/// unusable readings, like the reference.
+int uvIndexBucket(double uvIndex) {
+  if (!uvIndex.isFinite) {
+    return -1;
+  }
+  if (uvIndex < 3) {
+    return 0;
+  }
+  if (uvIndex < 6) {
+    return 1;
+  }
+  if (uvIndex < 8) {
+    return 2;
+  }
+  if (uvIndex < 11) {
+    return 3;
+  }
+  return 4;
+}
+
+/// UV severity band and its clavis dot color — five buckets over the
+/// `uvLevel` wording table. [colors] stays in the signature for callers
+/// that already resolve the scheme; the palette itself is the ported
+/// `WeatherBlob` table.
 (String, Color) uvRating(
   double uvIndex,
   AppLocalizations l10n,
   ShellColorScheme colors,
 ) {
-  if (uvIndex < 3) {
-    return (l10n.weatherUvLow, colors.performanceGood);
-  }
-  if (uvIndex < 6) {
-    return (l10n.weatherUvModerate, colors.performanceWarning);
-  }
-  if (uvIndex < 8) {
-    return (l10n.weatherUvHigh, colors.performanceWarning);
-  }
-  return (l10n.weatherUvExtreme, colors.performanceBad);
+  final bucket = uvIndexBucket(uvIndex) < 0 ? 0 : uvIndexBucket(uvIndex);
+  final label = switch (bucket) {
+    0 => l10n.weatherUvLow,
+    1 => l10n.weatherUvModerate,
+    2 => l10n.weatherUvHigh,
+    3 => l10n.weatherUvVeryHigh,
+    _ => l10n.weatherUvExtreme,
+  };
+  return (label, _uvPalette[bucket]);
 }
 
-/// Rating band and semantic color for a computed AQI value.
+/// Six-band visibility wording of the clavis `WeatherVisibilityCard`
+/// `descriptionText` (metre thresholds).
+String visibilityRating(double visibilityM, AppLocalizations l10n) {
+  if (visibilityM < 1000) {
+    return l10n.weatherVisibilityVeryPoor;
+  }
+  if (visibilityM < 4000) {
+    return l10n.weatherVisibilityPoor;
+  }
+  if (visibilityM < 10000) {
+    return l10n.weatherVisibilityModerate;
+  }
+  if (visibilityM < 20000) {
+    return l10n.weatherVisibilityGood;
+  }
+  if (visibilityM < 40000) {
+    return l10n.weatherVisibilityClear;
+  }
+  return l10n.weatherVisibilityExcellent;
+}
+
+/// `aqiLevelIndex`: the highest band of [_aqiThresholds] the value reaches,
+/// clamped to the six palette entries; -1 for unusable readings.
+int aqiLevelIndex(double value) {
+  if (!value.isFinite) {
+    return -1;
+  }
+  var level = 0;
+  for (var i = 0; i < _aqiThresholds.length; i++) {
+    if (value >= _aqiThresholds[i]) {
+      level = i;
+    }
+  }
+  return math.min(level, _aqiPalette.length - 1);
+}
+
+/// Rating band and clavis palette color for a computed AQI value; [colors]
+/// stays in the signature for callers that already resolve the scheme.
 (String, Color) airQualityRating(
   int index,
   AppLocalizations l10n,
   ShellColorScheme colors,
 ) {
-  if (index <= 50) {
-    return (l10n.weatherAqiGood, colors.performanceGood);
-  }
-  if (index <= 100) {
-    return (l10n.weatherAqiModerate, colors.textSecondary);
-  }
-  if (index <= 150) {
-    return (l10n.weatherAqiLightPollution, colors.performanceWarning);
-  }
-  if (index <= 200) {
-    return (l10n.weatherAqiUnhealthy, colors.performanceWarning);
-  }
-  if (index <= 300) {
-    return (l10n.weatherAqiVeryUnhealthy, colors.performanceBad);
-  }
-  return (l10n.weatherAqiHazardous, colors.performanceBad);
+  final level = aqiLevelIndex(index.toDouble());
+  final band = level < 0 ? 0 : level;
+  final label = switch (band) {
+    0 => l10n.weatherAqiGood,
+    1 => l10n.weatherAqiModerate,
+    2 => l10n.weatherAqiLightPollution,
+    3 => l10n.weatherAqiUnhealthy,
+    4 => l10n.weatherAqiVeryUnhealthy,
+    _ => l10n.weatherAqiHazardous,
+  };
+  return (label, _aqiPalette[band]);
 }
 
-/// Combined AQI: the maximum of the US EPA PM2.5 and PM10 sub-indices.
-int airQualityIndex(AirQuality airQuality) {
-  final pm25 = _subIndex(airQuality.pm2_5, const <List<double>>[
-    [0, 12.0, 0, 50],
-    [12.1, 35.4, 51, 100],
-    [35.5, 55.4, 101, 150],
-    [55.5, 150.4, 151, 200],
-    [150.5, 250.4, 201, 300],
-    [250.5, 500.4, 301, 500],
-  ]);
-  final pm10 = _subIndex(airQuality.pm10, const <List<double>>[
-    [0, 54, 0, 50],
-    [55, 154, 51, 100],
-    [155, 254, 101, 150],
-    [255, 354, 151, 200],
-    [355, 424, 201, 300],
-    [425, 604, 301, 500],
-  ]);
-  return math.max(pm25, pm10).round();
-}
-
-double _subIndex(double concentration, List<List<double>> breakpoints) {
-  for (final band in breakpoints) {
-    final low = band[0];
-    final high = band[1];
-    if (concentration <= high) {
-      if (concentration < low) {
-        // A reading can sit in the gap between EPA bands; clamp to the band
-        // floor so the sub-index stays monotonic.
-        return band[2];
-      }
-      final t = (concentration - low) / (high - low);
-      return band[2] + t * (band[3] - band[2]);
+/// `pollutantIndex`: piecewise-linear map of a concentration onto the
+/// clavis AQI scale ([_aqiThresholds]); NaN for unusable readings.
+double _pollutantIndex(double concentration, List<double> breakpoints) {
+  if (!concentration.isFinite) {
+    return double.nan;
+  }
+  var level = -1;
+  for (var i = 0; i < breakpoints.length; i++) {
+    if (concentration >= breakpoints[i]) {
+      level = i;
     }
   }
-  return 500;
+  if (level < 0) {
+    return double.nan;
+  }
+  if (level < breakpoints.length - 1) {
+    final bpLo = breakpoints[level];
+    final bpHi = breakpoints[level + 1];
+    final inLo = _aqiThresholds[level];
+    final inHi = _aqiThresholds[level + 1];
+    return ((inHi - inLo) / (bpHi - bpLo)) * (concentration - bpLo) + inLo;
+  }
+  return concentration * _aqiThresholds.last / breakpoints.last;
+}
+
+/// `aqiSummary`: the worst clavis AQI over the reported pollutants — the
+/// 0–250 scale of the reference, not the US EPA sub-indices.
+int airQualityIndex(AirQuality airQuality) {
+  final pm25 = _pollutantIndex(airQuality.pm2_5, _pm25Breakpoints);
+  final pm10 = _pollutantIndex(airQuality.pm10, _pm10Breakpoints);
+  final worst = math.max(pm25.isFinite ? pm25 : 0, pm10.isFinite ? pm10 : 0);
+  return worst.round();
 }
 
 /// Visibility in km above 1 km, otherwise metres.

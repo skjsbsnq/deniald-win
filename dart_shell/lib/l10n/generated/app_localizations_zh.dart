@@ -3656,6 +3656,33 @@ class AppLocalizationsZh extends AppLocalizations {
   String get weatherTomorrow => '明天';
 
   @override
+  String get weatherTrendHourly => '逐小时趋势';
+
+  @override
+  String get weatherTrendDaily => '逐日趋势';
+
+  @override
+  String get weatherUvVeryHigh => '很高';
+
+  @override
+  String get weatherVisibilityVeryPoor => '极差';
+
+  @override
+  String get weatherVisibilityPoor => '差';
+
+  @override
+  String get weatherVisibilityModerate => '一般';
+
+  @override
+  String get weatherVisibilityGood => '良好';
+
+  @override
+  String get weatherVisibilityClear => '清晰';
+
+  @override
+  String get weatherVisibilityExcellent => '极佳';
+
+  @override
   String get weekdayShortMonday => '一';
 
   @override

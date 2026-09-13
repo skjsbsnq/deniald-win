@@ -5204,6 +5204,42 @@
   "@weatherTomorrow": {
     "description": "Forecast row label."
   },
+  "weatherTrendHourly": "Hourly trend",
+  "@weatherTrendHourly": {
+    "description": "Title of the hourly forecast trend card."
+  },
+  "weatherTrendDaily": "Daily trend",
+  "@weatherTrendDaily": {
+    "description": "Title of the daily forecast trend card."
+  },
+  "weatherUvVeryHigh": "Very high",
+  "@weatherUvVeryHigh": {
+    "description": "UV rating band."
+  },
+  "weatherVisibilityVeryPoor": "Very poor",
+  "@weatherVisibilityVeryPoor": {
+    "description": "Visibility rating band."
+  },
+  "weatherVisibilityPoor": "Poor",
+  "@weatherVisibilityPoor": {
+    "description": "Visibility rating band."
+  },
+  "weatherVisibilityModerate": "Moderate",
+  "@weatherVisibilityModerate": {
+    "description": "Visibility rating band."
+  },
+  "weatherVisibilityGood": "Good",
+  "@weatherVisibilityGood": {
+    "description": "Visibility rating band."
+  },
+  "weatherVisibilityClear": "Clear",
+  "@weatherVisibilityClear": {
+    "description": "Visibility rating band."
+  },
+  "weatherVisibilityExcellent": "Excellent",
+  "@weatherVisibilityExcellent": {
+    "description": "Visibility rating band."
+  },
   "weekdayShortMonday": "Mo",
   "@weekdayShortMonday": {
     "description": "Compact weekday symbol."
