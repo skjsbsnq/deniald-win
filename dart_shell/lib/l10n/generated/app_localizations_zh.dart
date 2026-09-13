@@ -3919,4 +3919,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String weatherHeroHighLow(String high, String low) {
     return '最高 $high · 最低 $low';
   }
+
+  @override
+  String get widgetQuickActionsLabel => '快捷操作';
 }

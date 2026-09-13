@@ -1209,5 +1209,6 @@
   "trayAudioSettings": "音频设置",
   "@trayAudioSettings": {"description": "音量滑条尾端打开音频设置按钮的无障碍标签。"},
   "weatherSegmentConditions": "天气",
-  "weatherHeroHighLow": "最高 {high} · 最低 {low}"
+  "weatherHeroHighLow": "最高 {high} · 最低 {low}",
+  "widgetQuickActionsLabel": "快捷操作"
 }

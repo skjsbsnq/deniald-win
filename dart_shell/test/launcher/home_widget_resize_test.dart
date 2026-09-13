@@ -5,6 +5,7 @@ import 'package:denial_dart_shell/src/launcher/widgets/home_app_page.dart';
 import 'package:denial_dart_shell/src/launcher/widgets/home_tiles.dart';
 import 'package:denial_dart_shell/src/localization/denial_localizations.dart';
 import 'package:denial_dart_shell/src/theme/shell_theme.dart';
+import 'package:denial_dart_shell/src/widgets/desktop_widgets/desktop_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -180,7 +181,7 @@ void main() {
     expect(find.byIcon(Icons.open_in_full_rounded), findsNothing);
     // Long-pressing a resizable tile is what requests resize mode in the
     // first place; it must not be mistaken for an item move.
-    final tileCenter = tester.getCenter(find.byType(HomeClockWidget));
+    final tileCenter = tester.getCenter(find.byType(BlobClockWidget));
     final pointer = await tester.startGesture(tileCenter);
     await tester.pump(const Duration(milliseconds: 600));
     expect(events.resizeModeStarts, 1);

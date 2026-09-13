@@ -1,7 +1,18 @@
 import '../../local_apps/local_flutter_application.dart';
 import 'desktop_app.dart';
 
-enum HomeGridItemType { clock, batteryDischarge, app }
+enum HomeGridItemType {
+  clock,
+  batteryDischarge,
+  app,
+
+  /// MD3E blob widget family (T23): weather snapshot, compact battery, and
+  /// the quick-action pill row. Purely additive — persisted layouts carry
+  /// item ids as strings, so older saves keep resolving exactly as before.
+  weather,
+  battery,
+  quickActions,
+}
 
 class HomeLayoutSlot {
   const HomeLayoutSlot({required this.id, this.colSpan, this.rowSpan});
@@ -75,6 +86,52 @@ class HomeGridItem {
     );
   }
 
+  factory HomeGridItem.weather({
+    int colSpan = defaultWeatherColSpan,
+    int rowSpan = defaultWeatherRowSpan,
+  }) {
+    return HomeGridItem._(
+      type: HomeGridItemType.weather,
+      id: 'widget:weather',
+      colSpan: colSpan.clamp(weatherMinColSpan, weatherMaxColSpan).toInt(),
+      rowSpan: rowSpan.clamp(weatherMinRowSpan, weatherMaxRowSpan).toInt(),
+      app: null,
+      localApp: null,
+    );
+  }
+
+  factory HomeGridItem.battery({
+    int colSpan = defaultBatteryColSpan,
+    int rowSpan = defaultBatteryRowSpan,
+  }) {
+    return HomeGridItem._(
+      type: HomeGridItemType.battery,
+      id: 'widget:battery',
+      colSpan: colSpan.clamp(batteryMinColSpan, batteryMaxColSpan).toInt(),
+      rowSpan: rowSpan.clamp(batteryMinRowSpan, batteryMaxRowSpan).toInt(),
+      app: null,
+      localApp: null,
+    );
+  }
+
+  factory HomeGridItem.quickActions({
+    int colSpan = defaultQuickActionsColSpan,
+    int rowSpan = defaultQuickActionsRowSpan,
+  }) {
+    return HomeGridItem._(
+      type: HomeGridItemType.quickActions,
+      id: 'widget:quick-actions',
+      colSpan: colSpan
+          .clamp(quickActionsMinColSpan, quickActionsMaxColSpan)
+          .toInt(),
+      rowSpan: rowSpan
+          .clamp(quickActionsMinRowSpan, quickActionsMaxRowSpan)
+          .toInt(),
+      app: null,
+      localApp: null,
+    );
+  }
+
   static const int defaultClockColSpan = 2;
   static const int defaultClockRowSpan = 1;
   static const int clockMinColSpan = 2;
@@ -87,6 +144,24 @@ class HomeGridItem {
   static const int batteryDischargeMaxColSpan = 4;
   static const int batteryDischargeMinRowSpan = 1;
   static const int batteryDischargeMaxRowSpan = 3;
+  static const int defaultWeatherColSpan = 2;
+  static const int defaultWeatherRowSpan = 1;
+  static const int weatherMinColSpan = 2;
+  static const int weatherMaxColSpan = 4;
+  static const int weatherMinRowSpan = 1;
+  static const int weatherMaxRowSpan = 2;
+  static const int defaultBatteryColSpan = 2;
+  static const int defaultBatteryRowSpan = 1;
+  static const int batteryMinColSpan = 1;
+  static const int batteryMaxColSpan = 2;
+  static const int batteryMinRowSpan = 1;
+  static const int batteryMaxRowSpan = 2;
+  static const int defaultQuickActionsColSpan = 4;
+  static const int defaultQuickActionsRowSpan = 1;
+  static const int quickActionsMinColSpan = 3;
+  static const int quickActionsMaxColSpan = 4;
+  static const int quickActionsMinRowSpan = 1;
+  static const int quickActionsMaxRowSpan = 1;
 
   final HomeGridItemType type;
   final String id;
@@ -101,6 +176,9 @@ class HomeGridItem {
     return switch (type) {
       HomeGridItemType.clock => clockMinColSpan,
       HomeGridItemType.batteryDischarge => batteryDischargeMinColSpan,
+      HomeGridItemType.weather => weatherMinColSpan,
+      HomeGridItemType.battery => batteryMinColSpan,
+      HomeGridItemType.quickActions => quickActionsMinColSpan,
       HomeGridItemType.app => 1,
     };
   }
@@ -109,6 +187,9 @@ class HomeGridItem {
     return switch (type) {
       HomeGridItemType.clock => clockMaxColSpan,
       HomeGridItemType.batteryDischarge => batteryDischargeMaxColSpan,
+      HomeGridItemType.weather => weatherMaxColSpan,
+      HomeGridItemType.battery => batteryMaxColSpan,
+      HomeGridItemType.quickActions => quickActionsMaxColSpan,
       HomeGridItemType.app => 1,
     };
   }
@@ -117,6 +198,9 @@ class HomeGridItem {
     return switch (type) {
       HomeGridItemType.clock => clockMinRowSpan,
       HomeGridItemType.batteryDischarge => batteryDischargeMinRowSpan,
+      HomeGridItemType.weather => weatherMinRowSpan,
+      HomeGridItemType.battery => batteryMinRowSpan,
+      HomeGridItemType.quickActions => quickActionsMinRowSpan,
       HomeGridItemType.app => 1,
     };
   }
@@ -125,6 +209,9 @@ class HomeGridItem {
     return switch (type) {
       HomeGridItemType.clock => clockMaxRowSpan,
       HomeGridItemType.batteryDischarge => batteryDischargeMaxRowSpan,
+      HomeGridItemType.weather => weatherMaxRowSpan,
+      HomeGridItemType.battery => batteryMaxRowSpan,
+      HomeGridItemType.quickActions => quickActionsMaxRowSpan,
       HomeGridItemType.app => 1,
     };
   }
@@ -139,6 +226,18 @@ class HomeGridItem {
         rowSpan: rowSpan,
       ),
       HomeGridItemType.batteryDischarge => HomeGridItem.batteryDischarge(
+        colSpan: colSpan,
+        rowSpan: rowSpan,
+      ),
+      HomeGridItemType.weather => HomeGridItem.weather(
+        colSpan: colSpan,
+        rowSpan: rowSpan,
+      ),
+      HomeGridItemType.battery => HomeGridItem.battery(
+        colSpan: colSpan,
+        rowSpan: rowSpan,
+      ),
+      HomeGridItemType.quickActions => HomeGridItem.quickActions(
         colSpan: colSpan,
         rowSpan: rowSpan,
       ),

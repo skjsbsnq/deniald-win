@@ -4085,4 +4085,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String weatherHeroHighLow(String high, String low) {
     return 'H $high · L $low';
   }
+
+  @override
+  String get widgetQuickActionsLabel => 'Quick actions';
 }

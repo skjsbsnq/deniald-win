@@ -7287,6 +7287,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'H {high} · L {low}'**
   String weatherHeroHighLow(String high, String low);
+
+  /// Accessible label for the desktop widget pill row that hosts quick actions (screenshot, do not disturb, lock, settings, power).
+  ///
+  /// In en, this message translates to:
+  /// **'Quick actions'**
+  String get widgetQuickActionsLabel;
 }
 
 class _AppLocalizationsDelegate

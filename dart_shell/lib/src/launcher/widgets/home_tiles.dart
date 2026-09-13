@@ -8,6 +8,7 @@ import '../../localization/denial_localizations.dart';
 import '../../theme/shell_theme.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/app_icon.dart';
+import '../../widgets/desktop_widgets/desktop_widgets.dart';
 import '../controllers/home_grid_controller.dart';
 import '../models/home_battery_discharge_info.dart';
 import '../models/home_clock_info.dart';
@@ -32,7 +33,7 @@ class HomeGridItemCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return switch (item.type) {
-      HomeGridItemType.clock => HomeClockWidget(
+      HomeGridItemType.clock => BlobClockWidget(
         clock: ref.watch(homeClockProvider),
       ),
       HomeGridItemType.batteryDischarge => _HomeBatteryDischargeTile(
@@ -40,6 +41,9 @@ class HomeGridItemCard extends ConsumerWidget {
             ref.watch(homeBatteryDischargeProvider).asData?.value ??
             HomeBatteryDischargeSeries.empty,
       ),
+      HomeGridItemType.weather => const BlobWeatherWidget(),
+      HomeGridItemType.battery => const BlobBatteryWidget(),
+      HomeGridItemType.quickActions => const QuickActionPillRow(),
       HomeGridItemType.app => _HomeAppTile(
         name: item.localApp?.titleFor(context) ?? item.app!.name,
         iconPath: item.app?.iconPath,

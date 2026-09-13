@@ -5514,5 +5514,7 @@
       "high": {"type": "String"},
       "low": {"type": "String"}
     }
-  }
+  },
+  "widgetQuickActionsLabel": "Quick actions",
+  "@widgetQuickActionsLabel": {"description": "Accessible label for the desktop widget pill row that hosts quick actions (screenshot, do not disturb, lock, settings, power)."}
 }
