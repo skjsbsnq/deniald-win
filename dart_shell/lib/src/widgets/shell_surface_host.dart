@@ -309,26 +309,32 @@ class _ManagedShellSurfaceLayerState
 
     return IgnorePointer(
       ignoring: surface.closing,
-      child: FadeTransition(
-        opacity: _opacity,
-        child: FocusScope(
-          node: _focusScopeNode,
-          onKeyEvent: (_, event) {
-            if (dismissOnEscape &&
-                event is KeyDownEvent &&
-                event.logicalKey == LogicalKeyboardKey.escape) {
-              handle.close();
-              return KeyEventResult.handled;
-            }
-            return KeyEventResult.ignored;
-          },
-          child: Semantics(
-            scopesRoute: true,
-            explicitChildNodes: true,
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                GestureDetector(
+      child: FocusScope(
+        node: _focusScopeNode,
+        onKeyEvent: (_, event) {
+          if (dismissOnEscape &&
+              event is KeyDownEvent &&
+              event.logicalKey == LogicalKeyboardKey.escape) {
+            handle.close();
+            return KeyEventResult.handled;
+          }
+          return KeyEventResult.ignored;
+        },
+        child: Semantics(
+          scopesRoute: true,
+          explicitChildNodes: true,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              // Only the scrim fades. The surface subtree usually contains a
+              // ShellBackdropBlur, and fading it composites the blurred glass
+              // at partial alpha — the panel reads as transparent first and
+              // the blur appears to arrive late. The surface therefore opens
+              // at full opacity (scale still carries the entrance motion) and
+              // keeps the fade only on the way out.
+              FadeTransition(
+                opacity: _opacity,
+                child: GestureDetector(
                   behavior: HitTestBehavior.opaque,
                   onTap: dismissOnOutside ? handle.close : null,
                   child: ColoredBox(
@@ -337,12 +343,17 @@ class _ManagedShellSurfaceLayerState
                         context.shellColors.overviewScrim,
                   ),
                 ),
-                ScaleTransition(
+              ),
+              FadeTransition(
+                opacity: surface.closing
+                    ? _opacity
+                    : const AlwaysStoppedAnimation<double>(1.0),
+                child: ScaleTransition(
                   scale: _scale,
                   child: surface.builder(context, handle),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),

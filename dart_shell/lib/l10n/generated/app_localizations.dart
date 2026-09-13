@@ -2999,6 +2999,18 @@ abstract class AppLocalizations {
   /// **'Card opacity'**
   String get settingsCardOpacity;
 
+  /// Non-blocking banner shown when a settings change is rejected while the settings store stays reachable.
+  ///
+  /// In en, this message translates to:
+  /// **'The latest change could not be saved.'**
+  String get settingsChangeSaveFailed;
+
+  /// Accessible label for dismissing the settings save-failure banner without retrying.
+  ///
+  /// In en, this message translates to:
+  /// **'Dismiss save failure'**
+  String get settingsChangeSaveFailedDismiss;
+
   /// English UI text for settingsClockScale.
   ///
   /// In en, this message translates to:

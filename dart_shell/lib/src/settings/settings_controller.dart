@@ -32,17 +32,30 @@ final shellSettingsProvider =
 enum ShellSettingsSyncPhase { loading, ready, failed }
 
 class ShellSettingsSyncStatus {
-  const ShellSettingsSyncStatus(this.phase);
+  const ShellSettingsSyncStatus(this.phase, {this.writeFailure});
 
   const ShellSettingsSyncStatus.loading()
-    : phase = ShellSettingsSyncPhase.loading;
+    : phase = ShellSettingsSyncPhase.loading,
+      writeFailure = null;
 
-  const ShellSettingsSyncStatus.ready() : phase = ShellSettingsSyncPhase.ready;
+  const ShellSettingsSyncStatus.ready()
+    : phase = ShellSettingsSyncPhase.ready,
+      writeFailure = null;
 
   const ShellSettingsSyncStatus.failed()
-    : phase = ShellSettingsSyncPhase.failed;
+    : phase = ShellSettingsSyncPhase.failed,
+      writeFailure = null;
+
+  const ShellSettingsSyncStatus.writeRejected(Object error)
+    : phase = ShellSettingsSyncPhase.ready,
+      writeFailure = error;
 
   final ShellSettingsSyncPhase phase;
+
+  /// Set when a committed-state write was rejected while the settings store
+  /// stayed readable. The surface keeps running and reports the failure
+  /// locally instead of collapsing to the unavailable state.
+  final Object? writeFailure;
 }
 
 final shellSettingsSyncStatusProvider =
@@ -61,6 +74,19 @@ class ShellSettingsSyncStatusController
   void markReady() => state = const ShellSettingsSyncStatus.ready();
 
   void markFailed() => state = const ShellSettingsSyncStatus.failed();
+
+  void markWriteFailed(Object error) {
+    if (state.phase != ShellSettingsSyncPhase.ready) {
+      return;
+    }
+    state = ShellSettingsSyncStatus.writeRejected(error);
+  }
+
+  void clearWriteFailure() {
+    if (state.writeFailure != null) {
+      state = ShellSettingsSyncStatus(state.phase);
+    }
+  }
 }
 
 class ShellSettingsController extends Notifier<ShellSettings> {
@@ -78,6 +104,7 @@ class ShellSettingsController extends Notifier<ShellSettings> {
   late ShellSettings _latestSettings;
   late Completer<void> _initialLoad;
   final Map<String, Object?> _pendingMutationPatch = <String, Object?>{};
+  ShellSettings? _rejectedWrite;
   SystemThemePropagation? _systemThemePropagation;
   ShellAppearanceSettings? _lastPropagatedAppearance;
 
@@ -661,10 +688,44 @@ class ShellSettingsController extends Notifier<ShellSettings> {
     final written = state;
     final committedPatch = _copySettingsPatch(_pendingMutationPatch);
     await _store.write(written);
+    _rejectedWrite = null;
+    if (ref.mounted) {
+      ref
+          .read(shellSettingsSyncStatusProvider.notifier)
+          .clearWriteFailure();
+    }
     _removeCommittedSettingsPatch(_pendingMutationPatch, committedPatch);
     if (_pendingMutationPatch.isEmpty) {
       _writeTimer?.cancel();
       _writeTimer = null;
+    }
+  }
+
+  /// Re-applies the settings snapshot whose last write was rejected while the
+  /// store stayed readable, scheduling another store write.
+  void retryFailedWrite() {
+    final rejected = _rejectedWrite;
+    if (rejected == null) {
+      return;
+    }
+    _rejectedWrite = null;
+    if (ref.mounted) {
+      ref
+          .read(shellSettingsSyncStatusProvider.notifier)
+          .clearWriteFailure();
+    }
+    _update(rejected);
+  }
+
+  /// Drops the retained rejected-write snapshot and clears the local write
+  /// failure report. The authoritative state already restored by the failed
+  /// write stays active.
+  void dismissWriteFailure() {
+    _rejectedWrite = null;
+    if (ref.mounted) {
+      ref
+          .read(shellSettingsSyncStatusProvider.notifier)
+          .clearWriteFailure();
     }
   }
 
@@ -781,25 +842,40 @@ class ShellSettingsController extends Notifier<ShellSettings> {
 
   Future<void> _writeSafely() async {
     final writeSerial = _mutationSerial;
+    final rejected = state;
     try {
       await flush();
-    } on Object {
+    } on Object catch (error) {
       if (writeSerial != _mutationSerial) {
         return;
       }
+      ShellSettings? restored;
+      var rollbackReadable = false;
       try {
-        final restored = await _store.read();
-        if (writeSerial == _mutationSerial && restored != null) {
-          _pendingMutationPatch.clear();
-          _hasAuthoritativeState = true;
-          state = restored;
-          _latestSettings = restored;
-        }
+        restored = await _store.read();
+        rollbackReadable = true;
       } on Object {
         // The failed write remains the primary error. Retain the optimistic
         // state if the authoritative rollback cannot be read either.
       }
+      if (writeSerial != _mutationSerial) {
+        return;
+      }
       if (!ref.mounted) {
+        return;
+      }
+      if (rollbackReadable && restored != null) {
+        // The store still answers: the rejected change rolls back to the
+        // authoritative snapshot and the failure stays local to this change
+        // instead of taking the whole surface down.
+        _pendingMutationPatch.clear();
+        _hasAuthoritativeState = true;
+        state = restored;
+        _latestSettings = restored;
+        _rejectedWrite = rejected;
+        ref
+            .read(shellSettingsSyncStatusProvider.notifier)
+            .markWriteFailed(error);
         return;
       }
       ref.read(shellSettingsSyncStatusProvider.notifier).markFailed();

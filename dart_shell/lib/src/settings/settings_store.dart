@@ -59,6 +59,7 @@ class NativeSettingsStore
   final SettingsDocumentTransport _transport;
   Future<void> _writeQueue = Future<void>.value();
   int _revision = 0;
+  int? _documentVersion;
 
   @override
   Stream<DenialSettingsDocument> get settingsDocumentUpdates =>
@@ -81,25 +82,41 @@ class NativeSettingsStore
     if (_revision <= 0) {
       await _readDocument();
     }
-    final payload =
-        '${const JsonEncoder.withIndent('  ').convert(settings.toJson())}\n';
     try {
       final response = await _transport.write(
         expectedRevision: _revision,
-        document: payload,
+        document: _encodeShellDocument(settings),
       );
       _revision = response.revision;
     } on StateError {
       // A keyboard update and a shell preference can be committed in either
       // order. Refresh the token and replay the shell projection once; Rust
-      // preserves the native-owned keyboard section during this write.
+      // preserves the native-owned keyboard section during this write. The
+      // payload is re-encoded so a schema version learned from the refreshed
+      // document reaches the retried write.
       await _readDocument();
       final response = await _transport.write(
         expectedRevision: _revision,
-        document: payload,
+        document: _encodeShellDocument(settings),
       );
       _revision = response.revision;
     }
+  }
+
+  /// Encodes the shell projection for `settings.document.apply`.
+  ///
+  /// The compositor validates and owns the shared document, including its
+  /// schema version. Shell-written payloads echo the version of the last
+  /// authoritative document instead of [ShellSettings.schemaVersion], so a
+  /// compositor built at a different schema revision still accepts the write.
+  /// Without a remembered document the shell's own version is emitted.
+  String _encodeShellDocument(ShellSettings settings) {
+    final json = settings.toJson();
+    final documentVersion = _documentVersion;
+    if (documentVersion != null) {
+      json['version'] = documentVersion;
+    }
+    return '${const JsonEncoder.withIndent('  ').convert(json)}\n';
   }
 
   Future<DenialSettingsDocument> _readDocument() async {
@@ -113,7 +130,27 @@ class NativeSettingsStore
     if (document.revision > _revision) {
       _revision = document.revision;
     }
+    final version = _documentVersionOf(document.json);
+    if (version != null) {
+      _documentVersion = version;
+    }
     return document;
+  }
+
+  static int? _documentVersionOf(String json) {
+    try {
+      final decoded = jsonDecode(json);
+      if (decoded is Map<String, dynamic>) {
+        final version = decoded['version'];
+        if (version is int && version > 0) {
+          return version;
+        }
+      }
+    } on Object {
+      // Malformed documents are surfaced by read() and the update stream;
+      // the version probe stays best effort.
+    }
+    return null;
   }
 
   ShellSettings _decode(DenialSettingsDocument document) {

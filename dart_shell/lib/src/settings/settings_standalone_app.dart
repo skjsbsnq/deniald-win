@@ -171,6 +171,22 @@ class _DenialSettingsStandaloneContentState
                     );
                   },
                 ),
+              if (syncStatus.writeFailure != null)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 20,
+                  child: Center(
+                    child: _SettingsWriteFailureBanner(
+                      onRetry: () => ref
+                          .read(shellSettingsProvider.notifier)
+                          .retryFailedWrite(),
+                      onDismiss: () => ref
+                          .read(shellSettingsProvider.notifier)
+                          .dismissWriteFailure(),
+                    ),
+                  ),
+                ),
             ],
           ),
         ),
@@ -226,6 +242,66 @@ class _SettingsSynchronizationLoading extends StatelessWidget {
       child: Center(
         child: SettingsLoadingIndicator(
           semanticsLabel: AppLocalizations.of(context).commonLoading,
+        ),
+      ),
+    );
+  }
+}
+
+/// Non-blocking banner shown when one settings write is rejected but the
+/// store stays reachable — the change already rolled back to the
+/// authoritative snapshot, so the app keeps working while the user can
+/// retry or dismiss the report.
+class _SettingsWriteFailureBanner extends StatelessWidget {
+  const _SettingsWriteFailureBanner({
+    required this.onRetry,
+    required this.onDismiss,
+  });
+
+  final VoidCallback onRetry;
+  final VoidCallback onDismiss;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final colors = context.shellColors;
+    return Semantics(
+      liveRegion: true,
+      child: Container(
+        constraints: const BoxConstraints(maxWidth: 460),
+        padding: const EdgeInsets.only(left: 16, right: 8),
+        decoration: BoxDecoration(
+          color: colors.surfaceContainerHigh,
+          borderRadius: context.shellTheme.borderRadius(
+            ShellShapeScale.large,
+          ),
+          border: Border.all(color: colors.hairlineSoft),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.error_outline_rounded,
+              size: 20,
+              color: Theme.of(context).colorScheme.error,
+            ),
+            const SizedBox(width: 10),
+            Flexible(
+              child: Text(
+                l10n.settingsChangeSaveFailed,
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ),
+            TextButton(
+              onPressed: onRetry,
+              child: Text(l10n.commonRetry),
+            ),
+            IconButton(
+              tooltip: l10n.settingsChangeSaveFailedDismiss,
+              onPressed: onDismiss,
+              icon: const Icon(Icons.close_rounded, size: 18),
+            ),
+          ],
         ),
       ),
     );

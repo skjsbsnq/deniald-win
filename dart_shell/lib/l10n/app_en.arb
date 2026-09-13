@@ -2361,6 +2361,14 @@
   "@settingsCardOpacity": {
     "description": "Opacity of card backgrounds inside shell panels and Settings."
   },
+  "settingsChangeSaveFailed": "The latest change could not be saved.",
+  "@settingsChangeSaveFailed": {
+    "description": "Non-blocking banner shown when a settings change is rejected while the settings store stays reachable."
+  },
+  "settingsChangeSaveFailedDismiss": "Dismiss save failure",
+  "@settingsChangeSaveFailedDismiss": {
+    "description": "Accessible label for dismissing the settings save-failure banner without retrying."
+  },
   "settingsClockScale": "Clock scale",
   "@settingsClockScale": {
     "description": "English UI text for settingsClockScale."

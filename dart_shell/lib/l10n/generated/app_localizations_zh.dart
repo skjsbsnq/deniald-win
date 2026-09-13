@@ -1614,6 +1614,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get settingsCardOpacity => '卡片不透明度';
 
   @override
+  String get settingsChangeSaveFailed => '无法保存最近的更改。';
+
+  @override
+  String get settingsChangeSaveFailedDismiss => '忽略保存失败提示';
+
+  @override
   String get settingsClockScale => '时钟缩放';
 
   @override

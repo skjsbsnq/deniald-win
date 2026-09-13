@@ -476,6 +476,8 @@
   "settingsBluetoothUnavailable": "蓝牙控件不可用。",
   "settingsBrightness": "亮度",
   "settingsCardOpacity": "卡片不透明度",
+  "settingsChangeSaveFailed": "无法保存最近的更改。",
+  "settingsChangeSaveFailedDismiss": "忽略保存失败提示",
   "settingsClockScale": "时钟缩放",
   "settingsCloseEffectExplosion": "爆炸",
   "settingsCloseEffectFade": "淡出",

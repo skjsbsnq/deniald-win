@@ -1672,6 +1672,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get settingsCardOpacity => 'Card opacity';
 
   @override
+  String get settingsChangeSaveFailed =>
+      'The latest change could not be saved.';
+
+  @override
+  String get settingsChangeSaveFailedDismiss => 'Dismiss save failure';
+
+  @override
   String get settingsClockScale => 'Clock scale';
 
   @override
