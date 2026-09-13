@@ -31,9 +31,16 @@ class _HomeBatteryDischargeTile extends StatelessWidget {
             .clamp(24.0, 44.0)
             .toDouble();
 
-        return DesktopBlobContainer(
-          shape: DesktopBlobShape.softBurst,
-          color: context.shellColors.surfaceContainerLow,
+        return DecoratedBox(
+          decoration: BoxDecoration(
+            color: context.shellTheme.cardColor(
+              context.shellColors.surfaceContainerLow,
+            ),
+            borderRadius: context.shellTheme.borderRadius(
+              ShellShapeScale.small,
+            ),
+            border: Border.all(color: ShellMediaColors.lightOutline),
+          ),
           child: Padding(
             padding: EdgeInsets.fromLTRB(
               compact ? 12 : 16,

@@ -12,24 +12,108 @@ abstract final class _GlyphRadii {
   static const double signalBar = 1.5;
 }
 
-/// The battery pictogram alone: outline, cap, and level fill. Shared by
-/// [BatteryMark] (which appends a percentage label) and [BatteryIconMark]
-/// (glyph only).
-class _BatteryGlyph extends StatelessWidget {
-  const _BatteryGlyph({
+/// Battery pictogram with a level fill and a percentage label.
+class BatteryMark extends StatelessWidget {
+  const BatteryMark({
+    super.key,
     required this.status,
-    required this.scale,
-    required this.foreground,
+    this.scale = 1.0,
+    this.color,
   });
 
   final BatteryStatus status;
   final double scale;
-  final Color foreground;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
     final level = ((status.capacity ?? 64) / 100.0).clamp(0.0, 1.0);
-    final foreground = this.foreground;
+    final foreground = color ?? context.shellColors.textPrimary;
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        SizedBox(
+          width: 24 * scale,
+          height: 12 * scale,
+          child: Stack(
+            children: [
+              Positioned.fill(
+                right: 3 * scale,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    border: Border.all(color: foreground, width: 1.4 * scale),
+                    borderRadius: context.shellTheme.borderRadius(
+                      _GlyphRadii.batteryOuter * scale,
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                right: 0,
+                top: 4 * scale,
+                width: 2 * scale,
+                height: 4 * scale,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: foreground,
+                    borderRadius: context.shellTheme.borderRadius(
+                      _GlyphRadii.batteryCap * scale,
+                    ),
+                  ),
+                ),
+              ),
+              Positioned(
+                left: 2 * scale,
+                top: 2 * scale,
+                bottom: 2 * scale,
+                width: 17 * scale * level,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: foreground,
+                    borderRadius: context.shellTheme.borderRadius(
+                      _GlyphRadii.batteryFill * scale,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(width: 5 * scale),
+        Text(
+          status.capacity == null
+              ? context.l10n.batteryCapacityUnavailable
+              : context.l10n.percentCompact(status.capacity!),
+          style: TextStyle(
+            color: foreground,
+            fontSize: 12 * scale,
+            height: 1,
+            fontWeight: FontWeight.w800,
+            decoration: TextDecoration.none,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class BatteryIconMark extends StatelessWidget {
+  const BatteryIconMark({
+    super.key,
+    required this.status,
+    this.scale = 1.0,
+    this.color,
+  });
+
+  final BatteryStatus status;
+  final double scale;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    final level = ((status.capacity ?? 64) / 100.0).clamp(0.0, 1.0);
+    final foreground = color ?? context.shellColors.textPrimary;
 
     return SizedBox(
       width: 24 * scale,
@@ -77,68 +161,6 @@ class _BatteryGlyph extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-/// Battery pictogram with a level fill and a percentage label.
-class BatteryMark extends StatelessWidget {
-  const BatteryMark({
-    super.key,
-    required this.status,
-    this.scale = 1.0,
-    this.color,
-  });
-
-  final BatteryStatus status;
-  final double scale;
-  final Color? color;
-
-  @override
-  Widget build(BuildContext context) {
-    final foreground = color ?? context.shellColors.textPrimary;
-
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        _BatteryGlyph(status: status, scale: scale, foreground: foreground),
-        SizedBox(width: 5 * scale),
-        Text(
-          status.capacity == null
-              ? context.l10n.batteryCapacityUnavailable
-              : context.l10n.percentCompact(status.capacity!),
-          style: TextStyle(
-            color: foreground,
-            fontSize: 12 * scale,
-            height: 1,
-            fontWeight: FontWeight.w800,
-            decoration: TextDecoration.none,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// The battery pictogram without its percentage label.
-class BatteryIconMark extends StatelessWidget {
-  const BatteryIconMark({
-    super.key,
-    required this.status,
-    this.scale = 1.0,
-    this.color,
-  });
-
-  final BatteryStatus status;
-  final double scale;
-  final Color? color;
-
-  @override
-  Widget build(BuildContext context) {
-    return _BatteryGlyph(
-      status: status,
-      scale: scale,
-      foreground: color ?? context.shellColors.textPrimary,
     );
   }
 }

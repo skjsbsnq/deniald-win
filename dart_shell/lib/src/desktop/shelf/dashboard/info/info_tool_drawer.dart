@@ -238,9 +238,11 @@ class _DrawerCollapsedCapsule extends StatelessWidget {
                   dateLabel,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: theme.text.bodyMedium.copyWith(
+                  style: TextStyle(
                     color: colors.textPrimary,
+                    fontSize: 13,
                     fontWeight: FontWeight.w600,
+                    decoration: TextDecoration.none,
                   ),
                 ),
               ),

@@ -92,10 +92,12 @@ class _ProfileHeaderCardState extends ConsumerState<ProfileHeaderCard> {
                         '$userName@$_hostname',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: theme.text.titleLarge.copyWith(
+                        style: TextStyle(
                           color: colors.textPrimary,
+                          fontSize: 22,
                           fontWeight: FontWeight.w700,
                           height: 1.15,
+                          decoration: TextDecoration.none,
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -155,10 +157,8 @@ class _ProfileHeaderCardState extends ConsumerState<ProfileHeaderCard> {
             errorBuilder: (_, _, _) =>
                 ColoredBox(color: colors.surfaceContainerHighest),
           ),
-          // A whisper of the accent tonal family unifies the cover with the
-          // page instead of a raw alpha literal on the seed color.
           DecoratedBox(
-            decoration: BoxDecoration(color: theme.accentPalette.subtle),
+            decoration: BoxDecoration(color: theme.accent.withAlpha(20)),
           ),
         ],
       ),
@@ -248,9 +248,11 @@ class _DistroBadge extends StatelessWidget {
             label,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: theme.text.labelSmall.copyWith(
+            style: TextStyle(
               color: theme.accentPalette.onContainer,
+              fontSize: 11,
               fontWeight: FontWeight.w700,
+              decoration: TextDecoration.none,
             ),
           ),
         ],
@@ -285,7 +287,12 @@ class _UptimeBadge extends StatelessWidget {
             label,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: theme.text.labelSmall.copyWith(color: colors.textSecondary),
+            style: TextStyle(
+              color: colors.textSecondary,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              decoration: TextDecoration.none,
+            ),
           ),
         ],
       ),

@@ -114,11 +114,7 @@ class _DesktopApplicationLauncherState
     with SingleTickerProviderStateMixin {
   static const double _tileExtent = 112;
   static const double _suggestedTileExtent = 96;
-  static const double _tileSpacing = ShellSpacing.sm;
-  // Anchor-direction slide for the open/close spring: the bubble's anchor is
-  // the bottom-left corner, so it drifts in from down-left while scaling.
-  // 16dp per axis keeps the diagonal displacement under the spec's 24dp cap.
-  static const double _openTranslate = ShellSpacing.lg;
+  static const double _tileSpacing = 8;
   // Idle delay before the hidden bubble inflates its subtree, so the first
   // open animates an already-mounted tree instead of paying the inflate
   // inside its opening frames.
@@ -234,21 +230,12 @@ class _DesktopApplicationLauncherState
   void _updateVisibility(bool visible) {
     if (_isOpen == visible) return;
     _isOpen = visible;
-    // Reduce-motion users get the end state directly; the settle spring,
-    // anchor slide, and fade are decorative and share this one controller.
-    final reduceMotion = MediaQuery.disableAnimationsOf(context);
-    final TickerFuture? settle;
-    if (reduceMotion) {
-      _expandController.value = visible ? 1.0 : 0.0;
-      settle = null;
-    } else {
-      settle = springTo(
-        _expandController,
-        visible ? 1.0 : 0.0,
-        spring: Motion.expressiveSpatialDefault,
-        telemetryLabel: 'launcher_bubble_toggle',
-      );
-    }
+    final settle = springTo(
+      _expandController,
+      visible ? 1.0 : 0.0,
+      spring: Motion.expressiveSpatialDefault,
+      telemetryLabel: 'launcher_bubble_toggle',
+    );
     if (visible) {
       _preinflateTimer?.cancel();
       _preinflateTimer = null;
@@ -261,14 +248,7 @@ class _DesktopApplicationLauncherState
     // The kept-alive grid keeps its scroll controller attached, so the
     // fresh-state reset can run once the collapse settles instead of one
     // frame into the next reopen. Running it while the bubble is still
-    // visible would snap the grid mid-collapse. With reduce motion the
-    // controller is already at its end state, so the reset runs now.
-    if (settle == null) {
-      if (_expandController.value <= 0.001) {
-        _resetForNextOpen();
-      }
-      return;
-    }
+    // visible would snap the grid mid-collapse.
     settle.whenCompleteOrCancel(() {
       if (mounted && !_isOpen && _expandController.value <= 0.001) {
         _resetForNextOpen();
@@ -545,14 +525,10 @@ class _DesktopApplicationLauncherState
       _gridController.jumpTo(clampedTarget);
       return;
     }
-    final durationScale = ref
-        .read(shellSettingsProvider)
-        .animations
-        .durationScale;
     unawaited(
       _gridController.animateTo(
         clampedTarget,
-        duration: Motion.tile * durationScale,
+        duration: const Duration(milliseconds: 200),
         curve: Motion.standard,
       ),
     );
@@ -623,7 +599,7 @@ class _DesktopApplicationLauncherState
                   ),
                 ),
                 child: Padding(
-                  padding: const EdgeInsets.all(ShellSpacing.sm),
+                  padding: const EdgeInsets.all(8.0),
                   child: child,
                 ),
               );
@@ -644,32 +620,17 @@ class _DesktopApplicationLauncherState
               // so parking the collapsed bubble flips the Offstage flag
               // instead of re-inflating the subtree on every reopen. TickerMode
               // parks the subtree's animations while it is hidden.
-              // The bubble grows out of its bottom-left anchor: besides the
-              // spring scale it slides in along the anchor direction (the
-              // per-axis travel stays under the 24dp spec cap) and fades in
-              // with the backdrop-blur ramp.
-              final settle = 1.0 - clampedProgress;
               return TickerMode(
                 enabled: !hidden,
                 child: Offstage(
                   offstage: hidden,
-                  child: Transform.translate(
-                    offset: Offset(
-                      -_openTranslate * settle,
-                      _openTranslate * settle,
-                    ),
-                    child: Opacity(
-                      opacity: clampedProgress,
-                      child: Transform.scale(
-                        scale: scale,
-                        alignment: Alignment.bottomLeft,
-                        // The parked bubble's search field still attaches to
-                        // the focus tree while offstage; keep it unfocusable
-                        // so its autofocus cannot steal focus before the
-                        // first open.
-                        child: ExcludeFocus(excluding: hidden, child: content),
-                      ),
-                    ),
+                  child: Transform.scale(
+                    scale: scale,
+                    alignment: Alignment.bottomLeft,
+                    // The parked bubble's search field still attaches to the
+                    // focus tree while offstage; keep it unfocusable so its
+                    // autofocus cannot steal focus before the first open.
+                    child: ExcludeFocus(excluding: hidden, child: content),
                   ),
                 ),
               );
@@ -683,7 +644,7 @@ class _DesktopApplicationLauncherState
                   onClear: _clearSearch,
                   onSubmit: () => _launchSelected(_visibleTargets),
                 ),
-                const SizedBox(height: ShellSpacing.sm),
+                const SizedBox(height: 8),
                 Expanded(
                   child: LayoutBuilder(
                     builder: (context, constraints) {
@@ -723,7 +684,8 @@ class _DesktopApplicationLauncherState
                                   key: desktopApplicationSuggestionsDividerKey,
                                   height: 1,
                                   thickness: 1,
-                                  color: context.shellColors.outlineVariant,
+                                  color: context.shellColors.hairlineSoft
+                                      .withValues(alpha: 0.55),
                                 ),
                               ),
                             ),

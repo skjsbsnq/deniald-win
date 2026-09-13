@@ -17,11 +17,12 @@ const settingsSearchEmptyKey = ValueKey<String>('settings-search-empty');
 /// search is active (§3.2).
 ///
 /// Result rows reuse [SettingsNavItem] so the search matches the navigation
-/// exactly — same 72dp two-line card, 40dp hue circle, and selected accent
+/// exactly — same 64dp single-line card, 40dp hue circle, and selected accent
 /// fill. The owning group is the section heading above the row and is also
-/// announced through the card's accessibility label. [highlighted] drives
-/// both the visual highlight and the `selected` semantics; the highlighted
-/// row scrolls itself into view when it changes.
+/// announced through the card's accessibility label, so the card paints no
+/// secondary line. [highlighted] drives both the visual highlight and the
+/// `selected` semantics; the highlighted row scrolls itself into view when it
+/// changes.
 class SettingsSearchResults extends StatelessWidget {
   const SettingsSearchResults({
     required this.groups,

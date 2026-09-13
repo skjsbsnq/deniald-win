@@ -302,15 +302,32 @@ class _KeyboardTextField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SettingsTextField(
+    return TextField(
       controller: controller,
       enabled: enabled,
-      monospace: true,
-      label: label,
-      hint: hint,
+      autocorrect: false,
+      enableSuggestions: false,
       inputFormatters: [
         FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9_,:+\-\s]')),
       ],
+      style: ShellText.base.copyWith(
+        color: context.shellColors.textPrimary,
+        fontFamily: ShellText.systemBarFontFamily,
+      ),
+      decoration: InputDecoration(
+        labelText: label,
+        hintText: hint,
+        filled: true,
+        fillColor: context.shellColors.surfaceContainerHigh,
+        border: OutlineInputBorder(
+          borderRadius: context.shellTheme.borderRadius(ShellShapeScale.medium),
+          borderSide: BorderSide(color: context.shellColors.hairline),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: context.shellTheme.borderRadius(ShellShapeScale.medium),
+          borderSide: BorderSide(color: context.shellColors.hairline),
+        ),
+      ),
     );
   }
 }

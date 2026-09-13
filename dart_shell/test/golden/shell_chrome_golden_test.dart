@@ -9,7 +9,6 @@ import 'package:denial_dart_shell/src/settings/settings_controller.dart';
 import 'package:denial_dart_shell/src/settings/shell_settings.dart';
 import 'package:denial_dart_shell/src/state/bluetooth.dart';
 import 'package:denial_dart_shell/src/state/desktop_notifications.dart';
-import 'package:denial_dart_shell/src/state/desktop_power_modes.dart';
 import 'package:denial_dart_shell/src/state/network_connectivity.dart';
 import 'package:denial_dart_shell/src/state/quick_settings.dart';
 import 'package:denial_dart_shell/src/state/system_status.dart';
@@ -244,7 +243,6 @@ void main() {
           ),
           batteryProvider.overrideWith(_FakeBatteryController.new),
           desktopWorkspaceProvider.overrideWith(_FakeWorkspaceController.new),
-          desktopPowerModesProvider.overrideWith(_FakePowerModes.new),
         ],
         child: MaterialApp(
           localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -295,7 +293,6 @@ void main() {
           ),
           batteryProvider.overrideWith(_FakeBatteryController.new),
           desktopWorkspaceProvider.overrideWith(_FakeWorkspaceController.new),
-          desktopPowerModesProvider.overrideWith(_FakePowerModes.new),
         ],
         child: MaterialApp(
           localizationsDelegates: AppLocalizations.localizationsDelegates,
@@ -494,12 +491,6 @@ class _FakeBatteryController extends BatteryController {
   @override
   BatteryStatus build() =>
       const BatteryStatus(capacity: 87, charging: false, full: true);
-}
-
-// Keeps the modes row off the golden and away from the real D-Bus service.
-class _FakePowerModes extends DesktopPowerModesController {
-  @override
-  DesktopPowerModesState build() => DesktopPowerModesState.initial();
 }
 
 class _FakeWorkspaceController extends DesktopWorkspaceController {

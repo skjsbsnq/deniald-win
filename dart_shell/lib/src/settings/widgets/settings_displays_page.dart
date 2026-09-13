@@ -17,7 +17,6 @@ import '../../theme/shell_theme.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/shell_cursor.dart';
 import '../monitor_arrangement.dart';
-import 'settings_buttons.dart';
 import 'settings_controls.dart';
 import 'settings_menu.dart';
 
@@ -175,20 +174,26 @@ class _SettingsDisplayConfirmationDialogState
       namesRoute: true,
       explicitChildNodes: true,
       label: l10n.settingsDisplayConfirmationTitle,
-      // Shared modal chrome: overviewScrim dim and centred panel. The
-      // countdown must not be dismissed by outside taps or Escape, so no
-      // [SettingsModalScrim.onDismiss] is supplied.
-      child: SettingsModalScrim(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 410),
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              color: context.shellColors.surfaceContainerHigh,
-              borderRadius: context.shellTheme.borderRadius(
-                ShellShapeScale.extraLarge,
+      child: ColoredBox(
+        color: ShellMediaColors.darkness.withValues(alpha: 0.64),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 410),
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                color: context.shellColors.surfaceContainerHigh,
+                borderRadius: context.shellTheme.borderRadius(
+                  ShellShapeScale.large,
+                ),
+                border: Border.all(color: context.shellColors.hairline),
+                boxShadow: <BoxShadow>[
+                  BoxShadow(
+                    color: ShellMediaColors.darkness.withValues(alpha: 0.40),
+                    blurRadius: 28,
+                    offset: Offset(0, 12),
+                  ),
+                ],
               ),
-              border: Border.all(color: context.shellColors.hairline),
-            ),
               child: Padding(
                 padding: const EdgeInsets.all(22),
                 child: Column(
@@ -257,7 +262,8 @@ class _SettingsDisplayConfirmationDialogState
             ),
           ),
         ),
-      );
+      ),
+    );
   }
 }
 
@@ -760,12 +766,26 @@ class _CanvasZoomButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SettingsIconButton(
-      icon: icon,
-      iconSize: 18,
-      semanticsLabel: tooltip,
+    return IconButton(
       tooltip: tooltip,
       onPressed: onPressed,
+      icon: Icon(icon),
+      iconSize: 18,
+      constraints: const BoxConstraints.tightFor(width: 36, height: 36),
+      padding: EdgeInsets.zero,
+      style: IconButton.styleFrom(
+        foregroundColor: context.shellColors.textSecondary,
+        disabledForegroundColor: context.shellColors.textSecondary.withAlpha(
+          82,
+        ),
+        backgroundColor: context.shellColors.surfaceContainerHigh,
+        hoverColor: context.shellColors.textSecondary.withAlpha(26),
+        focusColor: context.shellColors.textSecondary.withAlpha(26),
+        shape: RoundedRectangleBorder(
+          borderRadius: context.shellTheme.borderRadius(ShellShapeScale.medium),
+          side: BorderSide(color: context.shellColors.hairline),
+        ),
+      ),
     );
   }
 }

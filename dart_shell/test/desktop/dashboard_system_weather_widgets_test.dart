@@ -173,9 +173,7 @@ void main() {
     expect(find.text('Beijing'), findsOneWidget);
     expect(find.text('26°'), findsOneWidget);
     expect(find.text('Partly cloudy'), findsOneWidget);
-    // The hero folds feels-like and today's high/low into one line.
-    expect(find.textContaining('Feels like 28°'), findsOneWidget);
-    expect(find.textContaining('H 28° · L 18°'), findsOneWidget);
+    expect(find.text('Feels like 28°'), findsOneWidget);
     expect(find.text('Hourly'), findsOneWidget);
     // All 24 upcoming hour columns render inside the horizontal strip.
     expect(find.textContaining(':00'), findsAtLeastNWidgets(24));

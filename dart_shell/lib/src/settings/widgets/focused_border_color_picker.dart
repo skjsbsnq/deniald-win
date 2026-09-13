@@ -1,15 +1,15 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../../localization/denial_localizations.dart';
 import '../../theme/motion.dart';
 import '../../theme/shell_theme.dart';
 import '../../theme/tokens.dart';
+import '../../widgets/shell_cursor.dart';
 import '../color_format.dart';
 import 'hsv_color_wheel.dart';
-import 'settings_buttons.dart';
-import 'settings_controls.dart';
 
 const settingsAccentColorPickerKey = ValueKey<String>(
   'settings-accent-color-picker',
@@ -41,40 +41,58 @@ class SettingsAccentColorPicker extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    // Shared modal chrome: overviewScrim dim, outside-tap + Escape dismiss,
-    // centred panel, focus returned to the opener on close.
-    return SettingsModalScrim(
-      onDismiss: onClose,
-      padding: EdgeInsets.zero,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final panelWidth = math.min(360.0, constraints.maxWidth - 32.0);
-          final panelHeight = math.min(410.0, constraints.maxHeight - 32.0);
-          final wheelSize = math.max(
-            128.0,
-            math.min(220.0, panelHeight - 174.0),
-          );
-          return GestureDetector(
+    return Focus(
+      autofocus: true,
+      onKeyEvent: (_, event) {
+        if (event is KeyDownEvent &&
+            event.logicalKey == LogicalKeyboardKey.escape) {
+          onClose();
+          return KeyEventResult.handled;
+        }
+        return KeyEventResult.ignored;
+      },
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          GestureDetector(
             behavior: HitTestBehavior.opaque,
-            onTap: () {},
-            child: SizedBox(
-              width: panelWidth,
-              height: panelHeight,
-              child: _ColorPickerPanel(
-                color: color,
-                wheelSize: wheelSize,
-                onChanged: onChanged,
-                onReset: onReset,
-                onClose: onClose,
-                title: title ?? l10n.settingsColorPickerTitle,
-                routeLabel: routeLabel ?? l10n.settingsColorPickerRouteLabel,
-                wheelSemanticsLabel:
-                    wheelSemanticsLabel ??
-                    l10n.settingsColorWheelSemanticsLabel,
-              ),
-            ),
-          );
-        },
+            onTap: onClose,
+            child: ColoredBox(color: context.shellColors.overviewScrim),
+          ),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final panelWidth = math.min(360.0, constraints.maxWidth - 32.0);
+              final panelHeight = math.min(410.0, constraints.maxHeight - 32.0);
+              final wheelSize = math.max(
+                128.0,
+                math.min(220.0, panelHeight - 174.0),
+              );
+              return Center(
+                child: GestureDetector(
+                  behavior: HitTestBehavior.opaque,
+                  onTap: () {},
+                  child: SizedBox(
+                    width: panelWidth,
+                    height: panelHeight,
+                    child: _ColorPickerPanel(
+                      color: color,
+                      wheelSize: wheelSize,
+                      onChanged: onChanged,
+                      onReset: onReset,
+                      onClose: onClose,
+                      title: title ?? l10n.settingsColorPickerTitle,
+                      routeLabel:
+                          routeLabel ?? l10n.settingsColorPickerRouteLabel,
+                      wheelSemanticsLabel:
+                          wheelSemanticsLabel ??
+                          l10n.settingsColorWheelSemanticsLabel,
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
       ),
     );
   }
@@ -115,9 +133,7 @@ class _ColorPickerPanel extends StatelessWidget {
       child: DecoratedBox(
         decoration: BoxDecoration(
           color: theme.cardColor(context.shellColors.panelBackgroundBottom),
-          // Shared modal radius: the 28dp `extraLarge` panel shape used by
-          // the other settings overlays (§4 card/sheet family).
-          borderRadius: theme.borderRadius(ShellShapeScale.extraLarge),
+          borderRadius: BorderRadius.circular(theme.panelRadius),
           border: Border.all(color: context.shellColors.hairline),
         ),
         child: FocusTraversalGroup(
@@ -154,16 +170,15 @@ class _ColorPickerPanel extends StatelessWidget {
                 const SizedBox(height: 12),
                 Row(
                   children: [
-                    SettingsButton(
+                    _PickerButton(
                       key: settingsAccentColorResetKey,
                       label: l10n.settingsColorPickerReset,
-                      variant: SettingsButtonVariant.outlined,
                       onPressed: onReset,
                     ),
                     const Spacer(),
-                    SettingsButton(
+                    _PickerButton(
                       label: l10n.settingsColorPickerDone,
-                      variant: SettingsButtonVariant.filledTonal,
+                      prominent: true,
                       onPressed: onClose,
                     ),
                   ],
@@ -223,13 +238,162 @@ class _PickerHeader extends StatelessWidget {
             ],
           ),
         ),
-        SettingsIconButton(
+        _PickerIconButton(
           icon: Icons.close_rounded,
-          iconSize: 18,
           semanticsLabel: l10n.settingsColorPickerCloseSemanticsLabel,
           onPressed: onClose,
         ),
       ],
+    );
+  }
+}
+
+class _PickerButton extends StatefulWidget {
+  const _PickerButton({
+    super.key,
+    required this.label,
+    required this.onPressed,
+    this.prominent = false,
+  });
+
+  final String label;
+  final VoidCallback onPressed;
+  final bool prominent;
+
+  @override
+  State<_PickerButton> createState() => _PickerButtonState();
+}
+
+class _PickerButtonState extends State<_PickerButton> {
+  var _hovered = false;
+  var _focused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final highlighted = _hovered || _focused;
+    final accent = ShellTheme.of(context).accent;
+    return Semantics(
+      button: true,
+      label: widget.label,
+      child: FocusableActionDetector(
+        mouseCursor: ShellMouseCursors.link,
+        onShowHoverHighlight: (value) => setState(() => _hovered = value),
+        onShowFocusHighlight: (value) => setState(() => _focused = value),
+        shortcuts: const <ShortcutActivator, Intent>{
+          SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+          SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
+        },
+        actions: <Type, Action<Intent>>{
+          ActivateIntent: CallbackAction<ActivateIntent>(
+            onInvoke: (_) {
+              widget.onPressed();
+              return null;
+            },
+          ),
+        },
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: widget.onPressed,
+          child: AnimatedContainer(
+            duration: Motion.tile,
+            curve: Motion.standard,
+            height: 38,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: widget.prominent
+                  ? highlighted
+                        ? context.shellTheme.accentPalette.onContainer
+                        : accent
+                  : highlighted
+                  ? context.shellColors.surfaceContainerHighest
+                  : context.shellColors.surfaceContainerHigh,
+              borderRadius: context.shellTheme.borderRadius(ShellRadii.chip),
+              border: Border.all(
+                color: _focused ? accent : context.shellColors.hairline,
+              ),
+            ),
+            child: Text(
+              widget.label,
+              style: ShellText.cardTitle.copyWith(
+                color: widget.prominent
+                    ? context.shellTheme.accentPalette.onPrimary
+                    : context.shellColors.textSecondary,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _PickerIconButton extends StatefulWidget {
+  const _PickerIconButton({
+    required this.icon,
+    required this.semanticsLabel,
+    required this.onPressed,
+  });
+
+  final IconData icon;
+  final String semanticsLabel;
+  final VoidCallback onPressed;
+
+  @override
+  State<_PickerIconButton> createState() => _PickerIconButtonState();
+}
+
+class _PickerIconButtonState extends State<_PickerIconButton> {
+  var _hovered = false;
+  var _focused = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final highlighted = _hovered || _focused;
+    final accent = ShellTheme.of(context).accent;
+    return Semantics(
+      button: true,
+      label: widget.semanticsLabel,
+      child: FocusableActionDetector(
+        mouseCursor: ShellMouseCursors.link,
+        onShowHoverHighlight: (value) => setState(() => _hovered = value),
+        onShowFocusHighlight: (value) => setState(() => _focused = value),
+        shortcuts: const <ShortcutActivator, Intent>{
+          SingleActivator(LogicalKeyboardKey.enter): ActivateIntent(),
+          SingleActivator(LogicalKeyboardKey.space): ActivateIntent(),
+        },
+        actions: <Type, Action<Intent>>{
+          ActivateIntent: CallbackAction<ActivateIntent>(
+            onInvoke: (_) {
+              widget.onPressed();
+              return null;
+            },
+          ),
+        },
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: widget.onPressed,
+          child: AnimatedContainer(
+            duration: Motion.tile,
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: highlighted
+                  ? context.shellColors.surfaceContainerHighest
+                  : context.shellColors.surfaceContainerHigh,
+              shape: BoxShape.circle,
+              border: Border.all(
+                color: _focused ? accent : context.shellColors.hairline,
+              ),
+            ),
+            child: Icon(
+              widget.icon,
+              size: 18,
+              color: context.shellColors.textSecondary,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }

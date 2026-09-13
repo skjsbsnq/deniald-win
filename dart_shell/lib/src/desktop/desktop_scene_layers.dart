@@ -83,18 +83,33 @@ class _DesktopHomeWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Every widget type renders through the shared HomeGridItemCard
-    // dispatcher, which mounts the MD3E blob family (tonal fill + grouped
-    // blur, borderless). The clock no longer special-cases a bare render.
-    return RepaintBoundary(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: HomeGridItemCard(
-          item: item,
-          launchEnabled: false,
-          onLaunch: (_) {},
-        ),
+    final theme = ShellTheme.of(context);
+    final content = Padding(
+      padding: const EdgeInsets.all(12),
+      child: HomeGridItemCard(
+        item: item,
+        launchEnabled: false,
+        onLaunch: (_) {},
       ),
+    );
+    return RepaintBoundary(
+      child: item.type == HomeGridItemType.clock
+          ? content
+          : ShellBackdropBlur(
+              blur: theme.effectiveCardOpacity < 1.0,
+              grouped: true,
+              borderRadius: context.shellTheme.borderRadius(ShellRadii.tile),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: theme.cardColor(context.shellColors.panelBackground),
+                  borderRadius: context.shellTheme.borderRadius(
+                    ShellRadii.tile,
+                  ),
+                  border: Border.all(color: context.shellColors.hairlineSoft),
+                ),
+                child: content,
+              ),
+            ),
     );
   }
 }

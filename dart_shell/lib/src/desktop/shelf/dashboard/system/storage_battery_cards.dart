@@ -7,153 +7,98 @@ import '../../../../models/battery_status.dart';
 import '../../../../services/system_hardware_service.dart';
 import '../../../../theme/shell_theme.dart';
 import '../../../../theme/tokens.dart';
-import '../dashboard_card_tone.dart';
-import 'expressive_polygon.dart';
 import 'liquid_metric_card.dart';
 
-/// Root filesystem occupancy card in the tertiary family: a labeled tonal
-/// indicator bar replaces the bare progress strip, and the shared expressive
-/// polygon blooms in the corner as the disk fills.
+/// Root filesystem occupancy card with a linear usage bar.
 class StorageCard extends StatelessWidget {
-  const StorageCard({
-    super.key,
-    required this.storage,
-    this.tone = DashboardCardTone.tertiary,
-  });
+  const StorageCard({super.key, required this.storage});
 
   /// Latest `df -B1 /` reading; null renders the unavailable state.
   final StorageUsage? storage;
 
-  /// Tonal family of the card fill; storage defaults to the tertiary family
-  /// per the mixed-emphasis grid.
-  final DashboardCardTone tone;
-
   @override
   Widget build(BuildContext context) {
     final theme = context.shellTheme;
-    final toneColors = dashboardCardToneColors(
-      theme,
-      context.shellColors,
-      tone,
-    );
+    final colors = context.shellColors;
     final l10n = context.l10n;
     final usage = storage?.fraction ?? 0.0;
-    final radius = theme.borderRadius(ShellShapeScale.large);
 
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: theme.panelColor(toneColors.container),
-        borderRadius: radius,
+        color: theme.panelColor(colors.surfaceContainer),
+        borderRadius: theme.borderRadius(ShellShapeScale.large),
+        border: Border.all(color: colors.hairlineSoft, width: 1.0),
       ),
-      child: ClipRRect(
-        borderRadius: radius,
-        child: Stack(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          l10n.systemStorage,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: theme.text.labelMediumEmphasized.copyWith(
-                            color: toneColors.foregroundSecondary,
-                          ),
-                        ),
-                      ),
-                      Text(
-                        storage == null ? '--' : '${(usage * 100).round()}%',
-                        style: theme.text.titleSmallEmphasized.copyWith(
-                          color: toneColors.foreground,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  SizedBox(
-                    height: 46,
-                    child: Center(
-                      child: _TonalIndicatorBar(
-                        fraction: usage,
-                        accent: toneColors.accent,
-                        trackColor: toneColors.foregroundSecondary.withValues(
-                          alpha: 0.22,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    storage == null
-                        ? l10n.systemDataUnavailable
-                        : l10n.systemStorageFree(
-                            formatGigabytes(storage!.total - storage!.used),
-                          ),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    l10n.systemStorage,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: theme.text.labelSmall.copyWith(
-                      color: toneColors.foregroundSecondary,
+                    style: TextStyle(
+                      color: colors.textSecondary,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+
+                      decoration: TextDecoration.none,
                     ),
                   ),
-                ],
-              ),
+                ),
+                Text(
+                  storage == null ? '--' : '${(usage * 100).round()}%',
+                  style: TextStyle(
+                    color: colors.textPrimary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    decoration: TextDecoration.none,
+                  ),
+                ),
+              ],
             ),
-            Positioned(
-              right: -16,
-              bottom: -16,
-              child: SizedBox.square(
-                dimension: 88,
-                child: ExpressivePolygon(
-                  complexity: usage,
-                  color: toneColors.accent,
+            const SizedBox(height: 10),
+            SizedBox(
+              height: 46,
+              child: Center(
+                child: ClipRRect(
+                  borderRadius: theme.borderRadius(ShellShapeScale.small),
+                  child: SizedBox(
+                    height: 8,
+                    child: Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        ColoredBox(color: colors.surfaceContainerHighest),
+                        FractionallySizedBox(
+                          alignment: Alignment.centerLeft,
+                          widthFactor: usage,
+                          child: ColoredBox(color: theme.accentPalette.primary),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
             ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-/// Rounded tonal indicator bar: a full-radius track in the card's quiet
-/// foreground tone with the family accent sweeping the used fraction.
-class _TonalIndicatorBar extends StatelessWidget {
-  const _TonalIndicatorBar({
-    required this.fraction,
-    required this.accent,
-    required this.trackColor,
-  });
-
-  final double fraction;
-  final Color accent;
-  final Color trackColor;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = context.shellTheme;
-    return ClipRRect(
-      borderRadius: theme.borderRadius(ShellShapeScale.full),
-      child: SizedBox(
-        height: ShellSpacing.md,
-        child: Stack(
-          fit: StackFit.expand,
-          children: [
-            ColoredBox(color: trackColor),
-            FractionallySizedBox(
-              alignment: Alignment.centerLeft,
-              widthFactor: fraction.clamp(0.0, 1.0).toDouble(),
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: accent,
-                  borderRadius: theme.borderRadius(ShellShapeScale.full),
-                ),
+            const SizedBox(height: 8),
+            Text(
+              storage == null
+                  ? l10n.systemDataUnavailable
+                  : l10n.systemStorageFree(
+                      formatGigabytes(storage!.total - storage!.used),
+                    ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: colors.textTertiary,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                decoration: TextDecoration.none,
               ),
             ),
           ],
@@ -165,32 +110,22 @@ class _TonalIndicatorBar extends StatelessWidget {
 
 /// Battery tank card: liquid level, percentage, and supply status.
 class BatteryTankCard extends StatelessWidget {
-  const BatteryTankCard({
-    super.key,
-    required this.battery,
-    this.tone = DashboardCardTone.surface,
-  });
+  const BatteryTankCard({super.key, required this.battery});
 
   final BatteryStatus battery;
-
-  /// Tonal family of the card fill and its foreground roles.
-  final DashboardCardTone tone;
 
   @override
   Widget build(BuildContext context) {
     final theme = context.shellTheme;
-    final toneColors = dashboardCardToneColors(
-      theme,
-      context.shellColors,
-      tone,
-    );
+    final colors = context.shellColors;
     final l10n = context.l10n;
     final capacity = battery.capacity;
 
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: theme.panelColor(toneColors.container),
+        color: theme.panelColor(colors.surfaceContainer),
         borderRadius: theme.borderRadius(ShellShapeScale.large),
+        border: Border.all(color: colors.hairlineSoft, width: 1.0),
       ),
       child: Padding(
         padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
@@ -205,15 +140,22 @@ class BatteryTankCard extends StatelessWidget {
                     l10n.systemBattery,
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
-                    style: theme.text.labelMediumEmphasized.copyWith(
-                      color: toneColors.foregroundSecondary,
+                    style: TextStyle(
+                      color: colors.textSecondary,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+
+                      decoration: TextDecoration.none,
                     ),
                   ),
                 ),
                 Text(
                   capacity == null ? '--' : '$capacity%',
-                  style: theme.text.titleSmallEmphasized.copyWith(
-                    color: toneColors.foreground,
+                  style: TextStyle(
+                    color: colors.textPrimary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    decoration: TextDecoration.none,
                   ),
                 ),
               ],
@@ -225,22 +167,18 @@ class BatteryTankCard extends StatelessWidget {
                   ? Center(
                       child: Text(
                         l10n.systemBatteryUnavailable,
-                        style: theme.text.labelSmall.copyWith(
-                          color: toneColors.foregroundSecondary,
+                        style: TextStyle(
+                          color: colors.textTertiary,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                          decoration: TextDecoration.none,
                         ),
                       ),
                     )
-                  : LiquidFill(
-                      fraction: capacity / 100,
-                      color: toneColors.accent,
-                    ),
+                  : LiquidFill(fraction: capacity / 100),
             ),
             const SizedBox(height: 8),
-            _BatteryStatusLine(
-              battery: battery,
-              l10n: l10n,
-              idleColor: toneColors.foregroundSecondary,
-            ),
+            _BatteryStatusLine(battery: battery, l10n: l10n),
           ],
         ),
       ),
@@ -249,15 +187,10 @@ class BatteryTankCard extends StatelessWidget {
 }
 
 class _BatteryStatusLine extends StatelessWidget {
-  const _BatteryStatusLine({
-    required this.battery,
-    required this.l10n,
-    required this.idleColor,
-  });
+  const _BatteryStatusLine({required this.battery, required this.l10n});
 
   final BatteryStatus battery;
   final AppLocalizations l10n;
-  final Color idleColor;
 
   @override
   Widget build(BuildContext context) {
@@ -272,7 +205,7 @@ class _BatteryStatusLine extends StatelessWidget {
       (null, _, _, _) => (
         Icons.battery_0_bar_rounded,
         l10n.systemStatusUnavailable,
-        idleColor,
+        colors.textTertiary,
       ),
       (_, _, true, _) => (
         Icons.check_rounded,
@@ -287,9 +220,13 @@ class _BatteryStatusLine extends StatelessWidget {
       (_, _, _, true) => (
         Icons.power_rounded,
         l10n.batteryOnAcPower,
-        idleColor,
+        colors.textSecondary,
       ),
-      _ => (Icons.battery_full_rounded, l10n.batteryOnBattery, idleColor),
+      _ => (
+        Icons.battery_full_rounded,
+        l10n.batteryOnBattery,
+        colors.textSecondary,
+      ),
     };
 
     return Row(
@@ -301,7 +238,12 @@ class _BatteryStatusLine extends StatelessWidget {
             label,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: context.shellTheme.text.labelSmall.copyWith(color: color),
+            style: TextStyle(
+              color: color,
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              decoration: TextDecoration.none,
+            ),
           ),
         ),
       ],

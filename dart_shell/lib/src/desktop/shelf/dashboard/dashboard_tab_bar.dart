@@ -38,12 +38,6 @@ class _DashboardTabBarState extends State<DashboardTabBar>
   // equally divided entry widths instead of a fixed pixel stride.
   static const int _tabCount = 3;
 
-  // In-flight width deformation: pill velocity (tab indexes per second)
-  // scaled into a fractional width stretch, capped so a wheel-spam jump of
-  // two cells cannot smear the indicator across the whole bar.
-  static const double _velocityStretch = 0.10;
-  static const double _maxStretch = 0.35;
-
   late final AnimationController _pill = AnimationController.unbounded(
     vsync: this,
   );
@@ -113,26 +107,14 @@ class _DashboardTabBarState extends State<DashboardTabBar>
                   children: [
                     AnimatedBuilder(
                       animation: _pill,
-                      builder: (context, child) {
-                        // M3E tab indicator: the pill briefly stretches along
-                        // its travel while the spring is in flight, then
-                        // overshoots back to the exact cell width on settle.
-                        // Velocity is in tab-index units per second.
-                        final stretch =
-                            (_pill.velocity.abs() * _velocityStretch)
-                                .clamp(0.0, _maxStretch)
-                                .toDouble() *
-                            cellWidth;
-                        return Positioned(
-                          left: _pill.value * cellWidth - stretch / 2,
-                          top: 0,
-                          bottom: 0,
-                          width: cellWidth + stretch,
-                          child: child!,
-                        );
-                      },
+                      builder: (context, child) => Positioned(
+                        left: _pill.value * cellWidth,
+                        top: 0,
+                        bottom: 0,
+                        width: cellWidth,
+                        child: child!,
+                      ),
                       child: DecoratedBox(
-                        key: const Key('dashboard-tab-pill'),
                         decoration: BoxDecoration(
                           color: theme.accentPalette.container,
                           borderRadius: theme.borderRadius(
@@ -239,9 +221,11 @@ class _Entry extends StatelessWidget {
               label,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: theme.text.labelLargeEmphasized.copyWith(
+              style: TextStyle(
                 color: fg,
+                fontSize: 13,
                 fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+                decoration: TextDecoration.none,
               ),
             ),
           ],

@@ -68,15 +68,6 @@ class _DesktopAppSearchField extends StatelessWidget {
   final VoidCallback onClear;
   final VoidCallback onSubmit;
 
-  /// Pill height from the spec's launcher-bubble row.
-  static const double _height = 48;
-  static const double _iconSize = 20;
-  static const double _clearExtent = 28;
-  static const double _clearIconSize = 18;
-
-  /// Focused outline width from the spec's search-pill row (1.5px primary).
-  static const double _focusedBorderWidth = 1.5;
-
   static final List<TextInputFormatter> _inputFormatters =
       List<TextInputFormatter>.unmodifiable(<TextInputFormatter>[
         FilteringTextInputFormatter.deny(RegExp(r'[\u0000-\u001F\u007F]')),
@@ -99,19 +90,17 @@ class _DesktopAppSearchField extends StatelessWidget {
         child: Stack(
           children: <Widget>[
             SizedBox(
-              height: _height,
+              height: 48,
               child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: ShellSpacing.lg,
-                ),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Row(
                   children: [
                     Icon(
                       Icons.search_rounded,
-                      size: _iconSize,
+                      size: 20,
                       color: context.shellColors.textSecondary,
                     ),
-                    const SizedBox(width: ShellSpacing.md),
+                    const SizedBox(width: 10),
                     Expanded(
                       child: Stack(
                         alignment: Alignment.centerLeft,
@@ -120,8 +109,10 @@ class _DesktopAppSearchField extends StatelessWidget {
                             IgnorePointer(
                               child: Text(
                                 l10n.desktopSearchApplications,
-                                style: theme.text.bodyMedium.copyWith(
+                                style: TextStyle(
                                   color: context.shellColors.textTertiary,
+                                  fontSize: 14,
+                                  decoration: TextDecoration.none,
                                 ),
                               ),
                             ),
@@ -149,7 +140,7 @@ class _DesktopAppSearchField extends StatelessWidget {
                       ),
                     ),
                     if (hasQuery) ...[
-                      const SizedBox(width: ShellSpacing.sm),
+                      const SizedBox(width: 8),
                       Semantics(
                         button: true,
                         label: l10n.desktopClearApplicationSearch,
@@ -159,10 +150,10 @@ class _DesktopAppSearchField extends StatelessWidget {
                             behavior: HitTestBehavior.opaque,
                             onTap: onClear,
                             child: SizedBox.square(
-                              dimension: _clearExtent,
+                              dimension: 28,
                               child: Icon(
                                 Icons.close_rounded,
-                                size: _clearIconSize,
+                                size: 18,
                                 color: context.shellColors.textSecondary,
                               ),
                             ),
@@ -183,15 +174,11 @@ class _DesktopAppSearchField extends StatelessWidget {
                       borderRadius: context.shellTheme.borderRadius(
                         ShellShapeScale.full,
                       ),
-                      // Idle state has no hairline: the tonal
-                      // surfaceContainerHigh fill carries the pill. Focus
-                      // shows the spec's 1.5px primary outline.
-                      border: focusNode.hasFocus
-                          ? Border.all(
-                              color: accent.primary,
-                              width: _focusedBorderWidth,
-                            )
-                          : null,
+                      border: Border.all(
+                        color: focusNode.hasFocus
+                            ? accent.outline
+                            : context.shellColors.hairline,
+                      ),
                     ),
                   ),
                 ),
@@ -207,8 +194,6 @@ class _DesktopAppSearchField extends StatelessWidget {
 class _DesktopAppSearchEmptyState extends StatelessWidget {
   const _DesktopAppSearchEmptyState();
 
-  static const double _iconSize = 34;
-
   @override
   Widget build(BuildContext context) {
     return Center(
@@ -217,10 +202,10 @@ class _DesktopAppSearchEmptyState extends StatelessWidget {
         children: [
           Icon(
             Icons.search_off_rounded,
-            size: _iconSize,
+            size: 34,
             color: context.shellColors.textTertiary,
           ),
-          const SizedBox(height: ShellSpacing.md),
+          const SizedBox(height: 10),
           Text(
             context.l10n.desktopNoApplicationsFound,
             style: context.shellTheme.text.cardTitle.copyWith(
@@ -253,16 +238,6 @@ class _DesktopAppTile extends StatefulWidget {
 
 class _DesktopAppTileState extends State<_DesktopAppTile>
     with SingleTickerProviderStateMixin {
-  /// Icon well size from the spec's launcher-bubble row (54 -> 56).
-  static const double _iconExtent = 56;
-
-  /// Material-icon glyph inside the well for local apps, scaled with
-  /// [_iconExtent] so it matches the raster icons' optical size.
-  static const double _localIconSize = 48;
-
-  /// Pressed scale from the spec's launcher-tile row (0.94 spring).
-  static const double _pressScale = 0.94;
-
   late final AnimationController _pressController;
   bool _hovered = false;
   late bool _selected = widget.selected;
@@ -308,14 +283,15 @@ class _DesktopAppTileState extends State<_DesktopAppTile>
     final accent = theme.accentPalette;
     final l10n = context.l10n;
     final highlighted = _selected || _hovered;
-    final borderRadius = theme.borderRadius(ShellShapeScale.extraLarge);
+    final borderRadius = theme.borderRadius(ShellShapeScale.medium);
     final name = Text(
       widget.app.name,
       maxLines: widget.singleLineName ? 1 : 2,
       overflow: TextOverflow.ellipsis,
       textAlign: TextAlign.center,
-      style: theme.text.labelMedium.copyWith(
+      style: theme.text.cardTitle.copyWith(
         color: colors.textPrimary,
+        fontSize: 11,
       ),
     );
     return Semantics(
@@ -336,20 +312,15 @@ class _DesktopAppTileState extends State<_DesktopAppTile>
             animation: _pressController,
             builder: (context, child) {
               final pressT = _pressController.value.clamp(0.0, 1.0);
-              // Tonal tile: surfaceContainerHigh base, the M3 state layer
-              // (panelHighlight) alpha-blended over it on hover/selection,
-              // then the existing accent-subtle press tint on top.
-              final baseColor = theme.cardColor(colors.surfaceContainerHigh);
-              final layeredColor = highlighted
-                  ? Color.alphaBlend(colors.panelHighlight, baseColor)
-                  : baseColor;
+              final hoverColor = highlighted
+                  ? colors.panelHighlight
+                  : colors.panelHighlight.withValues(alpha: 0);
               final backgroundColor = Color.lerp(
-                layeredColor,
+                hoverColor,
                 accent.subtle,
                 pressT,
               );
-              final scale =
-                  1.0 - (1.0 - _pressScale) * _pressController.value;
+              final scale = 1.0 - 0.06 * _pressController.value;
 
               return Transform.scale(
                 scale: scale,
@@ -358,7 +329,7 @@ class _DesktopAppTileState extends State<_DesktopAppTile>
                     color: backgroundColor,
                     borderRadius: borderRadius,
                     border: _selected
-                        ? Border.all(color: accent.outline)
+                        ? Border.all(color: accent.primary)
                         : null,
                   ),
                   child: child,
@@ -366,23 +337,23 @@ class _DesktopAppTileState extends State<_DesktopAppTile>
               );
             },
             child: Padding(
-              padding: const EdgeInsets.all(ShellSpacing.sm),
+              padding: const EdgeInsets.all(10),
               child: Column(
                 children: [
                   SizedBox(
-                    width: _iconExtent,
-                    height: _iconExtent,
+                    width: 54,
+                    height: 54,
                     child: widget.app.icon != null
                         ? ExcludeSemantics(
                             child: Icon(
                               widget.app.icon!,
-                              size: _localIconSize,
+                              size: 46,
                               color: accent.primary,
                             ),
                           )
                         : DeferredAppIcon(iconPath: widget.app.iconPath),
                   ),
-                  const SizedBox(height: ShellSpacing.sm),
+                  const SizedBox(height: 8),
                   if (widget.singleLineName) name else Expanded(child: name),
                 ],
               ),

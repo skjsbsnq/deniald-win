@@ -68,7 +68,6 @@ class _WeatherViewState extends ConsumerState<WeatherView> {
       return _WeatherLoadingPane(status: state.status);
     }
 
-    final theme = context.shellTheme;
     final colors = context.shellColors;
     final l10n = context.l10n;
     final temperatureUnit = ref.watch(
@@ -88,7 +87,41 @@ class _WeatherViewState extends ConsumerState<WeatherView> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           mainAxisSize: MainAxisSize.min,
           children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    snapshot.location.city,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: colors.textPrimary,
+                      fontSize: 17,
+                      fontWeight: FontWeight.w700,
+                      decoration: TextDecoration.none,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  l10n.weatherUpdated(_formatClock(snapshot.fetchedAt)),
+                  style: TextStyle(
+                    color: colors.textTertiary,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    decoration: TextDecoration.none,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                _RefreshButton(
+                  onPressed: () => unawaited(
+                    ref.read(weatherProvider.notifier).forceRefresh(),
+                  ),
+                ),
+              ],
+            ),
             if (state.status == WeatherStatus.failed) ...[
+              const SizedBox(height: 8),
               Row(
                 children: [
                   Icon(
@@ -102,17 +135,20 @@ class _WeatherViewState extends ConsumerState<WeatherView> {
                       l10n.weatherCachedDataNotice,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: theme.text.labelSmall.copyWith(
+                      style: TextStyle(
                         color: colors.textTertiary,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        decoration: TextDecoration.none,
                       ),
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 8),
             ],
+            const SizedBox(height: 14),
             WeatherHeroSection(
-              snapshot: snapshot,
+              current: snapshot.current,
               // Day/night must be resolved on the city's wall clock; the
               // device clock would flip the glyph across time zones.
               isDay: isDaylight(
@@ -120,8 +156,6 @@ class _WeatherViewState extends ConsumerState<WeatherView> {
                 snapshot.days.firstOrNull,
               ),
               temperatureUnit: temperatureUnit,
-              onRefresh: () =>
-                  unawaited(ref.read(weatherProvider.notifier).forceRefresh()),
             ),
             // Sections whose data is absent collapse together with their
             // heading instead of leaving an orphaned caption behind.
@@ -164,18 +198,38 @@ class _SectionCaption extends StatelessWidget {
   Widget build(BuildContext context) {
     return Text(
       label,
-      style: context.shellTheme.text.labelSmall.copyWith(
+      style: TextStyle(
         color: colors.textTertiary,
+        fontSize: 11,
         fontWeight: FontWeight.w700,
+        decoration: TextDecoration.none,
       ),
     );
   }
 }
 
-/// Skeleton loading pane: static tonal placeholder blocks echoing the hero
-/// card, the hourly strip, and the daily list so a cold open paints the
-/// page's shape instead of a bare spinner. The status caption below keeps
-/// the locating/loading wording visible for context.
+class _RefreshButton extends StatelessWidget {
+  const _RefreshButton({required this.onPressed});
+
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.shellColors;
+
+    // A square pill at full scale renders the same circle the bespoke
+    // BoxShape.circle decoration did.
+    return ShellHoverPill(
+      onTap: onPressed,
+      width: 30,
+      height: 30,
+      color: colors.surfaceContainerHighest,
+      hoverColor: colors.panelHighlight,
+      child: Icon(Icons.refresh_rounded, size: 16, color: colors.textSecondary),
+    );
+  }
+}
+
 class _WeatherLoadingPane extends StatelessWidget {
   const _WeatherLoadingPane({required this.status});
 
@@ -183,79 +237,32 @@ class _WeatherLoadingPane extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final theme = context.shellTheme;
     final colors = context.shellColors;
     final l10n = context.l10n;
     final locating = status == WeatherStatus.locating;
 
-    return Column(
-      key: const Key('weather-loading-skeleton'),
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const _SkeletonBlock(height: 200, radius: ShellShapeScale.extraLarge),
-        const SizedBox(height: 18),
-        const _SkeletonBlock(height: 12, width: 96),
-        const SizedBox(height: 8),
-        const _SkeletonBlock(height: 110, radius: ShellShapeScale.large),
-        const SizedBox(height: 18),
-        const _SkeletonBlock(height: 12, width: 72),
-        const SizedBox(height: 8),
-        const _SkeletonBlock(height: 170, radius: ShellShapeScale.large),
-        const SizedBox(height: 18),
-        Center(
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                locating
-                    ? Icons.location_on_rounded
-                    : Icons.cloud_queue_rounded,
-                size: 16,
-                color: colors.textTertiary,
+    return SizedBox(
+      height: 280,
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              locating ? Icons.location_on_rounded : Icons.cloud_queue_rounded,
+              size: 38,
+              color: colors.textTertiary,
+            ),
+            const SizedBox(height: 10),
+            Text(
+              locating ? l10n.weatherLoadingLocating : l10n.weatherLoadingData,
+              style: TextStyle(
+                color: colors.textSecondary,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                decoration: TextDecoration.none,
               ),
-              const SizedBox(width: 8),
-              Text(
-                locating
-                    ? l10n.weatherLoadingLocating
-                    : l10n.weatherLoadingData,
-                style: theme.text.bodyMedium.copyWith(
-                  color: colors.textSecondary,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-/// One tonal placeholder slab of the loading skeleton.
-class _SkeletonBlock extends StatelessWidget {
-  const _SkeletonBlock({
-    required this.height,
-    this.width,
-    this.radius = ShellShapeScale.small,
-  });
-
-  final double height;
-  final double? width;
-  final double radius;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = context.shellTheme;
-    final colors = context.shellColors;
-    return Align(
-      alignment: Alignment.centerLeft,
-      child: Container(
-        height: height,
-        width: width,
-        decoration: BoxDecoration(
-          color: theme.panelColor(colors.surfaceContainer),
-          borderRadius: theme.borderRadius(radius),
+            ),
+          ],
         ),
       ),
     );
@@ -299,9 +306,11 @@ class _WeatherErrorPane extends StatelessWidget {
               locationFailed
                   ? l10n.weatherErrorLocationUnavailable
                   : l10n.weatherErrorLoadFailed,
-              style: context.shellTheme.text.bodyMedium.copyWith(
+              style: TextStyle(
                 color: colors.textSecondary,
+                fontSize: 13,
                 fontWeight: FontWeight.w600,
+                decoration: TextDecoration.none,
               ),
             ),
             const SizedBox(height: 14),
@@ -345,26 +354,43 @@ class _WeatherErrorAction extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = context.shellTheme;
 
-    return ShellHoverPill(
-      onTap: onPressed,
-      semanticLabel: label,
-      height: 32,
-      padding: const EdgeInsets.symmetric(horizontal: 14),
-      color: theme.accentPalette.container,
-      radius: ShellShapeScale.full,
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: 15, color: theme.accentPalette.onContainer),
-          const SizedBox(width: 6),
-          Text(
-            label,
-            style: theme.text.labelMediumEmphasized.copyWith(
-              color: theme.accentPalette.onContainer,
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onPressed,
+        child: Container(
+          height: 32,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          decoration: BoxDecoration(
+            color: theme.accentPalette.container,
+            borderRadius: theme.borderRadius(ShellShapeScale.full),
+          ),
+          child: Center(
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(icon, size: 15, color: theme.accentPalette.onContainer),
+                const SizedBox(width: 6),
+                Text(
+                  label,
+                  style: TextStyle(
+                    color: theme.accentPalette.onContainer,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    decoration: TextDecoration.none,
+                  ),
+                ),
+              ],
             ),
           ),
-        ],
+        ),
       ),
     );
   }
+}
+
+String _formatClock(DateTime time) {
+  return '${time.hour.toString().padLeft(2, '0')}:'
+      '${time.minute.toString().padLeft(2, '0')}';
 }

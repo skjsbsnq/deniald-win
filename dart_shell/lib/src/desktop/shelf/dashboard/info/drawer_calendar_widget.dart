@@ -5,7 +5,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../localization/denial_localizations.dart';
 import '../../../../state/system_status.dart';
 import '../../../../theme/shell_theme.dart';
-import '../../../../theme/tokens.dart';
 import '../../../../widgets/shell_hover_pill.dart';
 
 /// Month calendar for the dashboard tool drawer.
@@ -132,9 +131,11 @@ class _DrawerCalendarWidgetState extends ConsumerState<DrawerCalendarWidget> {
               child: Center(
                 child: Text(
                   monthTitle,
-                  style: context.shellTheme.text.titleSmallEmphasized.copyWith(
+                  style: TextStyle(
                     color: colors.textPrimary,
+                    fontSize: 14,
                     fontWeight: FontWeight.w700,
+                    decoration: TextDecoration.none,
                   ),
                 ),
               ),
@@ -161,8 +162,11 @@ class _DrawerCalendarWidgetState extends ConsumerState<DrawerCalendarWidget> {
                 child: Center(
                   child: Text(
                     localizedWeekdaySymbol(l10n, day),
-                    style: context.shellTheme.text.labelMedium.copyWith(
+                    style: TextStyle(
                       color: colors.textSecondary,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      decoration: TextDecoration.none,
                     ),
                   ),
                 ),
@@ -193,47 +197,30 @@ class _DrawerCalendarWidgetState extends ConsumerState<DrawerCalendarWidget> {
       gridStartDate.day + index,
     );
 
-    // The selected day's whole week row rides on a continuous
-    // primaryContainer band — the M3E "week pill" from the reference
-    // calendar — instead of an isolated dot.
-    // Located by wall-date comparison, not Duration math: a 23/25-hour DST
-    // day inside the grid would skew a difference().inDays lookup.
-    var selectedWeek = -1;
-    for (var i = 0; i < 42; i++) {
-      if (_sameMonth(cellAt(i), _selectedDate) &&
-          cellAt(i).day == _selectedDate.day) {
-        selectedWeek = i ~/ 7;
-        break;
-      }
-    }
-
     final rows = <Widget>[
       for (int week = 0; week < 6; week++)
         Padding(
           padding: const EdgeInsets.symmetric(vertical: 2.0),
-          child: _WeekBandRow(
-            highlighted: week == selectedWeek,
-            child: Row(
-              children: [
-                for (int col = 0; col < 7; col++)
-                  () {
-                    final index = week * 7 + col;
-                    final cellDate = cellAt(index);
-                    return _CalendarDayCell(
-                      key: ValueKey('calendar-cell-$gridStartDate-$index'),
-                      cellDate: cellDate,
-                      isCurrentMonth: _sameMonth(cellDate, _displayedMonth),
-                      isToday:
-                          _sameMonth(cellDate, today) &&
-                          cellDate.day == today.day,
-                      isSelected:
-                          _sameMonth(cellDate, _selectedDate) &&
-                          cellDate.day == _selectedDate.day,
-                      onTap: () => _selectCell(gridStartDate, index),
-                    );
-                  }(),
-              ],
-            ),
+          child: Row(
+            children: [
+              for (int col = 0; col < 7; col++)
+                () {
+                  final index = week * 7 + col;
+                  final cellDate = cellAt(index);
+                  return _CalendarDayCell(
+                    key: ValueKey('calendar-cell-$gridStartDate-$index'),
+                    cellDate: cellDate,
+                    isCurrentMonth: _sameMonth(cellDate, _displayedMonth),
+                    isToday:
+                        _sameMonth(cellDate, today) &&
+                        cellDate.day == today.day,
+                    isSelected:
+                        _sameMonth(cellDate, _selectedDate) &&
+                        cellDate.day == _selectedDate.day,
+                    onTap: () => _selectCell(gridStartDate, index),
+                  );
+                }(),
+            ],
           ),
         ),
     ];
@@ -259,30 +246,6 @@ class _DrawerCalendarWidgetState extends ConsumerState<DrawerCalendarWidget> {
       date.year == month.year && date.month == month.month;
 }
 
-/// The week row carrying the selected date, drawn as a continuous
-/// `primaryContainer` band behind the day cells.
-class _WeekBandRow extends StatelessWidget {
-  const _WeekBandRow({required this.highlighted, required this.child});
-
-  final bool highlighted;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = context.shellTheme;
-    if (!highlighted) {
-      return child;
-    }
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: theme.accentPalette.container,
-        borderRadius: theme.borderRadius(ShellShapeScale.full),
-      ),
-      child: child,
-    );
-  }
-}
-
 /// One calendar day. Hover state is local so sweeping the grid repaints
 /// single cells instead of the whole 42-cell matrix.
 class _CalendarDayCell extends StatelessWidget {
@@ -306,13 +269,17 @@ class _CalendarDayCell extends StatelessWidget {
     final theme = context.shellTheme;
     final colors = context.shellColors;
 
-    // The selected day is the filled dot on the week band; today drops to an
-    // accent-colored label so the two never compete as twin solid circles.
-    final Color bg = isSelected
+    // Today and selection outrank hover; the highlight only surfaces on
+    // otherwise plain cells.
+    final Color bg = isToday
         ? theme.accentPalette.primary
+        : isSelected
+        ? theme.accentPalette.container
         : Colors.transparent;
-    final Color hoverBg = isSelected
+    final Color hoverBg = isToday
         ? theme.accentPalette.primary
+        : isSelected
+        ? theme.accentPalette.container
         : colors.panelHighlight;
 
     return Expanded(
@@ -326,12 +293,12 @@ class _CalendarDayCell extends StatelessWidget {
           childBuilder: (context, hovered, focused) {
             final Color fg;
             final FontWeight weight;
-            if (isSelected) {
+            if (isToday) {
               fg = theme.accentPalette.onPrimary;
               weight = FontWeight.w700;
-            } else if (isToday) {
-              fg = theme.accentPalette.primary;
-              weight = FontWeight.w700;
+            } else if (isSelected) {
+              fg = theme.accentPalette.onContainer;
+              weight = FontWeight.w600;
             } else if (hovered) {
               fg = colors.textPrimary;
               weight = FontWeight.w500;
@@ -341,9 +308,11 @@ class _CalendarDayCell extends StatelessWidget {
             }
             return Text(
               '${cellDate.day}',
-              style: theme.text.bodyMedium.copyWith(
+              style: TextStyle(
                 color: fg,
+                fontSize: 13,
                 fontWeight: weight,
+                decoration: TextDecoration.none,
               ),
             );
           },
@@ -372,8 +341,11 @@ class _CalendarTodayChip extends StatelessWidget {
       hoverColor: colors.panelHighlight,
       childBuilder: (context, hovered, focused) => Text(
         label,
-        style: theme.text.labelSmall.copyWith(
+        style: TextStyle(
           color: hovered ? colors.textPrimary : theme.accentPalette.onContainer,
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          decoration: TextDecoration.none,
         ),
       ),
     );

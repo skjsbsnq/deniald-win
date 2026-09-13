@@ -46,141 +46,130 @@ class WeatherDailyForecast extends StatelessWidget {
     }
     final span = maximum - minimum;
 
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: theme.panelColor(colors.surfaceContainer),
-        borderRadius: theme.borderRadius(ShellShapeScale.largeIncreased),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
-        child: Column(
-          children: <Widget>[
-            for (var i = 0; i < days.length; i++)
-              Padding(
-                padding: EdgeInsets.only(bottom: i == days.length - 1 ? 0 : 10),
-                child: Row(
-                  children: [
-                    SizedBox(
-                      width: 52,
-                      child: Text(
-                        _weekdayLabel(l10n, days[i].date, i),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.text.bodySmall.copyWith(
-                          color: i == 0
-                              ? colors.textPrimary
-                              : colors.textSecondary,
-                          fontWeight: i == 0
-                              ? FontWeight.w700
-                              : FontWeight.w600,
-                        ),
-                      ),
+    return Column(
+      children: <Widget>[
+        for (var i = 0; i < days.length; i++)
+          Padding(
+            padding: EdgeInsets.only(bottom: i == days.length - 1 ? 0 : 10),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 52,
+                  child: Text(
+                    _weekdayLabel(l10n, days[i].date, i),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: i == 0 ? colors.textPrimary : colors.textSecondary,
+                      fontSize: 12,
+                      fontWeight: i == 0 ? FontWeight.w700 : FontWeight.w600,
+                      decoration: TextDecoration.none,
                     ),
-                    const SizedBox(width: 8),
-                    Icon(
-                      weatherConditionFor(days[i].weatherCode).icon(day: true),
-                      size: 19,
-                      color: colors.textSecondary,
-                    ),
-                    const SizedBox(width: 10),
-                    SizedBox(
-                      width: 30,
-                      child: Text(
-                        formatTemperature(
-                          days[i].minTemperatureC,
-                          temperatureUnit,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        textAlign: TextAlign.right,
-                        style: theme.text.bodySmall.copyWith(
-                          color: colors.textTertiary,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: LayoutBuilder(
-                        builder: (context, constraints) {
-                          final trackWidth = constraints.maxWidth;
-                          var left = 0.0;
-                          var width = trackWidth;
-                          if (span > 0 && trackWidth > 0) {
-                            left =
-                                (days[i].minTemperatureC - minimum) /
-                                span *
-                                trackWidth;
-                            width =
-                                (days[i].maxTemperatureC -
-                                    days[i].minTemperatureC) /
-                                span *
-                                trackWidth;
-                          }
-                          return SizedBox(
-                            height: 6,
-                            child: Stack(
-                              children: [
-                                Positioned.fill(
-                                  child: DecoratedBox(
-                                    decoration: BoxDecoration(
-                                      color: colors.surfaceContainerHighest,
-                                      borderRadius: theme.borderRadius(
-                                        ShellShapeScale.full,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                Positioned(
-                                  left: left,
-                                  width: width.clamp(
-                                    4.0,
-                                    math.max(4.0, trackWidth - left),
-                                  ),
-                                  top: 0,
-                                  bottom: 0,
-                                  child: DecoratedBox(
-                                    decoration: BoxDecoration(
-                                      gradient: LinearGradient(
-                                        colors: <Color>[
-                                          theme.accentPalette.primary
-                                              .withValues(alpha: 0.40),
-                                          theme.accentPalette.primary,
-                                        ],
-                                      ),
-                                      borderRadius: theme.borderRadius(
-                                        ShellShapeScale.full,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    SizedBox(
-                      width: 30,
-                      child: Text(
-                        formatTemperature(
-                          days[i].maxTemperatureC,
-                          temperatureUnit,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: theme.text.bodySmall.copyWith(
-                          color: colors.textPrimary,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
-              ),
-          ],
-        ),
-      ),
+                const SizedBox(width: 8),
+                Icon(
+                  weatherConditionFor(days[i].weatherCode).icon(day: true),
+                  size: 19,
+                  color: colors.textSecondary,
+                ),
+                const SizedBox(width: 10),
+                SizedBox(
+                  width: 30,
+                  child: Text(
+                    formatTemperature(days[i].minTemperatureC, temperatureUnit),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.right,
+                    style: TextStyle(
+                      color: colors.textTertiary,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      decoration: TextDecoration.none,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      final trackWidth = constraints.maxWidth;
+                      var left = 0.0;
+                      var width = trackWidth;
+                      if (span > 0 && trackWidth > 0) {
+                        left =
+                            (days[i].minTemperatureC - minimum) /
+                            span *
+                            trackWidth;
+                        width =
+                            (days[i].maxTemperatureC -
+                                days[i].minTemperatureC) /
+                            span *
+                            trackWidth;
+                      }
+                      return SizedBox(
+                        height: 6,
+                        child: Stack(
+                          children: [
+                            Positioned.fill(
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  color: colors.surfaceContainerHighest,
+                                  borderRadius: theme.borderRadius(
+                                    ShellShapeScale.full,
+                                  ),
+                                ),
+                              ),
+                            ),
+                            Positioned(
+                              left: left,
+                              width: width.clamp(
+                                4.0,
+                                math.max(4.0, trackWidth - left),
+                              ),
+                              top: 0,
+                              bottom: 0,
+                              child: DecoratedBox(
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(
+                                    colors: <Color>[
+                                      theme.accentPalette.primary.withValues(
+                                        alpha: 0.40,
+                                      ),
+                                      theme.accentPalette.primary,
+                                    ],
+                                  ),
+                                  borderRadius: theme.borderRadius(
+                                    ShellShapeScale.full,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(width: 8),
+                SizedBox(
+                  width: 30,
+                  child: Text(
+                    formatTemperature(days[i].maxTemperatureC, temperatureUnit),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: colors.textPrimary,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      decoration: TextDecoration.none,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 

@@ -15,10 +15,7 @@ const settingsNavigationListKey = ValueKey<String>('settings-navigation-list');
 // Layout geometry (02-VISUAL-SPEC.md §2.2 / §3.2).
 const double settingsSidebarWidth = 288;
 const double settingsSidebarPadding = 16;
-
-/// Two-line navigation card height (02-VISUAL-SPEC.md §4, reference photo:
-/// icon + title + supporting line).
-const double settingsNavItemHeight = 72;
+const double settingsNavItemHeight = 64;
 const double settingsNavItemRadius = ShellShapeScale.large;
 const double settingsNavItemInset = 12;
 const double settingsNavIconDiameter = 40;
@@ -134,47 +131,6 @@ extension SettingsPageIdPresentation on SettingsPageId {
     SettingsPageId.weather => context.l10n.settingsNavigationWeather,
     SettingsPageId.power => context.l10n.settingsNavigationPower,
     SettingsPageId.developer => context.l10n.settingsNavigationDeveloper,
-  };
-
-  /// Second painted line of the navigation card (§4: 12sp `onSurfaceVariant`).
-  ///
-  /// Every destination supplies a short summary of its contents so the rail
-  /// matches the two-line reference layout; the line is also folded into the
-  /// card's accessibility label by [SettingsNavItem].
-  String supportLabel(BuildContext context) => switch (this) {
-    SettingsPageId.about => context.l10n.settingsNavigationAboutSupport,
-    SettingsPageId.appearance =>
-      context.l10n.settingsNavigationAppearanceSupport,
-    SettingsPageId.language =>
-      context.l10n.settingsNavigationLanguageSupport,
-    SettingsPageId.keyboard =>
-      context.l10n.settingsNavigationKeyboardSupport,
-    SettingsPageId.touchpad =>
-      context.l10n.settingsNavigationTouchpadSupport,
-    SettingsPageId.shortcuts =>
-      context.l10n.settingsNavigationShortcutsSupport,
-    SettingsPageId.environment =>
-      context.l10n.settingsNavigationEnvironmentSupport,
-    SettingsPageId.animations =>
-      context.l10n.settingsNavigationAnimationsSupport,
-    SettingsPageId.layout =>
-      context.l10n.settingsNavigationDesktopLayoutSupport,
-    SettingsPageId.overlays =>
-      context.l10n.settingsNavigationOverlaysSupport,
-    SettingsPageId.lockScreen =>
-      context.l10n.settingsNavigationLockScreenSupport,
-    SettingsPageId.audio => context.l10n.settingsNavigationAudioSupport,
-    SettingsPageId.displays =>
-      context.l10n.settingsNavigationDisplaysSupport,
-    SettingsPageId.network =>
-      context.l10n.settingsNavigationNetworkSupport,
-    SettingsPageId.bluetooth =>
-      context.l10n.settingsNavigationBluetoothSupport,
-    SettingsPageId.weather =>
-      context.l10n.settingsNavigationWeatherSupport,
-    SettingsPageId.power => context.l10n.settingsNavigationPowerSupport,
-    SettingsPageId.developer =>
-      context.l10n.settingsNavigationDeveloperSupport,
   };
 
   IconData get icon => switch (this) {
@@ -382,10 +338,10 @@ class _GroupHeader extends StatelessWidget {
   }
 }
 
-/// One card-style navigation destination (§3.4/§4).
+/// One card-style navigation destination (§3.4).
 ///
-/// The card is a two-line 72dp row — title plus the destination's supporting
-/// summary — matching the Android 16 desktop Settings reference photo.
+/// The card carries the destination label alone: a single-line 64dp row whose
+/// title is centred, so every rail entry and search result reads alike.
 class SettingsNavItem extends StatefulWidget {
   const SettingsNavItem({
     required this.page,
@@ -399,11 +355,10 @@ class SettingsNavItem extends StatefulWidget {
   final bool selected;
   final VoidCallback onPressed;
 
-  /// Extra line appended to the accessibility label; never painted (§3.3).
+  /// Second line of the accessibility label; never painted (§3.3).
   ///
-  /// Search results announce the destination's owning group this way. The
-  /// painted supporting line ([SettingsPageId.supportLabel]) always precedes
-  /// it in the label.
+  /// Search results announce the destination's owning group this way without
+  /// giving the card a visible supporting line.
   final String? semanticsSupport;
 
   @override
@@ -470,12 +425,9 @@ class _SettingsNavItemState extends State<SettingsNavItem>
     final colors = context.shellColors;
     final selected = widget.selected;
     final pageLabel = widget.page.label(context);
-    final supportLabel = widget.page.supportLabel(context);
-    final semanticsLabel = <String>[
-      pageLabel,
-      supportLabel,
-      if (widget.semanticsSupport != null) widget.semanticsSupport!,
-    ].join('\n');
+    final semanticsLabel = widget.semanticsSupport == null
+        ? pageLabel
+        : '$pageLabel\n${widget.semanticsSupport}';
     final radius = theme.borderRadius(settingsNavItemRadius);
     final hoverDuration = MediaQuery.disableAnimationsOf(context)
         ? Duration.zero
@@ -565,44 +517,21 @@ class _SettingsNavItemState extends State<SettingsNavItem>
                           ),
                           const SizedBox(width: settingsNavIconSpacing),
                           Expanded(
-                            // The painted lines are the parent Semantics
-                            // label, so they are excluded here rather than
-                            // announced a second time.
+                            // The painted label is the parent Semantics label,
+                            // so it is excluded here rather than announced a
+                            // second time.
                             child: ExcludeSemantics(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                crossAxisAlignment:
-                                    CrossAxisAlignment.start,
-                                children: <Widget>[
-                                  Text(
-                                    pageLabel,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: ShellText.settingsNavLabel
-                                        .copyWith(
-                                          color: Color.lerp(
-                                            colors.textPrimary,
-                                            palette.onContainer,
-                                            selection,
-                                          ),
-                                        ),
+                              child: Text(
+                                pageLabel,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: ShellText.settingsNavLabel.copyWith(
+                                  color: Color.lerp(
+                                    colors.textPrimary,
+                                    palette.onContainer,
+                                    selection,
                                   ),
-                                  Text(
-                                    supportLabel,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    // §4: the supporting line is the 12sp
-                                    // BodySmall role on onSurfaceVariant
-                                    // (shell textSecondary).
-                                    style: ShellText.bodySmall.copyWith(
-                                      color: Color.lerp(
-                                        colors.textSecondary,
-                                        palette.onContainerSecondary,
-                                        selection,
-                                      ),
-                                    ),
-                                  ),
-                                ],
+                                ),
                               ),
                             ),
                           ),

@@ -5,6 +5,7 @@ import '../../models/ui_development.dart';
 import '../../state/ui_development.dart';
 import '../../theme/shell_theme.dart';
 import '../../theme/tokens.dart';
+import '../../widgets/shell_cursor.dart';
 import 'settings_buttons.dart';
 import 'settings_controls.dart';
 
@@ -375,7 +376,12 @@ class _WorkspaceSetupPanel extends StatelessWidget {
         ],
         if (running) ...[
           const SizedBox(height: 10),
-          const SettingsProgressBar(minHeight: 4),
+          LinearProgressIndicator(
+            minHeight: 4,
+            borderRadius: context.shellTheme.borderRadius(ShellShapeScale.full),
+            color: ShellTheme.of(context).accent,
+            backgroundColor: context.shellColors.surfaceContainerHighest,
+          ),
         ],
       ],
     );
@@ -397,18 +403,53 @@ class _WorkspaceField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SettingsTextField(
-      fieldKey: settingsDeveloperWorkspaceFieldKey,
-      controller: controller,
-      focusNode: focusNode,
-      enabled: enabled,
-      monospace: true,
-      borderRadius: ShellShapeScale.full,
-      keyboardType: TextInputType.url,
-      textInputAction: TextInputAction.done,
-      onSubmitted: (_) => onSubmitted(),
-      hint: context.l10n.settingsDeveloperWorkspaceHint,
-      semanticsLabel: context.l10n.settingsDeveloperWorkspaceFieldLabel,
+    final accent = ShellTheme.of(context).accent;
+    return Semantics(
+      textField: true,
+      label: context.l10n.settingsDeveloperWorkspaceFieldLabel,
+      child: MouseRegion(
+        cursor: ShellMouseCursors.text,
+        child: TextField(
+          key: settingsDeveloperWorkspaceFieldKey,
+          controller: controller,
+          focusNode: focusNode,
+          enabled: enabled,
+          autocorrect: false,
+          enableSuggestions: false,
+          keyboardType: TextInputType.url,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (_) => onSubmitted(),
+          style: ShellText.settingsRowSupport.copyWith(
+            color: context.shellColors.textPrimary,
+            fontFamily: ShellText.systemBarFontFamily,
+          ),
+          decoration: InputDecoration(
+            isDense: true,
+            hintText: context.l10n.settingsDeveloperWorkspaceHint,
+            hintStyle: ShellText.settingsRowSupport.copyWith(
+              color: context.shellColors.textTertiary,
+            ),
+            filled: true,
+            fillColor: context.shellColors.surfaceContainerHigh,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 13,
+              vertical: 12,
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: context.shellTheme.borderRadius(ShellShapeScale.full),
+              borderSide: BorderSide(color: context.shellColors.hairline),
+            ),
+            focusedBorder: OutlineInputBorder(
+              borderRadius: context.shellTheme.borderRadius(ShellShapeScale.full),
+              borderSide: BorderSide(color: accent),
+            ),
+            disabledBorder: OutlineInputBorder(
+              borderRadius: context.shellTheme.borderRadius(ShellShapeScale.full),
+              borderSide: BorderSide(color: context.shellColors.hairlineSoft),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -460,7 +501,13 @@ class _RuntimeSummary extends StatelessWidget {
         ),
         if (state.progress case final progress?) ...[
           const SizedBox(height: 10),
-          SettingsProgressBar(value: progress, minHeight: 4),
+          LinearProgressIndicator(
+            value: progress,
+            minHeight: 4,
+            borderRadius: context.shellTheme.borderRadius(ShellShapeScale.full),
+            color: ShellTheme.of(context).accent,
+            backgroundColor: context.shellColors.surfaceContainerHighest,
+          ),
         ],
       ],
     );

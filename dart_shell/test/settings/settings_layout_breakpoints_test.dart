@@ -71,7 +71,7 @@ void main() {
     });
   });
 
-  testWidgets('navigation cards use the verified 72dp card geometry', (
+  testWidgets('navigation cards use the verified 64dp card geometry', (
     tester,
   ) async {
     await _withSemantics(tester, () async {

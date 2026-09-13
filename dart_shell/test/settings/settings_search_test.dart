@@ -158,9 +158,8 @@ void main() {
       expect(_result(SettingsPageId.animations), findsOneWidget);
       expect(_result(SettingsPageId.audio), findsNothing);
       expect(find.byKey(settingsSearchEmptyKey), findsNothing);
-      // The group name appears once, as the section heading: the result card
-      // is the same two-line 72dp card as the navigation and paints the
-      // destination's own supporting line, never the group name (§3.4).
+      // The group name appears once, as the section heading: the result card is
+      // a single-line 64dp row and carries no supporting line (§3.4).
       expect(
         _sectionHeader('Personalization'),
         findsOneWidget,
@@ -172,14 +171,6 @@ void main() {
           matching: find.text('Personalization'),
         ),
         findsNothing,
-      );
-      expect(
-        find.descendant(
-          of: _result(SettingsPageId.animations),
-          matching: find.text('Window and panel motion'),
-        ),
-        findsOneWidget,
-        reason: 'the result card must paint the destination support line',
       );
       expect(
         tester.getSize(_result(SettingsPageId.animations)).height,
@@ -331,9 +322,8 @@ void main() {
           contains('Personalization'),
           reason: 'a result must announce its destination and its group (§3.3)',
         );
-        // The group is announced through the label alone: the card paints
-        // only the destination's own supporting line, never the group name
-        // (§3.4).
+        // The group is announced through the label alone: the card keeps the
+        // single-line 64dp row and paints no supporting line (§3.4).
         expect(
           find.descendant(
             of: _result(SettingsPageId.layout),

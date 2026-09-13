@@ -14,7 +14,6 @@ import 'package:denial_dart_shell/src/services/system_identity_service.dart';
 import 'package:denial_dart_shell/src/services/todo_service.dart';
 import 'package:denial_dart_shell/src/state/bluetooth.dart';
 import 'package:denial_dart_shell/src/state/desktop_notifications.dart';
-import 'package:denial_dart_shell/src/state/desktop_power_modes.dart';
 import 'package:denial_dart_shell/src/state/network_connectivity.dart';
 import 'package:denial_dart_shell/src/state/quick_settings.dart';
 import 'package:denial_dart_shell/src/state/shell_controller.dart';
@@ -289,7 +288,6 @@ void main() {
           (_, _) => const DesktopNotificationsState(),
         ),
         desktopWorkspaceProvider.overrideWith(_FakeWorkspaceController.new),
-        desktopPowerModesProvider.overrideWith(_FakePowerModesController.new),
       ],
     );
 
@@ -483,7 +481,6 @@ Widget _bubbleScope(Widget child) {
         (_, _) => const DesktopNotificationsState(),
       ),
       desktopWorkspaceProvider.overrideWith(_FakeWorkspaceController.new),
-      desktopPowerModesProvider.overrideWith(_FakePowerModesController.new),
     ],
     child: child,
   );
@@ -564,12 +561,6 @@ class _DrivenQuickSettingsController extends QuickSettingsController {
       volumeLoaded: true,
     );
   }
-}
-
-// The tray bubble's modes row would otherwise hit the real D-Bus service.
-class _FakePowerModesController extends DesktopPowerModesController {
-  @override
-  DesktopPowerModesState build() => DesktopPowerModesState.initial();
 }
 
 class _FakeNetworkController extends NetworkConnectivityController {

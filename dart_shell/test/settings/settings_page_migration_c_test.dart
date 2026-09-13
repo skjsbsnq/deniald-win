@@ -376,7 +376,7 @@ void main() {
       );
       await tester.pump();
 
-      final field = tester.widget<TextFormField>(
+      final field = tester.widget<TextField>(
         find.byKey(settingsDeveloperWorkspaceFieldKey),
       );
       expect(field.controller?.text, '/home/dev/DenialUI');

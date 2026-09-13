@@ -10,8 +10,6 @@ import '../desktop_workspace.dart';
 import '../../localization/denial_localizations.dart';
 import '../../services/network_backend.dart';
 import '../../settings/settings_application.dart';
-import '../../settings/settings_controller.dart';
-import '../../settings/shell_settings.dart';
 import '../../settings/widgets/settings_navigation.dart';
 import '../../state/bluetooth.dart';
 import '../../state/desktop_notifications.dart';
@@ -195,41 +193,31 @@ class _UnifiedTrayBubbleState extends ConsumerState<UnifiedTrayBubble>
                     child: Stack(
                       children: [
                         Positioned(
-                          right: ShellSpacing.sm,
-                          bottom: widget.shelfHeight + ShellSpacing.sm,
-                          child: Opacity(
-                            opacity: clampedProgress,
-                            // The panel grows out of the shelf: besides the
-                            // settle scale it rides a ≤24 dp translate from
-                            // below while fading in (02-VISUAL-SPEC §5).
-                            child: Transform.translate(
-                              offset: Offset(
-                                0.0,
-                                (1.0 - clampedProgress) * 24.0,
-                              ),
-                              child: Transform.scale(
-                                scale: scale,
-                                alignment: Alignment.bottomRight,
-                                child: SizedBox(
-                                  width: bubbleWidth,
-                                  child: ShellBackdropBlur(
-                                    strength: clampedProgress,
+                          right: 8.0,
+                          bottom: widget.shelfHeight + 8.0,
+                          child: Transform.scale(
+                            scale: scale,
+                            alignment: Alignment.bottomRight,
+                            child: SizedBox(
+                              width: bubbleWidth,
+                              child: ShellBackdropBlur(
+                                strength: clampedProgress,
+                                borderRadius: bubbleRadius,
+                                separateChild: true,
+                                child: DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    // Frosted surface blending with desktop
+                                    // background tones.
+                                    color: theme.panelColor(
+                                      colors.surfaceContainerLow,
+                                    ),
                                     borderRadius: bubbleRadius,
-                                    separateChild: true,
-                                    child: DecoratedBox(
-                                      decoration: BoxDecoration(
-                                        // Frosted surface blending with
-                                        // desktop background tones; tonal
-                                        // separation replaces the old
-                                        // hairline outline.
-                                        color: theme.panelColor(
-                                          colors.surfaceContainerLow,
-                                        ),
-                                        borderRadius: bubbleRadius,
-                                      ),
-                                      child: child,
+                                    border: Border.all(
+                                      color: colors.hairlineSoft,
+                                      width: 1.0,
                                     ),
                                   ),
+                                  child: child,
                                 ),
                               ),
                             ),
@@ -246,7 +234,7 @@ class _UnifiedTrayBubbleState extends ConsumerState<UnifiedTrayBubble>
       },
       child: RepaintBoundary(
         child: Padding(
-          padding: const EdgeInsets.all(ShellSpacing.lg),
+          padding: const EdgeInsets.all(16.0),
           child: Focus(
             focusNode: _contentFocus,
             autofocus: widget.visible,
@@ -280,16 +268,10 @@ class _TrayBubbleContent extends ConsumerWidget {
     final l10n = context.l10n;
 
     // The sliders watch their own value in narrow consumers below; this
-    // widget only subscribes to the tile states so a drag does not rebuild
-    // the whole column (header, chips, and tiles) on every pointer delta.
-    final quickSettings = ref.watch(
-      quickSettingsProvider.select(
-        (state) => (
-          profile: state.profile,
-          rotationLock: state.rotationLock,
-          screenshotRunning: state.screenshotRunning,
-        ),
-      ),
+    // widget only subscribes to the profile so a drag does not rebuild the
+    // whole column (header, chips, and tiles) on every pointer delta.
+    final profile = ref.watch(
+      quickSettingsProvider.select((state) => state.profile),
     );
     final quickSettingsController = ref.read(quickSettingsProvider.notifier);
 
@@ -324,18 +306,14 @@ class _TrayBubbleContent extends ConsumerWidget {
         bluetooth.available &&
         !bluetooth.powerChanging;
 
-    // The dark-theme tile reflects the resolved shell brightness; tapping it
-    // writes an explicit scheme preference through the settings controller.
-    final darkTheme = context.shellTheme.brightness == Brightness.dark;
-
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         _TrayHeader(onDismiss: onDismiss),
-        const SizedBox(height: ShellSpacing.md),
+        const SizedBox(height: 10.0),
         _TrayStatusChips(onDismiss: onDismiss, onOpenOverview: onOpenOverview),
-        const SizedBox(height: ShellSpacing.sm),
+        const SizedBox(height: 10.0),
         QuickSettingsTiles(
           wifi:
               networkSnapshot.wirelessEnabled &&
@@ -347,12 +325,9 @@ class _TrayBubbleContent extends ConsumerWidget {
           bluetoothSubtitle: bluetoothStatusLabel(bluetooth, l10n),
           bluetoothEnabled: bluetoothToggleEnabled,
           bluetoothBusy: bluetooth.powerChanging,
-          rotationLock: quickSettings.rotationLock,
-          darkTheme: darkTheme,
           dnd: notificationPolicy.doNotDisturb,
           dndReady: notificationPolicy.loaded,
-          profile: quickSettings.profile,
-          screenshotBusy: quickSettings.screenshotRunning,
+          profile: profile,
           onToggleWifi: networkController.toggleWireless,
           onOpenWifi: () {
             ref
@@ -377,27 +352,14 @@ class _TrayBubbleContent extends ConsumerWidget {
           },
           onToggleDnd: notificationController.toggleDoNotDisturb,
           onCycleProfile: quickSettingsController.cycleProfile,
-          onToggleRotation: quickSettingsController.toggleRotation,
-          onToggleDarkTheme: () {
-            ref
-                .read(shellSettingsProvider.notifier)
-                .setColorSchemePreference(
-                  darkTheme
-                      ? DesktopColorSchemePreference.preferLight
-                      : DesktopColorSchemePreference.preferDark,
-                );
-          },
           onScreenshot: () {
             onDismiss?.call();
             quickSettingsController.takeScreenshot();
           },
         ),
-        // The power-modes row carries its own top gap and collapses entirely
-        // when the host has no switchable system profile.
-        const QuickSettingsModesSection(),
-        const SizedBox(height: ShellSpacing.sm),
+        const SizedBox(height: 10.0),
         _BrightnessRangeBar(onDismiss: onDismiss),
-        const SizedBox(height: ShellSpacing.sm),
+        const SizedBox(height: 8.0),
         _VolumeRangeBar(onDismiss: onDismiss),
       ],
     );
@@ -423,17 +385,15 @@ class _BrightnessRangeBar extends ConsumerWidget {
     final controller = ref.read(quickSettingsProvider.notifier);
     return RangeBar(
       icon: Icons.brightness_6_rounded,
-      leadingIcon: Icons.brightness_6_rounded,
       value: brightness.value,
       enabled: brightness.loaded,
       activeColor: theme.accent,
       inactiveColor: colors.surfaceContainerHighest,
       onChanged: controller.setBrightness,
       onChangeEnd: controller.commitBrightness,
-      height: 48.0,
+      height: 36.0,
       trailing: _TrayTrailingActionButton(
         icon: Icons.brightness_auto_rounded,
-        semanticLabel: context.l10n.trayDisplaySettings,
         onPressed: () {
           launchSettingsPage(
             ref,
@@ -465,7 +425,6 @@ class _VolumeRangeBar extends ConsumerWidget {
     final controller = ref.read(quickSettingsProvider.notifier);
     return RangeBar(
       icon: Icons.volume_up_rounded,
-      leadingIcon: Icons.volume_up_rounded,
       value: volume.value,
       enabled: volume.loaded,
       activeColor: theme.accent,
@@ -473,10 +432,9 @@ class _VolumeRangeBar extends ConsumerWidget {
       onChangeStart: controller.beginVolumeInteraction,
       onChanged: controller.setVolume,
       onChangeEnd: controller.commitVolume,
-      height: 48.0,
+      height: 36.0,
       trailing: _TrayTrailingActionButton(
         icon: Icons.chevron_right_rounded,
-        semanticLabel: context.l10n.trayAudioSettings,
         onPressed: () {
           launchSettingsPage(
             ref,
@@ -509,15 +467,23 @@ class _TrayHeader extends ConsumerWidget {
             children: [
               Text(
                 l10n.quickSettingsTitle,
-                style: ShellText.titleMediumEmphasized.copyWith(
+                style: TextStyle(
                   color: colors.textPrimary,
+                  fontSize: 18,
+                  fontWeight: FontWeight.w700,
+                  height: 1.1,
+                  decoration: TextDecoration.none,
                 ),
               ),
               const SizedBox(height: 3),
               Text(
                 'Denial OS',
-                style: ShellText.bodySmall.copyWith(
+                style: TextStyle(
                   color: colors.textTertiary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  height: 1.1,
+                  decoration: TextDecoration.none,
                 ),
               ),
             ],
@@ -525,24 +491,21 @@ class _TrayHeader extends ConsumerWidget {
         ),
         _TrayHeaderActionButton(
           icon: Icons.settings_outlined,
-          semanticLabel: l10n.trayOpenSettings,
           onPressed: () {
             launchSettingsPage(ref, context, null, onDispatched: onDismiss);
           },
         ),
-        const SizedBox(width: ShellSpacing.sm),
+        const SizedBox(width: 8),
         _TrayHeaderActionButton(
           icon: Icons.power_settings_new_rounded,
-          semanticLabel: l10n.desktopOpenPowerControls,
           onPressed: () {
             showPowerSessionSurface(ref);
             onDismiss?.call();
           },
         ),
-        const SizedBox(width: ShellSpacing.sm),
+        const SizedBox(width: 8),
         _TrayHeaderActionButton(
           icon: Icons.edit_rounded,
-          semanticLabel: l10n.trayAppearanceSettings,
           onPressed: () {
             launchSettingsPage(
               ref,
@@ -628,14 +591,9 @@ class _TrayStatusChips extends ConsumerWidget {
 }
 
 class _TrayHeaderActionButton extends StatelessWidget {
-  const _TrayHeaderActionButton({
-    required this.icon,
-    required this.semanticLabel,
-    required this.onPressed,
-  });
+  const _TrayHeaderActionButton({required this.icon, required this.onPressed});
 
   final IconData icon;
-  final String semanticLabel;
   final VoidCallback onPressed;
 
   @override
@@ -646,9 +604,9 @@ class _TrayHeaderActionButton extends StatelessWidget {
       onTap: onPressed,
       width: 34,
       height: 34,
-      color: colors.surfaceContainerHighest,
+      color: colors.surfaceContainerHigh,
       hoverColor: colors.panelHighlight,
-      semanticLabel: semanticLabel,
+      border: Border.all(color: colors.hairlineSoft),
       child: Icon(icon, size: 18, color: colors.textPrimary),
     );
   }
@@ -657,28 +615,24 @@ class _TrayHeaderActionButton extends StatelessWidget {
 class _TrayTrailingActionButton extends StatelessWidget {
   const _TrayTrailingActionButton({
     required this.icon,
-    required this.semanticLabel,
     required this.onPressed,
   });
 
   final IconData icon;
-  final String semanticLabel;
   final VoidCallback onPressed;
 
   @override
   Widget build(BuildContext context) {
     final colors = context.shellColors;
 
-    // Ø40 round button matching the detached leading icon segment
-    // (02-VISUAL-SPEC §4).
     return ShellHoverPill(
       onTap: onPressed,
-      width: 40,
-      height: 40,
+      width: 36,
+      height: 36,
       color: colors.surfaceContainerHighest,
       hoverColor: colors.panelHighlight,
-      semanticLabel: semanticLabel,
-      child: Icon(icon, size: 20, color: colors.textPrimary),
+      border: Border.all(color: colors.hairlineSoft),
+      child: Icon(icon, size: 18, color: colors.textPrimary),
     );
   }
 }
@@ -705,6 +659,7 @@ class _TrayStatusChip extends StatelessWidget {
         padding: const EdgeInsets.symmetric(horizontal: 10),
         color: colors.surfaceContainerHighest,
         hoverColor: colors.panelHighlight,
+        border: Border.all(color: colors.hairlineSoft),
         alignment: Alignment.centerLeft,
         child: Row(
           children: [
@@ -715,7 +670,9 @@ class _TrayStatusChip extends StatelessWidget {
                 label,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: ShellText.labelMedium.copyWith(
+                style: ShellText.base.copyWith(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
                   color: colors.textPrimary,
                 ),
               ),

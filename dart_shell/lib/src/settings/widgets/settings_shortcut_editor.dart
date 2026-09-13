@@ -11,9 +11,7 @@ import '../../theme/motion.dart';
 import '../../theme/shell_theme.dart';
 import '../../theme/tokens.dart';
 import '../../widgets/app_icon.dart';
-import 'settings_buttons.dart';
 import 'settings_controls.dart';
-import 'settings_loading_indicator.dart';
 import 'settings_shortcut_presentation.dart';
 
 typedef ShortcutValidationCallback =
@@ -383,43 +381,47 @@ class _SettingsShortcutEditorState extends State<SettingsShortcutEditor> {
     final closeOrBack = _view == _EditorView.form
         ? widget.onClose
         : _closeCatalog;
-    return SettingsModalScrim(
-      // Content-level Escape handling (catalog back navigation, busy guard)
-      // runs ahead of the scrim's fallback dismiss.
-      onDismiss: widget.busy ? () {} : closeOrBack,
-      child: CallbackShortcuts(
-        bindings: <ShortcutActivator, VoidCallback>{
-          const SingleActivator(LogicalKeyboardKey.escape): widget.busy
-              ? () {}
-              : closeOrBack,
-        },
-        child: Semantics(
-          container: true,
-          scopesRoute: true,
-          namesRoute: true,
-          explicitChildNodes: true,
-          label: title,
+    return CallbackShortcuts(
+      bindings: <ShortcutActivator, VoidCallback>{
+        const SingleActivator(LogicalKeyboardKey.escape): widget.busy
+            ? () {}
+            : closeOrBack,
+      },
+      child: Semantics(
+        container: true,
+        scopesRoute: true,
+        namesRoute: true,
+        explicitChildNodes: true,
+        label: title,
+        child: ColoredBox(
+          color: context.shellColors.overviewScrim,
           child: LayoutBuilder(
             builder: (context, constraints) {
-              return ConstrainedBox(
-                constraints: BoxConstraints(
-                  maxWidth: 620,
-                  maxHeight: constraints.maxHeight,
-                ),
-                child: _EditorSurface(
-                  title: title,
-                  busy: widget.busy,
-                  onClose: widget.onClose,
-                  child: AnimatedSwitcher(
-                    duration: Motion.tile,
-                    switchInCurve: Motion.md3EmphasizedDecelerate,
-                    switchOutCurve: Motion.md3EmphasizedAccelerate,
-                    child: switch (_view) {
-                      _EditorView.form => _buildForm(),
-                      _EditorView.actions => _buildActionCatalog(),
-                      _EditorView.applications => _buildApplicationCatalog(),
-                      _EditorView.inputs => _buildInputCatalog(),
-                    },
+              return Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxWidth: 620,
+                      maxHeight: constraints.maxHeight - 32,
+                    ),
+                    child: _EditorSurface(
+                      title: title,
+                      busy: widget.busy,
+                      onClose: widget.onClose,
+                      child: AnimatedSwitcher(
+                        duration: Motion.tile,
+                        switchInCurve: Motion.md3EmphasizedDecelerate,
+                        switchOutCurve: Motion.md3EmphasizedAccelerate,
+                        child: switch (_view) {
+                          _EditorView.form => _buildForm(),
+                          _EditorView.actions => _buildActionCatalog(),
+                          _EditorView.applications =>
+                            _buildApplicationCatalog(),
+                          _EditorView.inputs => _buildInputCatalog(),
+                        },
+                      ),
+                    ),
                   ),
                 ),
               );
@@ -543,7 +545,7 @@ class _SettingsShortcutEditorState extends State<SettingsShortcutEditor> {
             ),
           ),
         ),
-        const SettingsHairline(),
+        Divider(height: 1, color: context.shellColors.hairlineSoft),
         _EditorFooter(
           canSave: !widget.busy && _validation?.isValid == true,
           saving: widget.busy && !widget.deleteBusy,
@@ -669,63 +671,67 @@ class _EditorSurface extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final accent = ShellTheme.of(context).accent;
-    // Modal surfaces share the panel/bubble radius so the editor matches the
-    // accent picker and other overlays (§2: extraLarge).
-    final radius = context.shellTheme.borderRadius(ShellShapeScale.extraLarge);
-    // Tonal surface + hairline instead of Material elevation (§1.2).
-    return ClipRRect(
-      borderRadius: radius,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: context.shellTheme.cardColor(
-            context.shellColors.surfaceContainerHigh,
-          ),
-          borderRadius: radius,
-          border: Border.all(color: accent.withAlpha(86)),
+    return Material(
+      color: context.shellTheme.cardColor(
+        context.shellColors.surfaceContainerHigh,
+      ),
+      shape: RoundedRectangleBorder(
+        borderRadius: context.shellTheme.borderRadius(
+          ShellShapeScale.largeIncreased,
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(18, 12, 10, 12),
-              child: Row(
-                children: [
-                  DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: accent.withAlpha(32),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.all(8),
-                      child: Icon(
-                        Icons.keyboard_command_key_rounded,
-                        color: accent,
-                        size: 19,
-                      ),
-                    ),
+        side: BorderSide(color: accent.withAlpha(86)),
+      ),
+      elevation: 18,
+      shadowColor: context.shellColors.shadow,
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(18, 12, 10, 12),
+            child: Row(
+              children: [
+                DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: accent.withAlpha(32),
+                    shape: BoxShape.circle,
                   ),
-                  const SizedBox(width: 11),
-                  Expanded(
-                    child: Text(
-                      title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: ShellText.settingsRowTitle,
+                  child: Padding(
+                    padding: const EdgeInsets.all(8),
+                    child: Icon(
+                      Icons.keyboard_command_key_rounded,
+                      color: accent,
+                      size: 19,
                     ),
                   ),
-                  SettingsIconButton(
-                    icon: Icons.close_rounded,
-                    semanticsLabel:
-                        context.l10n.settingsShortcutEditorCancel,
-                    onPressed: busy ? null : onClose,
+                ),
+                const SizedBox(width: 11),
+                Expanded(
+                  child: Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: ShellText.settingsRowTitle,
                   ),
-                ],
-              ),
+                ),
+                IconButton(
+                  tooltip: context.l10n.settingsShortcutEditorCancel,
+                  onPressed: busy ? null : onClose,
+                  icon: Icon(Icons.close_rounded),
+                  style: IconButton.styleFrom(
+                    foregroundColor: context.shellColors.textSecondary,
+                    disabledForegroundColor: context.shellColors.textTertiary
+                        .withAlpha(92),
+                    hoverColor: context.shellColors.textPrimary.withAlpha(18),
+                    focusColor: context.shellColors.textPrimary.withAlpha(18),
+                  ),
+                ),
+              ],
             ),
-            const SettingsHairline(),
-            Expanded(child: child),
-          ],
-        ),
+          ),
+          Divider(height: 1, color: context.shellColors.hairlineSoft),
+          Expanded(child: child),
+        ],
       ),
     );
   }
@@ -744,16 +750,36 @@ class _ShortcutTextField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SettingsTextField(
+    return TextField(
       controller: controller,
       enabled: enabled,
       autofocus: true,
-      monospace: true,
-      label: context.l10n.settingsShortcutEditorShortcutLabel,
-      hint: context.l10n.settingsShortcutEditorShortcutHint,
-      helperText: context.l10n.settingsShortcutEditorShortcutExample,
-      helperMaxLines: 2,
+      autocorrect: false,
+      enableSuggestions: false,
       onChanged: onChanged,
+      style: ShellText.base.copyWith(
+        color: context.shellColors.textPrimary,
+        fontFamily: ShellText.systemBarFontFamily,
+      ),
+      decoration: InputDecoration(
+        labelText: context.l10n.settingsShortcutEditorShortcutLabel,
+        hintText: context.l10n.settingsShortcutEditorShortcutHint,
+        helperText: context.l10n.settingsShortcutEditorShortcutExample,
+        helperMaxLines: 2,
+        helperStyle: ShellText.settingsRowSupport.copyWith(
+          color: context.shellColors.textSecondary,
+        ),
+        filled: true,
+        fillColor: context.shellColors.surfaceContainerHighest,
+        border: OutlineInputBorder(
+          borderRadius: context.shellTheme.borderRadius(ShellShapeScale.medium),
+          borderSide: BorderSide(color: context.shellColors.hairline),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: context.shellTheme.borderRadius(ShellShapeScale.medium),
+          borderSide: BorderSide(color: context.shellColors.hairline),
+        ),
+      ),
     );
   }
 }
@@ -787,32 +813,62 @@ class _TargetSelectionField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SettingsSegmentedControl<_EditorTarget>(
-      value: target,
-      enabled: enabled,
-      choices: <SettingsChoice<_EditorTarget>>[
-        SettingsChoice(
-          _EditorTarget.denialAction,
-          context.l10n.settingsShortcutEditorTargetAction,
-          icon: Icons.auto_awesome_rounded,
+    final palette = ShellTheme.of(context).accentPalette;
+    final selector = SegmentedButton<_EditorTarget>(
+      segments: <ButtonSegment<_EditorTarget>>[
+        ButtonSegment(
+          value: _EditorTarget.denialAction,
+          icon: Icon(Icons.auto_awesome_rounded, size: 17),
+          label: Text(context.l10n.settingsShortcutEditorTargetAction),
         ),
-        SettingsChoice(
-          _EditorTarget.application,
-          context.l10n.settingsShortcutEditorTargetApplication,
-          icon: Icons.apps_rounded,
+        ButtonSegment(
+          value: _EditorTarget.application,
+          icon: Icon(Icons.apps_rounded, size: 17),
+          label: Text(context.l10n.settingsShortcutEditorTargetApplication),
         ),
-        SettingsChoice(
-          _EditorTarget.spawn,
-          context.l10n.settingsShortcutEditorTargetProgram,
-          icon: Icons.terminal_rounded,
+        ButtonSegment(
+          value: _EditorTarget.spawn,
+          icon: Icon(Icons.terminal_rounded, size: 17),
+          label: Text(context.l10n.settingsShortcutEditorTargetProgram),
         ),
-        SettingsChoice(
-          _EditorTarget.spawnSh,
-          context.l10n.settingsShortcutEditorTargetShell,
-          icon: Icons.code_rounded,
+        ButtonSegment(
+          value: _EditorTarget.spawnSh,
+          icon: Icon(Icons.code_rounded, size: 17),
+          label: Text(context.l10n.settingsShortcutEditorTargetShell),
         ),
       ],
-      onChanged: onSelected,
+      selected: <_EditorTarget>{target},
+      showSelectedIcon: false,
+      onSelectionChanged: enabled
+          ? (selection) => onSelected(selection.single)
+          : null,
+      style: ButtonStyle(
+        visualDensity: VisualDensity.compact,
+        foregroundColor: WidgetStateProperty.resolveWith((states) {
+          return states.contains(WidgetState.selected)
+              ? palette.onContainer
+              : context.shellColors.textSecondary;
+        }),
+        backgroundColor: WidgetStateProperty.resolveWith((states) {
+          return states.contains(WidgetState.selected)
+              ? palette.container
+              : context.shellColors.surfaceContainerHighest;
+        }),
+        side: WidgetStateProperty.resolveWith((states) {
+          return BorderSide(
+            color: states.contains(WidgetState.selected)
+                ? palette.outline
+                : context.shellColors.hairline,
+          );
+        }),
+        overlayColor: WidgetStatePropertyAll(
+          context.shellColors.textPrimary.withAlpha(12),
+        ),
+      ),
+    );
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: selector,
     );
   }
 }
@@ -838,89 +894,63 @@ class _ApplicationSelectionField extends StatelessWidget {
         desktopFileId ??
         context.l10n.settingsShortcutEditorChooseApplication;
     final identity = application?.id ?? desktopFileId;
-    return _SelectionTile(
-      enabled: enabled,
-      onPressed: onPressed,
-      leading: SizedBox.square(
-        dimension: 28,
-        child: application == null
-            ? Icon(
-                desktopFileId == null
-                    ? Icons.apps_rounded
-                    : Icons.app_blocking_rounded,
-                color: context.shellColors.textTertiary,
-                size: 21,
-              )
-            : DeferredAppIcon(iconPath: application.iconPath),
-      ),
-      title: Text(
-        label,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: ShellText.cardTitle.copyWith(
-          color: context.shellColors.textPrimary,
+    return OutlinedButton(
+      onPressed: enabled ? onPressed : null,
+      style: OutlinedButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        foregroundColor: context.shellColors.textPrimary,
+        backgroundColor: context.shellColors.surfaceContainerHighest,
+        side: BorderSide(color: context.shellColors.hairline),
+        shape: RoundedRectangleBorder(
+          borderRadius: context.shellTheme.borderRadius(ShellShapeScale.medium),
         ),
       ),
-      subtitle: identity == null
-          ? null
-          : Text(
-              identity,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: ShellText.settingsBadgeLabel.copyWith(
-                color: context.shellColors.textSecondary,
-                fontFamily: ShellText.systemBarFontFamily,
-              ),
+      child: Row(
+        children: [
+          SizedBox.square(
+            dimension: 28,
+            child: application == null
+                ? Icon(
+                    desktopFileId == null
+                        ? Icons.apps_rounded
+                        : Icons.app_blocking_rounded,
+                    color: context.shellColors.textTertiary,
+                    size: 21,
+                  )
+                : DeferredAppIcon(iconPath: application.iconPath),
+          ),
+          const SizedBox(width: 11),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: ShellText.cardTitle,
+                ),
+                if (identity != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    identity,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: ShellText.settingsBadgeLabel.copyWith(
+                      color: context.shellColors.textSecondary,
+                      fontFamily: ShellText.systemBarFontFamily,
+                    ),
+                  ),
+                ],
+              ],
             ),
-    );
-  }
-}
-
-/// Full-width tonal tile hosting a [SettingsRow] — the shared shape for the
-/// editor's "choose …" fields (`medium` radius, hairline, `unfold_more`
-/// affordance). Replaces the previous Material `OutlinedButton` composites.
-class _SelectionTile extends StatelessWidget {
-  const _SelectionTile({
-    required this.leading,
-    required this.title,
-    required this.enabled,
-    required this.onPressed,
-    this.subtitle,
-  });
-
-  final Widget leading;
-  final Widget title;
-  final Widget? subtitle;
-  final bool enabled;
-  final VoidCallback onPressed;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = ShellTheme.of(context);
-    final radius = theme.borderRadius(ShellShapeScale.medium);
-    return ClipRRect(
-      borderRadius: radius,
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          color: context.shellColors.surfaceContainerHighest,
-          borderRadius: radius,
-          border: Border.all(color: context.shellColors.hairline),
-        ),
-        child: SettingsRow(
-          leading: leading,
-          title: title,
-          subtitle: subtitle,
-          trailing: Icon(
+          ),
+          Icon(
             Icons.unfold_more_rounded,
             size: 18,
             color: context.shellColors.textTertiary,
           ),
-          enabled: enabled,
-          onTap: enabled ? onPressed : null,
-          padding: const EdgeInsets.symmetric(
-            horizontal: ShellSpacing.lg,
-          ),
-        ),
+        ],
       ),
     );
   }
@@ -1005,13 +1035,13 @@ class _DirectCommandEditor extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 6),
-                SettingsIconButton(
-                  icon: Icons.remove_circle_outline_rounded,
-                  semanticsLabel:
-                      context.l10n.settingsShortcutEditorRemoveArgument(
-                        index + 1,
-                      ),
+                IconButton(
+                  tooltip: context.l10n.settingsShortcutEditorRemoveArgument(
+                    index + 1,
+                  ),
                   onPressed: enabled ? () => onRemoveArgument(index) : null,
+                  icon: Icon(Icons.remove_circle_outline_rounded),
+                  color: context.shellColors.textSecondary,
                 ),
               ],
             ),
@@ -1079,15 +1109,32 @@ class _CommandTextField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SettingsTextField(
+    return TextField(
       controller: controller,
       enabled: enabled,
-      monospace: true,
+      autocorrect: false,
+      enableSuggestions: false,
       minLines: minLines,
       maxLines: maxLines,
-      label: label,
-      hint: hint,
       onChanged: (_) => onChanged(),
+      style: ShellText.base.copyWith(
+        color: context.shellColors.textPrimary,
+        fontFamily: ShellText.systemBarFontFamily,
+      ),
+      decoration: InputDecoration(
+        labelText: label,
+        hintText: hint,
+        filled: true,
+        fillColor: context.shellColors.surfaceContainerHighest,
+        border: OutlineInputBorder(
+          borderRadius: context.shellTheme.borderRadius(ShellShapeScale.medium),
+          borderSide: BorderSide(color: context.shellColors.hairline),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: context.shellTheme.borderRadius(ShellShapeScale.medium),
+          borderSide: BorderSide(color: context.shellColors.hairline),
+        ),
+      ),
     );
   }
 }
@@ -1106,21 +1153,34 @@ class _ActionSelectionField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final accent = ShellTheme.of(context).accent;
-    return _SelectionTile(
-      enabled: enabled,
-      onPressed: onPressed,
-      leading: Icon(
-        settingsShortcutActionIcon(action),
-        color: accent,
-        size: 19,
-      ),
-      title: Text(
-        settingsShortcutActionLabel(context, action),
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
-        style: ShellText.cardTitle.copyWith(
-          color: context.shellColors.textPrimary,
+    return OutlinedButton(
+      onPressed: enabled ? onPressed : null,
+      style: OutlinedButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13),
+        foregroundColor: context.shellColors.textPrimary,
+        backgroundColor: context.shellColors.surfaceContainerHighest,
+        side: BorderSide(color: context.shellColors.hairline),
+        shape: RoundedRectangleBorder(
+          borderRadius: context.shellTheme.borderRadius(ShellShapeScale.medium),
         ),
+      ),
+      child: Row(
+        children: [
+          Icon(settingsShortcutActionIcon(action), color: accent, size: 19),
+          const SizedBox(width: 11),
+          Expanded(
+            child: Text(
+              settingsShortcutActionLabel(context, action),
+              textAlign: TextAlign.left,
+              style: ShellText.cardTitle,
+            ),
+          ),
+          Icon(
+            Icons.unfold_more_rounded,
+            size: 18,
+            color: context.shellColors.textTertiary,
+          ),
+        ],
       ),
     );
   }
@@ -1204,15 +1264,13 @@ class _ValidationLine extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (progress)
-            const Padding(
-              padding: EdgeInsets.only(top: 1),
+            Padding(
+              padding: const EdgeInsets.only(top: 1),
               child: SizedBox.square(
                 dimension: 15,
-                child: FittedBox(
-                  child: SizedBox.square(
-                    dimension: settingsLoadingIndicatorSize,
-                    child: SettingsLoadingIndicator(),
-                  ),
+                child: CircularProgressIndicator(
+                  strokeWidth: 1.8,
+                  color: color,
                 ),
               ),
             )
@@ -1334,32 +1392,47 @@ class _EditorButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SettingsButton(
-      label: label,
-      variant: primary
-          ? SettingsButtonVariant.filledTonal
-          : SettingsButtonVariant.outlined,
-      destructive: destructive,
-      icon: busy ? null : icon,
-      leading: busy ? const _EditorBusyIndicator() : null,
+    final palette = ShellTheme.of(context).accentPalette;
+    final foreground = primary
+        ? palette.onContainer
+        : destructive
+        ? context.shellColors.performanceBad
+        : context.shellColors.textSecondary;
+    final enabled = busy || onPressed != null;
+    final displayForeground = enabled ? foreground : foreground.withAlpha(92);
+    return FilledButton.icon(
       onPressed: busy ? null : onPressed,
-    );
-  }
-}
-
-/// 16dp rendition of the morphing M3E indicator used inside busy buttons.
-class _EditorBusyIndicator extends StatelessWidget {
-  const _EditorBusyIndicator();
-
-  @override
-  Widget build(BuildContext context) {
-    return const SizedBox.square(
-      dimension: 16,
-      child: FittedBox(
-        child: SizedBox.square(
-          dimension: settingsLoadingIndicatorSize,
-          child: SettingsLoadingIndicator(),
+      style: FilledButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 10),
+        backgroundColor: primary
+            ? palette.container
+            : context.shellColors.surfaceContainerHighest,
+        foregroundColor: foreground,
+        disabledBackgroundColor: primary
+            ? palette.container.withAlpha(96)
+            : context.shellColors.surfaceContainerHighest.withAlpha(120),
+        disabledForegroundColor: foreground.withAlpha(92),
+        shape: RoundedRectangleBorder(
+          borderRadius: context.shellTheme.borderRadius(ShellShapeScale.full),
+          side: BorderSide(
+            color: primary ? palette.outline : context.shellColors.hairline,
+          ),
         ),
+      ),
+      icon: busy
+          ? SizedBox.square(
+              dimension: 15,
+              child: CircularProgressIndicator(
+                strokeWidth: 1.8,
+                color: foreground,
+              ),
+            )
+          : icon == null
+          ? const SizedBox.shrink()
+          : Icon(icon, size: 17),
+      label: Text(
+        label,
+        style: ShellText.cardTitle.copyWith(color: displayForeground),
       ),
     );
   }
@@ -1396,10 +1469,15 @@ class _CatalogLayout extends StatelessWidget {
           padding: const EdgeInsets.fromLTRB(14, 14, 14, 10),
           child: Row(
             children: [
-              SettingsIconButton(
-                icon: Icons.arrow_back_rounded,
-                semanticsLabel: context.l10n.settingsShortcutEditorBack,
+              IconButton(
+                tooltip: context.l10n.settingsShortcutEditorBack,
                 onPressed: onBack,
+                icon: Icon(Icons.arrow_back_rounded),
+                style: IconButton.styleFrom(
+                  foregroundColor: context.shellColors.textSecondary,
+                  hoverColor: context.shellColors.textPrimary.withAlpha(18),
+                  focusColor: context.shellColors.textPrimary.withAlpha(18),
+                ),
               ),
               const SizedBox(width: 6),
               Expanded(
@@ -1413,12 +1491,29 @@ class _CatalogLayout extends StatelessWidget {
         ),
         Padding(
           padding: const EdgeInsets.fromLTRB(14, 0, 14, 12),
-          child: SettingsTextField(
+          child: TextField(
             controller: searchController,
             autofocus: true,
-            hint: context.l10n.settingsShortcutEditorSearch,
-            prefixIcon: const Icon(Icons.search_rounded, size: 19),
             onChanged: onSearchChanged,
+            style: ShellText.base,
+            decoration: InputDecoration(
+              hintText: context.l10n.settingsShortcutEditorSearch,
+              prefixIcon: Icon(Icons.search_rounded, size: 19),
+              filled: true,
+              fillColor: context.shellColors.surfaceContainerHighest,
+              border: OutlineInputBorder(
+                borderRadius: context.shellTheme.borderRadius(
+                  ShellShapeScale.medium,
+                ),
+                borderSide: BorderSide(color: context.shellColors.hairline),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: context.shellTheme.borderRadius(
+                  ShellShapeScale.medium,
+                ),
+                borderSide: BorderSide(color: context.shellColors.hairline),
+              ),
+            ),
           ),
         ),
         if (header case final header?) ...[
@@ -1440,7 +1535,7 @@ class _CatalogLayout extends StatelessWidget {
               : child,
         ),
         if (footer case final footer?) ...[
-          const SettingsHairline(),
+          Divider(height: 1, color: context.shellColors.hairlineSoft),
           Padding(padding: const EdgeInsets.all(12), child: footer),
         ],
       ],
@@ -1508,15 +1603,16 @@ class _ActionCatalogRow extends StatelessWidget {
     final foreground = selected
         ? palette.onContainer
         : context.shellColors.textPrimary;
-    return SettingsRow(
+    return ListTile(
       selected: selected,
-      leading: Icon(
-        settingsShortcutActionIcon(action),
-        size: 20,
-        color: selected
-            ? foreground
-            : context.shellColors.textTertiary,
+      iconColor: context.shellColors.textTertiary,
+      textColor: context.shellColors.textPrimary,
+      selectedColor: foreground,
+      selectedTileColor: palette.container,
+      shape: RoundedRectangleBorder(
+        borderRadius: context.shellTheme.borderRadius(ShellShapeScale.medium),
       ),
+      leading: Icon(settingsShortcutActionIcon(action), size: 20),
       title: Text(
         settingsShortcutActionLabel(context, action),
         style: ShellText.cardTitle.copyWith(color: foreground),
@@ -1525,7 +1621,6 @@ class _ActionCatalogRow extends StatelessWidget {
           ? Icon(Icons.check_rounded, size: 18, color: foreground)
           : null,
       onTap: onPressed,
-      padding: const EdgeInsets.symmetric(horizontal: ShellSpacing.lg),
     );
   }
 }
@@ -1548,8 +1643,13 @@ class _ApplicationCatalogRow extends StatelessWidget {
     final foreground = selected
         ? palette.onContainer
         : context.shellColors.textPrimary;
-    return SettingsRow(
+    return ListTile(
       selected: selected,
+      selectedColor: foreground,
+      selectedTileColor: palette.container,
+      shape: RoundedRectangleBorder(
+        borderRadius: context.shellTheme.borderRadius(ShellShapeScale.medium),
+      ),
       leading: SizedBox.square(
         dimension: 30,
         child: DeferredAppIcon(iconPath: application.iconPath),
@@ -1575,7 +1675,6 @@ class _ApplicationCatalogRow extends StatelessWidget {
           ? Icon(Icons.check_rounded, size: 18, color: foreground)
           : null,
       onTap: onPressed,
-      padding: const EdgeInsets.symmetric(horizontal: ShellSpacing.lg),
     );
   }
 }
@@ -1593,7 +1692,10 @@ class _InputCatalogRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final aliases = input.aliases.join(', ');
-    return SettingsRow(
+    return ListTile(
+      shape: RoundedRectangleBorder(
+        borderRadius: context.shellTheme.borderRadius(ShellShapeScale.medium),
+      ),
       leading: Icon(
         input.kind == DenialShortcutInputKind.gesture
             ? Icons.gesture_rounded
@@ -1603,10 +1705,7 @@ class _InputCatalogRow extends StatelessWidget {
       ),
       title: Text(
         input.canonical,
-        maxLines: 1,
-        overflow: TextOverflow.ellipsis,
         style: ShellText.cardTitle.copyWith(
-          color: context.shellColors.textPrimary,
           fontFamily: ShellText.systemBarFontFamily,
         ),
       ),
@@ -1627,7 +1726,6 @@ class _InputCatalogRow extends StatelessWidget {
         ),
       ),
       onTap: onPressed,
-      padding: const EdgeInsets.symmetric(horizontal: ShellSpacing.lg),
     );
   }
 }

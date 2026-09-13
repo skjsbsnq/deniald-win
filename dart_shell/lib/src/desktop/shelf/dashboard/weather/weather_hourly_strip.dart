@@ -6,7 +6,6 @@ import '../../../../localization/denial_localizations.dart';
 import '../../../../services/weather_service.dart';
 import '../../../../settings/shell_settings.dart';
 import '../../../../theme/shell_theme.dart';
-import '../../../../theme/tokens.dart';
 import 'weather_hero_section.dart';
 import 'weather_temperature.dart';
 
@@ -79,118 +78,116 @@ class WeatherHourlyStrip extends StatelessWidget {
     }
     final span = maximum - minimum;
 
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: theme.panelColor(colors.surfaceContainer),
-        borderRadius: theme.borderRadius(ShellShapeScale.largeIncreased),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(10, 10, 10, 10),
+    return SizedBox(
+      height: _stripHeight,
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
         child: SizedBox(
-          height: _stripHeight,
-          child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: SizedBox(
-              width: upcoming.length * _itemWidth,
-              child: Stack(
-                children: [
-                  Positioned.fill(
-                    child: CustomPaint(
-                      painter: _HourlyCurvePainter(
-                        temperatures: <double>[
-                          for (final hour in upcoming) hour.temperatureC,
+          width: upcoming.length * _itemWidth,
+          child: Stack(
+            children: [
+              Positioned.fill(
+                child: CustomPaint(
+                  painter: _HourlyCurvePainter(
+                    temperatures: <double>[
+                      for (final hour in upcoming) hour.temperatureC,
+                    ],
+                    minimum: minimum,
+                    span: span,
+                    lineColor: theme.accentPalette.primary,
+                  ),
+                ),
+              ),
+              Row(
+                children: <Widget>[
+                  for (final hour in upcoming)
+                    SizedBox(
+                      width: _itemWidth,
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(
+                            height: _timeLabelHeight,
+                            child: Center(
+                              child: Text(
+                                l10n.weatherHourLabel(
+                                  hour.time.hour.toString().padLeft(2, '0'),
+                                ),
+                                style: TextStyle(
+                                  color: colors.textTertiary,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  decoration: TextDecoration.none,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: _gap),
+                          SizedBox(
+                            height: _iconZoneHeight,
+                            child: Center(
+                              child: Icon(
+                                weatherConditionFor(hour.weatherCode).icon(
+                                  day: isDaylight(
+                                    hour.time,
+                                    _dayFor(hour, dayByDate),
+                                  ),
+                                ),
+                                size: 20,
+                                color: colors.textSecondary,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: _gap),
+                          SizedBox(
+                            height: _curveZoneHeight,
+                            child: Align(
+                              alignment: Alignment(
+                                0,
+                                _chipAlignment(
+                                  hour.temperatureC,
+                                  minimum,
+                                  span,
+                                ),
+                              ),
+                              child: Text(
+                                formatTemperature(
+                                  hour.temperatureC,
+                                  temperatureUnit,
+                                ),
+                                style: TextStyle(
+                                  color: colors.textPrimary,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  height: _chipHeight / 11,
+                                  decoration: TextDecoration.none,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: _gap),
+                          SizedBox(
+                            height: _precipLabelHeight,
+                            child: Center(
+                              child: Text(
+                                '${hour.precipitationProbability}%',
+                                style: TextStyle(
+                                  color: hour.precipitationProbability >= 40
+                                      ? theme.accentPalette.primary
+                                      : colors.textTertiary,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  decoration: TextDecoration.none,
+                                ),
+                              ),
+                            ),
+                          ),
                         ],
-                        minimum: minimum,
-                        span: span,
-                        lineColor: theme.accentPalette.primary,
-                        fillColor: theme.accentPalette.primary,
                       ),
                     ),
-                  ),
-                  Row(
-                    children: <Widget>[
-                      for (final hour in upcoming)
-                        SizedBox(
-                          width: _itemWidth,
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              SizedBox(
-                                height: _timeLabelHeight,
-                                child: Center(
-                                  child: Text(
-                                    l10n.weatherHourLabel(
-                                      hour.time.hour.toString().padLeft(2, '0'),
-                                    ),
-                                    style: theme.text.labelSmall.copyWith(
-                                      color: colors.textTertiary,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: _gap),
-                              SizedBox(
-                                height: _iconZoneHeight,
-                                child: Center(
-                                  child: Icon(
-                                    weatherConditionFor(hour.weatherCode).icon(
-                                      day: isDaylight(
-                                        hour.time,
-                                        _dayFor(hour, dayByDate),
-                                      ),
-                                    ),
-                                    size: 20,
-                                    color: colors.textSecondary,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: _gap),
-                              SizedBox(
-                                height: _curveZoneHeight,
-                                child: Align(
-                                  alignment: Alignment(
-                                    0,
-                                    _chipAlignment(
-                                      hour.temperatureC,
-                                      minimum,
-                                      span,
-                                    ),
-                                  ),
-                                  child: Text(
-                                    formatTemperature(
-                                      hour.temperatureC,
-                                      temperatureUnit,
-                                    ),
-                                    style: theme.text.labelSmall.copyWith(
-                                      color: colors.textPrimary,
-                                      fontWeight: FontWeight.w600,
-                                      height: _chipHeight / 11,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(height: _gap),
-                              SizedBox(
-                                height: _precipLabelHeight,
-                                child: Center(
-                                  child: Text(
-                                    '${hour.precipitationProbability}%',
-                                    style: theme.text.labelSmall.copyWith(
-                                      color: hour.precipitationProbability >= 40
-                                          ? theme.accentPalette.primary
-                                          : colors.textTertiary,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                    ],
-                  ),
                 ],
               ),
-            ),
+            ],
           ),
         ),
       ),
@@ -228,16 +225,12 @@ class _HourlyCurvePainter extends CustomPainter {
     required this.minimum,
     required this.span,
     required this.lineColor,
-    required this.fillColor,
   });
 
   final List<double> temperatures;
   final double minimum;
   final double span;
   final Color lineColor;
-
-  /// Base color for the gradient wash under the curve (M3E area fill).
-  final Color fillColor;
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -282,24 +275,6 @@ class _HourlyCurvePainter extends CustomPainter {
     }
     path.lineTo(points.last.dx, points.last.dy);
 
-    // Gradient wash filling the curve zone below the line.
-    final fill = Path.from(path)
-      ..lineTo(points.last.dx, curveTop + curveHeight)
-      ..lineTo(points.first.dx, curveTop + curveHeight)
-      ..close();
-    canvas.drawPath(
-      fill,
-      Paint()
-        ..shader = LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          colors: <Color>[
-            fillColor.withValues(alpha: 0.30),
-            fillColor.withValues(alpha: 0.0),
-          ],
-        ).createShader(Rect.fromLTWH(0, curveTop, size.width, curveHeight)),
-    );
-
     canvas.drawPath(
       path,
       Paint()
@@ -316,6 +291,5 @@ class _HourlyCurvePainter extends CustomPainter {
       oldDelegate.temperatures != temperatures ||
       oldDelegate.minimum != minimum ||
       oldDelegate.span != span ||
-      oldDelegate.lineColor != lineColor ||
-      oldDelegate.fillColor != fillColor;
+      oldDelegate.lineColor != lineColor;
 }
