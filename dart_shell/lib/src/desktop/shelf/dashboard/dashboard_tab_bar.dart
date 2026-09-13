@@ -108,7 +108,13 @@ class _DashboardTabBarState extends State<DashboardTabBar>
                     AnimatedBuilder(
                       animation: _pill,
                       builder: (context, child) => Positioned(
-                        left: _pill.value * cellWidth,
+                        // The spatial spring intentionally overshoots; clamp
+                        // the painted position so the capsule never leaves
+                        // the rounded track during its settle bounce.
+                        left:
+                            _pill.value
+                                    .clamp(0.0, (_tabCount - 1).toDouble()) *
+                                cellWidth,
                         top: 0,
                         bottom: 0,
                         width: cellWidth,
@@ -130,7 +136,7 @@ class _DashboardTabBarState extends State<DashboardTabBar>
                             child: _Entry(
                               tab: tab,
                               label: _Entry._label(l10n, tab),
-                              selected: tab == widget.selected,
+                              pill: _pill,
                               onTap: () => widget.onSelected(tab),
                             ),
                           ),
@@ -168,13 +174,17 @@ class _Entry extends StatelessWidget {
   const _Entry({
     required this.tab,
     required this.label,
-    required this.selected,
+    required this.pill,
     required this.onTap,
   });
 
   final DashboardTab tab;
   final String label;
-  final bool selected;
+
+  /// Normalized capsule position (0-2). Entry foreground lerps toward the
+  /// on-container role as the capsule approaches, so the inverted style
+  /// travels with the pill instead of flipping the moment `selected` swaps.
+  final Animation<double> pill;
   final VoidCallback onTap;
 
   static String _label(AppLocalizations l10n, DashboardTab tab) {
@@ -203,32 +213,47 @@ class _Entry extends StatelessWidget {
       onTap: onTap,
       height: double.infinity,
       childBuilder: (context, hovered, focused) {
-        // The selected entry inverts over the accent pill; selection also
-        // swaps to the filled glyph where a rounded pair exists.
-        final fg = selected
-            ? theme.accentPalette.onContainer
-            : (hovered ? colors.textPrimary : colors.textSecondary);
-        return Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              selected && tab == DashboardTab.info ? Icons.info_rounded : icon,
-              size: 18,
-              color: fg,
-            ),
-            const SizedBox(width: 6),
-            Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                color: fg,
-                fontSize: 13,
-                fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
-                decoration: TextDecoration.none,
-              ),
-            ),
-          ],
+        final resting = hovered ? colors.textPrimary : colors.textSecondary;
+        return AnimatedBuilder(
+          animation: pill,
+          builder: (context, _) {
+            final position = pill.value.clamp(
+              0.0,
+              (DashboardTab.values.length - 1).toDouble(),
+            );
+            final coverage =
+                (1.0 - (position - tab.index).abs()).clamp(0.0, 1.0);
+            final fg = Color.lerp(
+              resting,
+              theme.accentPalette.onContainer,
+              coverage,
+            )!;
+            final covered = coverage > 0.5;
+            return Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  covered && tab == DashboardTab.info
+                      ? Icons.info_rounded
+                      : icon,
+                  size: 18,
+                  color: fg,
+                ),
+                const SizedBox(width: 6),
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: fg,
+                    fontSize: 13,
+                    fontWeight: covered ? FontWeight.w700 : FontWeight.w600,
+                    decoration: TextDecoration.none,
+                  ),
+                ),
+              ],
+            );
+          },
         );
       },
     );

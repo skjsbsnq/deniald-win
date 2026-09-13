@@ -8,7 +8,7 @@ import 'package:denial_dart_shell/src/wallpaper/state/wallpaper_accent.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_color_utilities/material_color_utilities.dart'
-    show Variant;
+    show Hct, Variant;
 
 void main() {
   ByteData solidRgba(int r, int g, int b, {int pixelCount = 256}) {
@@ -55,7 +55,16 @@ void main() {
     final first = shellDynamicScheme(seed, brightness: Brightness.dark);
     final second = shellDynamicScheme(seed, brightness: Brightness.dark);
     expect(identical(first, second), isTrue);
-    expect(first.variant, Variant.expressive);
+    expect(first.variant, Variant.tonalSpot);
+    // The primary palette must keep the wallpaper's own hue: SchemeExpressive
+    // rotates it +240°, which surfaced a violet wallpaper as green accents.
+    final delta = (first.primaryPalette.hue - Hct.fromInt(seed.toARGB32()).hue)
+        .abs();
+    expect(
+      delta > 180 ? 360 - delta : delta,
+      closeTo(0, 30),
+      reason: 'primary hue must stay near the seed hue, not rotated away',
+    );
 
     final dark = const ShellThemeData(accent: seed);
     final darkAgain = const ShellThemeData(accent: seed);
@@ -112,7 +121,7 @@ void main() {
     expect(standard.hashCode == raised.hashCode, isFalse);
   });
 
-  test('settings category hues and the shell accent share the expressive '
+  test('settings category hues and the shell accent share the tonalSpot '
       'variant', () {
     const seed = Color(0xff7c3aed);
     final scheme = shellDynamicScheme(seed, brightness: Brightness.dark);
@@ -121,8 +130,8 @@ void main() {
       category,
       brightness: Brightness.dark,
     );
-    expect(scheme.variant, Variant.expressive);
-    expect(categoryScheme.variant, Variant.expressive);
+    expect(scheme.variant, Variant.tonalSpot);
+    expect(categoryScheme.variant, Variant.tonalSpot);
     // The category pipeline resolves through the same cached helper, so the
     // same (seed, brightness) pair returns the identical scheme instance.
     expect(

@@ -15,7 +15,7 @@ Color shellSchemeColor(int argb) => Color(argb);
 /// independently tuned neutrals; they remain the fallback carriers used to
 /// construct a [ShellThemeData] before its wallpaper seed is expanded. In an
 /// active theme every surface/text/outline role is re-derived from the seed's
-/// [SchemeExpressive] dynamic scheme via [ShellColorScheme.fromDynamicScheme],
+/// [SchemeTonalSpot] dynamic scheme via [ShellColorScheme.fromDynamicScheme],
 /// so the complete surface stack follows the wallpaper.
 @immutable
 class ShellColorScheme {

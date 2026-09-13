@@ -2,7 +2,7 @@ import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:material_color_utilities/material_color_utilities.dart'
-    show DynamicScheme, Hct, SchemeExpressive;
+    show DynamicScheme, Hct, SchemeTonalSpot;
 
 import 'backdrop_blur_level.dart';
 import 'shell_color_scheme.dart';
@@ -13,14 +13,16 @@ export 'package:material_color_utilities/material_color_utilities.dart'
     show DynamicScheme;
 export 'shell_color_scheme.dart' show shellSchemeColor;
 
-/// Memoized `SchemeExpressive` dynamic schemes keyed by the
+/// Memoized `SchemeTonalSpot` dynamic schemes keyed by the
 /// (seed argb, isDark, contrastLevel) triple.
 final Map<(int, bool, double), DynamicScheme> _dynamicSchemes =
     <(int, bool, double), DynamicScheme>{};
 
-/// The single Monet entry point: expands a seed into a `SchemeExpressive`
-/// [DynamicScheme] aligned with Android 16. Every accent-driven consumer
-/// (shell surfaces, accent palette, Settings category hues, appearance-page
+/// The single Monet entry point: expands a seed into a `SchemeTonalSpot`
+/// [DynamicScheme] — the Android 12–15 default whose primary palette keeps
+/// the wallpaper's own hue (SchemeExpressive rotates primary by +240°, so a
+/// violet wallpaper surfaced as green). Every accent-driven consumer (shell
+/// surfaces, accent palette, Settings category hues, appearance-page
 /// swatches) resolves through this helper so the variant can never drift.
 ///
 /// [contrastLevel] follows the MCU convention: 0 is standard, ±1 are the
@@ -38,7 +40,7 @@ DynamicScheme shellDynamicScheme(
   );
   return _dynamicSchemes.putIfAbsent(
     key,
-    () => SchemeExpressive(
+    () => SchemeTonalSpot(
       sourceColorHct: Hct.fromInt(key.$1),
       isDark: key.$2,
       contrastLevel: key.$3,
@@ -345,7 +347,7 @@ class ShellThemeData {
   Brightness get brightness => _baseColors.brightness;
 
   /// The effective semantic color stack: derived once from
-  /// ([accentSeed], brightness, [contrastLevel]) through `SchemeExpressive`,
+  /// ([accentSeed], brightness, [contrastLevel]) through `SchemeTonalSpot`,
   /// or the interpolated scheme while [AnimatedShellTheme] is lerping.
   ShellColorScheme get colors => _resolution.colorScheme;
 
@@ -609,7 +611,7 @@ class _ShellThemeResolution {
         ),
       );
 
-  /// The shared `SchemeExpressive` dynamic scheme backing every color role
+  /// The shared `SchemeTonalSpot` dynamic scheme backing every color role
   /// of this theme value: surfaces, accent palette, and Material theme all
   /// derive from this one instance.
   late final DynamicScheme dynamicScheme = shellDynamicScheme(

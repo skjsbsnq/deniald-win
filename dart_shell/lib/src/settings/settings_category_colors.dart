@@ -10,7 +10,7 @@ typedef SettingsCategoryHue = ({Color container, Color onContainer});
 ///
 /// The seed table mirrors `02-VISUAL-SPEC.md` §4.3 and is the single source of
 /// truth for category color (constraint §D7). Each seed is expanded through
-/// `ColorScheme.fromSeed(..., dynamicSchemeVariant: expressive)` so the icon
+/// `shellDynamicScheme` (SchemeTonalSpot) so the icon
 /// container/foreground pair stays tonally consistent with the active
 /// brightness; derivations are cached per `(seed, brightness)` because
 /// `fromSeed` is far too expensive to run from `build`.

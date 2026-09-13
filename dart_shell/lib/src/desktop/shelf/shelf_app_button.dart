@@ -219,16 +219,22 @@ class _ShelfAppButtonState extends State<ShelfAppButton>
         message: tooltipMessage,
         textStyle: ShellText.shelfTooltip,
         waitDuration: const Duration(milliseconds: 500),
-        // The 40px circle, an `xs` gap and the Ø4 indicator fill the 48px
-        // button cell exactly, so the column cannot overflow its track.
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            buttonContent,
-            const SizedBox(height: ShellSpacing.xs),
-            _buildIndicator(context),
-          ],
+        // The 40px circle centers on the 48px track while the Ø4 indicator
+        // hugs the track's bottom edge, so the icon sits optically centered
+        // instead of riding high above the dot.
+        child: SizedBox(
+          height: 48,
+          child: Stack(
+            children: [
+              Center(child: buttonContent),
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 1,
+                child: Center(child: _buildIndicator(context)),
+              ),
+            ],
+          ),
         ),
       ),
     );
