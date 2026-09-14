@@ -120,6 +120,8 @@ class _CpuUsageCard extends ConsumerWidget {
       usage: cpu.current,
       history: cpu.history,
       showExpressivePolygon: true,
+      decorationIcon: Icons.memory_rounded,
+      decorationForeground: palette.onPrimary,
       surfaceColor: palette.container,
       contentColor: palette.onContainer,
       mutedContentColor: palette.onContainerSecondary,
@@ -182,6 +184,10 @@ class _GpuUsageCard extends ConsumerWidget {
       label: gpu.label,
       usage: gpu.series.current,
       history: gpu.series.history,
+      showExpressivePolygon: true,
+      decorationShape: MaterialShapes.gem,
+      decorationIcon: Icons.developer_board_rounded,
+      decorationForeground: palette.onSecondary,
       surfaceColor: palette.secondaryContainer,
       contentColor: palette.onSecondaryContainer,
       mutedContentColor: palette.onSecondaryContainer.withValues(alpha: 0.75),
@@ -217,9 +223,9 @@ class _MemoryUsageCard extends ConsumerWidget {
           ? null
           : '${formatGigabytes(memory.used)} / '
                 '${formatGigabytes(memory.total)} GB',
+      icon: Icons.sd_card_rounded,
       surfaceColor: palette.container,
       contentColor: palette.onContainer,
-      mutedContentColor: palette.onContainerSecondary,
       fillColor: palette.tertiary.withValues(alpha: 0.66),
       shape: MaterialShapes.slanted,
     );
@@ -239,8 +245,8 @@ class _NetworkUsageCard extends ConsumerWidget {
         ),
       ),
     );
-    // clavis network: the only solid-primary card in the grid — onPrimary
-    // content, onPrimary rate icons.
+    // clavis network: solid-primary left panel carrying the sparkline,
+    // primaryContainer right rate panel.
     final palette = context.shellTheme.accentPalette;
 
     return NetworkMetricCard(
@@ -249,8 +255,10 @@ class _NetworkUsageCard extends ConsumerWidget {
       uploadBytesPerSecond: rates.upload,
       surfaceColor: palette.primary,
       contentColor: palette.onPrimary,
-      mutedContentColor: palette.onPrimary.withValues(alpha: 0.72),
-      accentColor: palette.onPrimary,
+      panelColor: palette.container,
+      panelContentColor: palette.onContainer,
+      downloadAccentColor: palette.tertiary,
+      uploadAccentColor: palette.primary,
     );
   }
 }
@@ -263,7 +271,8 @@ class _StorageUsageCard extends ConsumerWidget {
     final storage = ref.watch(
       systemExtendedStatusProvider.select((status) => status.storage),
     );
-    // clavis storage: solid tertiary surface with onTertiary content.
+    // clavis storage: solid-tertiary left panel, tertiaryContainer right
+    // rate panel.
     final palette = context.shellTheme.accentPalette;
 
     return StorageCard(
@@ -271,6 +280,8 @@ class _StorageUsageCard extends ConsumerWidget {
       surfaceColor: palette.tertiary,
       contentColor: palette.onTertiary,
       mutedContentColor: palette.onTertiary.withValues(alpha: 0.72),
+      panelColor: palette.tertiaryContainer,
+      panelContentColor: palette.onTertiaryContainer,
       accentColor: palette.onTertiary,
     );
   }
@@ -281,7 +292,8 @@ class _BatteryStatusCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    // clavis battery: secondaryContainer surface, secondary tank fill.
+    // clavis battery: secondaryContainer tank, secondary fill, contents
+    // repaint in onSecondary once the fill covers them.
     final palette = context.shellTheme.accentPalette;
     return BatteryTankCard(
       battery: ref.watch(batteryProvider),
@@ -289,6 +301,7 @@ class _BatteryStatusCard extends ConsumerWidget {
       contentColor: palette.onSecondaryContainer,
       mutedContentColor: palette.onSecondaryContainer.withValues(alpha: 0.75),
       fillColor: palette.secondary,
+      onFillColor: palette.onSecondary,
     );
   }
 }

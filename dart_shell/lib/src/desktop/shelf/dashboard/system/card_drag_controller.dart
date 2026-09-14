@@ -153,23 +153,26 @@ class SystemCardDragController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Ends the active session. Returns the preview layout to commit (the
-  /// committed layout itself when nothing moved); null when idle.
+  /// Ends the active session. Returns the preview layout to commit, or null
+  /// when the session is idle — or when the last target was invalid, which
+  /// is how clavis `finishDrag` drops an unresolvable release without
+  /// committing anything.
   ///
   /// Pointer sessions enter [SystemCardDragPhase.finishing] so the ghost can
-  /// settle onto the committed slot; keyboard sessions return to idle
-  /// directly because they never show a ghost.
+  /// settle onto the landing slot — the committed slot when the drop was
+  /// rejected, so an invalid release visibly flies home; keyboard sessions
+  /// return to idle directly because they never show a ghost.
   List<CardTile>? end(SystemCardDragContext context) {
     if (_phase != SystemCardDragPhase.dragging) {
       return null;
     }
-    final result = _previewLayout ?? context.committed;
+    final result = _previewValid ? _previewLayout ?? context.committed : null;
     if (_keyboardMode) {
       _clear();
       return result;
     }
     _phase = SystemCardDragPhase.finishing;
-    final target = placementFor(result, _tileId ?? '');
+    final target = placementFor(result ?? context.committed, _tileId ?? '');
     _finishingTarget = target == null
         ? null
         : Rect.fromLTWH(target.x, target.y, target.width, target.height);
@@ -240,7 +243,12 @@ class SystemCardDragController extends ChangeNotifier {
       activeIds: context.activeIds,
     );
     if (moved == null) {
-      // Keep the last good preview but flag the target frame invalid.
+      // clavis `updateDrag`: `previewLayout = solved || []` — an
+      // unresolvable target clears the preview so siblings fall back to the
+      // committed layout instead of freezing mid-shuffle, and the release
+      // commits nothing. The frame still shows the raw snapped target in
+      // error color so the rejected spot is visible.
+      _previewLayout = null;
       _previewValid = false;
       final tile = placementFor(context.committed, id);
       if (tile != null) {

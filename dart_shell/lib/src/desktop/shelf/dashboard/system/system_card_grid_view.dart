@@ -1,7 +1,11 @@
+import 'dart:async';
+import 'dart:math' as math;
+
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../services/system_card_store.dart';
+import '../../../../theme/shell_color_scheme.dart';
 import '../../../../theme/shell_theme.dart';
 import '../../../../theme/tokens.dart';
 import 'card_catalog.dart';
@@ -53,10 +57,33 @@ class _SystemCardGridViewState extends ConsumerState<SystemCardGridView> {
   bool _hydrationSettled = false;
   bool _missingTileResetScheduled = false;
 
+  /// Canvas width recorded by the persisted layout file, loaded once so
+  /// anchors written before the fixed-472 geometry (measured-width saves)
+  /// are discarded instead of resolving to column-misaligned tiles.
+  /// `null` after [_persistedWidthKnown] means no usable file existed.
+  double? _persistedCanvasWidth;
+  bool _persistedWidthKnown = false;
+
+  /// A commit this session always wins over the on-disk canvas width: the
+  /// file may still hold the old value while the debounced write lands.
+  bool _committedLocally = false;
+
   @override
   void initState() {
     super.initState();
     _drag = SystemCardDragController();
+    unawaited(_loadPersistedCanvasWidth());
+  }
+
+  Future<void> _loadPersistedCanvasWidth() async {
+    final saved = await ref.read(systemCardStoreProvider).read();
+    if (!mounted) {
+      return;
+    }
+    setState(() {
+      _persistedCanvasWidth = saved?.canvasWidth;
+      _persistedWidthKnown = true;
+    });
   }
 
   @override
@@ -128,9 +155,96 @@ class _SystemCardGridViewState extends ConsumerState<SystemCardGridView> {
     });
   }
 
+  /// Anchors to hydrate the committed layout from. A layout committed this
+  /// session or a file already written against the fixed 472 px canvas is
+  /// used verbatim; a file recorded under the old measured-width geometry is
+  /// remapped onto the fixed grid, and anything unusable falls back to the
+  /// default anchors.
+  Map<String, ({double x, double y})> _effectiveAnchors(
+    Map<String, ({double x, double y})> saved,
+    CardGridGeometry geometry,
+  ) {
+    final persistedWidth = _persistedCanvasWidth;
+    if (_committedLocally ||
+        saved.isEmpty ||
+        persistedWidth == null ||
+        persistedWidth == geometry.canvasWidth) {
+      return saved;
+    }
+    return _remapLegacyAnchors(
+      saved,
+      persistedWidth,
+      geometry,
+      SystemCardCatalog.instance,
+    );
+  }
+
+  /// Pre-472 saves stored anchors on a canvas whose cell width was derived
+  /// from the measured panel width: `cellWidth = (canvasWidth - 2*gap) / 3`.
+  /// Recover each anchor's logical column/row position (the coordinate in
+  /// old cell+gap pitches), re-express it in fixed-geometry pitches, then
+  /// snap/clamp to the 8 px grid so [resolveCardLayout] can validate it —
+  /// an unresolvable remap falls back to default anchors just like a
+  /// corrupt save.
+  static Map<String, ({double x, double y})> _remapLegacyAnchors(
+    Map<String, ({double x, double y})> saved,
+    double legacyCanvasWidth,
+    CardGridGeometry geometry,
+    SystemCardCatalog catalog,
+  ) {
+    final legacyCellWidth =
+        (legacyCanvasWidth - (geometry.columns - 1) * geometry.gap) /
+        geometry.columns;
+    // A measured-width save implies cells smaller than the fixed 472 px
+    // canvas; a non-finite or oversized value means the file is garbage.
+    if (!legacyCellWidth.isFinite ||
+        legacyCellWidth <= 0 ||
+        legacyCellWidth > cardCanvasWidth) {
+      return const <String, ({double x, double y})>{};
+    }
+    final legacyCellHeight = geometry.cellHeight;
+    final xPitch = geometry.cellWidth + geometry.gap;
+    final legacyXPitch = legacyCellWidth + geometry.gap;
+    final yPitch = geometry.cellHeight + geometry.gap;
+    final legacyYPitch = legacyCellHeight + geometry.gap;
+    final remapped = <String, ({double x, double y})>{};
+    for (final entry in saved.entries) {
+      if (!catalog.hasCard(entry.key)) {
+        continue;
+      }
+      // A corrupt anchor (non-finite, or so large the remap overflows to
+      // Infinity and gridSnap throws on round()) drops just that anchor —
+      // the rest of the file still migrates.
+      if (!entry.value.x.isFinite || !entry.value.y.isFinite) {
+        continue;
+      }
+      final columns = entry.value.x / legacyXPitch;
+      final rows = entry.value.y / legacyYPitch;
+      final mappedX = columns * xPitch;
+      final mappedY = rows * yPitch;
+      if (!mappedX.isFinite || !mappedY.isFinite) {
+        continue;
+      }
+      final maxX = math.max(
+        0.0,
+        geometry.canvasWidth -
+            geometry.widthForSpan(catalog.columnSpanFor(entry.key)),
+      );
+      remapped[entry.key] = (
+        x: gridSnap(mappedX, maxX, step: geometry.snapStep),
+        y: gridSnap(mappedY, cardCanvasMaxHeight, step: geometry.snapStep),
+      );
+    }
+    return remapped;
+  }
+
   void _endSession(SystemCardDragContext dragContext) {
+    // Capture the ghost before [SystemCardDragController.end] flips the
+    // phase — [ghostRect] only exists while the session is `dragging`.
+    final ghost = _drag.ghostRect;
     final result = _drag.end(dragContext);
     if (result != null && !cardLayoutsEqual(result, dragContext.committed)) {
+      _committedLocally = true;
       ref
           .read(systemCardLayoutProvider.notifier)
           .commit(
@@ -140,9 +254,12 @@ class _SystemCardGridViewState extends ConsumerState<SystemCardGridView> {
     }
     // A session that ends without a resolvable target (e.g. its card
     // disappeared mid-gesture) would otherwise wait forever for a ghost
-    // animation that never runs.
+    // animation that never runs. The same deadlock happens when the ghost
+    // already sits exactly on its landing rect — a pointer released back
+    // on the grab point leaves AnimatedPositioned nothing to animate, so
+    // its onEnd (the only exit from `finishing`) never fires.
     if (_drag.phase == SystemCardDragPhase.finishing &&
-        _drag.finishingTarget == null) {
+        (_drag.finishingTarget == null || _drag.finishingTarget == ghost)) {
       _drag.settleComplete();
     }
   }
@@ -152,11 +269,20 @@ class _SystemCardGridViewState extends ConsumerState<SystemCardGridView> {
     final layoutState = ref.watch(systemCardLayoutProvider);
     return LayoutBuilder(
       builder: (context, constraints) {
-        final geometry = CardGridGeometry.forWidth(constraints.maxWidth);
+        const geometry = CardGridGeometry();
+        final viewportWidth = constraints.maxWidth.isFinite
+            ? constraints.maxWidth
+            : geometry.canvasWidth;
+        // clavis DrawerView: the canvas stays a fixed 472 px surface and
+        // scales down as a whole when the viewport is narrower.
+        final scale = math.min(1.0, viewportWidth / geometry.canvasWidth);
         final activeIds = <String>[for (final item in widget.items) item.id];
+        final settled = layoutState.hydrated && _persistedWidthKnown;
         final committed = resolveCardLayout(
           activeIds: activeIds,
-          anchors: layoutState.anchors,
+          anchors: settled
+              ? _effectiveAnchors(layoutState.anchors, geometry)
+              : const <String, ({double x, double y})>{},
           geometry: geometry,
           catalog: SystemCardCatalog.instance,
         );
@@ -173,7 +299,9 @@ class _SystemCardGridViewState extends ConsumerState<SystemCardGridView> {
             committed: committed,
             dragContext: dragContext,
             geometry: geometry,
-            hydrated: layoutState.hydrated,
+            hydrated: settled,
+            scale: scale,
+            viewportWidth: viewportWidth,
           ),
         );
       },
@@ -186,6 +314,8 @@ class _SystemCardGridViewState extends ConsumerState<SystemCardGridView> {
     required SystemCardDragContext dragContext,
     required CardGridGeometry geometry,
     required bool hydrated,
+    required double scale,
+    required double viewportWidth,
   }) {
     final theme = context.shellTheme;
     final colors = context.shellColors;
@@ -207,64 +337,138 @@ class _SystemCardGridViewState extends ConsumerState<SystemCardGridView> {
     final frameColor = _drag.previewValid
         ? theme.accentPalette.primary
         : theme.accentPalette.error;
+    // clavis `gridContentHeight`: while a drag session resolves to a valid
+    // preview the canvas may only grow — it never shrinks below the
+    // committed height mid-gesture, so the source slot and the scroll
+    // offset stay stable until the drop commits. Invalid previews fall
+    // back to the committed height; when idle, effective == committed.
+    final canvasHeight = _drag.isActive
+        ? math.max(cardContentHeight(committed), cardContentHeight(effective))
+        : cardContentHeight(effective);
 
+    // The canvas must never hand RenderAnimatedSize a zero duration: a
+    // zero-duration restart completes the controller synchronously inside
+    // performLayout, which marks the render object dirty while it is still
+    // being laid out (this child is built by the LayoutBuilder above, so a
+    // real height change always lands mid-layout). A 1 ms floor is
+    // visually instant — and mid-drag the render object's unstable-state
+    // tracking follows per-frame height changes tightly anyway — while
+    // isolated changes outside a session still ease over 200 ms.
+    var sizeDuration = _motion(_drag.isActive ? 1 : 200);
+    if (sizeDuration == Duration.zero) {
+      sizeDuration = const Duration(milliseconds: 1);
+    }
     return AnimatedSize(
-      duration: _motion(200),
+      duration: sizeDuration,
       curve: Curves.easeOutCubic,
+      // Never clip the canvas while the animated size catches up: the
+      // settle ghost may sit below the animated bottom edge.
+      clipBehavior: Clip.none,
       child: SizedBox(
-        key: _canvasKey,
-        width: geometry.canvasWidth,
-        height: cardContentHeight(effective),
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            // 24 px reference grid, shown only while a drag is live.
-            Positioned.fill(
-              child: IgnorePointer(
-                child: AnimatedOpacity(
-                  opacity: dragging ? 1 : 0,
-                  duration: _motion(150),
-                  child: CustomPaint(
-                    painter: _CardGridGuidePainter(
-                      color: colors.outlineVariant.withValues(alpha: 0.22),
-                      step: cardGridGuideStep,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            // Snapped drop-target frame: primary fill, error when the
-            // preview cannot be resolved.
-            if (dragging && target != null)
-              AnimatedPositioned(
-                left: target.x,
-                top: target.y,
-                width: target.width,
-                height: target.height,
-                duration: frameDuration,
-                curve: Curves.easeOutCubic,
-                child: AnimatedContainer(
-                  duration: frameDuration,
-                  decoration: BoxDecoration(
-                    color: frameColor.withValues(alpha: 0.14),
-                    borderRadius: theme.borderRadius(ShellShapeScale.large),
-                    border: Border.all(color: frameColor, width: 2),
-                  ),
-                ),
-              ),
-            for (final item in widget.items)
-              _buildTile(
-                item,
+        width: viewportWidth,
+        height: canvasHeight * scale,
+        child: OverflowBox(
+          // The logical canvas keeps its fixed 472 px width; OverflowBox +
+          // a top-center Transform.scale is the clavis `scale:
+          // Math.min(1, width/472)` + centered-x equivalent. `_canvasKey`
+          // sits inside the transform so `globalToLocal` hands gesture
+          // callbacks canvas coordinates directly.
+          alignment: Alignment.topCenter,
+          minWidth: 0,
+          maxWidth: geometry.canvasWidth,
+          minHeight: 0,
+          maxHeight: canvasHeight,
+          child: Transform.scale(
+            scale: scale,
+            alignment: Alignment.topCenter,
+            child: SizedBox(
+              key: _canvasKey,
+              width: geometry.canvasWidth,
+              height: canvasHeight,
+              child: _canvasStack(
+                context,
                 committed: committed,
                 effective: effective,
                 dragContext: dragContext,
-                moveDuration: animatePositions ? moveDuration : Duration.zero,
+                dragging: dragging,
+                finishing: finishing,
+                animatePositions: animatePositions,
+                moveDuration: moveDuration,
+                frameDuration: frameDuration,
+                target: target,
+                frameColor: frameColor,
+                colors: colors,
               ),
-            if ((dragging || finishing) && !_drag.isKeyboardSession)
-              _buildGhost(dragging: dragging, settleDuration: moveDuration),
-          ],
+            ),
+          ),
         ),
       ),
+    );
+  }
+
+  Widget _canvasStack(
+    BuildContext context, {
+    required List<CardTile> committed,
+    required List<CardTile> effective,
+    required SystemCardDragContext dragContext,
+    required bool dragging,
+    required bool finishing,
+    required bool animatePositions,
+    required Duration moveDuration,
+    required Duration frameDuration,
+    required CardTile? target,
+    required Color frameColor,
+    required ShellColorScheme colors,
+  }) {
+    final theme = context.shellTheme;
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        // 24 px reference grid, shown only while a drag is live.
+        Positioned.fill(
+          child: IgnorePointer(
+            child: AnimatedOpacity(
+              opacity: dragging ? 1 : 0,
+              duration: _motion(150),
+              child: CustomPaint(
+                painter: _CardGridGuidePainter(
+                  color: colors.outlineVariant.withValues(alpha: 0.22),
+                  step: cardGridGuideStep,
+                ),
+              ),
+            ),
+          ),
+        ),
+        // Snapped drop-target frame: primary fill, error when the
+        // preview cannot be resolved.
+        if (dragging && target != null)
+          AnimatedPositioned(
+            left: target.x,
+            top: target.y,
+            width: target.width,
+            height: target.height,
+            duration: frameDuration,
+            curve: Curves.easeOutCubic,
+            child: AnimatedContainer(
+              duration: frameDuration,
+              decoration: BoxDecoration(
+                color: frameColor.withValues(alpha: 0.14),
+                borderRadius: theme.borderRadius(ShellShapeScale.large),
+                border: Border.all(color: frameColor, width: 2),
+              ),
+            ),
+          ),
+        for (final item in widget.items)
+          _buildTile(
+            item,
+            committed: committed,
+            effective: effective,
+            dragContext: dragContext,
+            moveDuration: animatePositions ? moveDuration : Duration.zero,
+          ),
+        if ((dragging || finishing) && !_drag.isKeyboardSession)
+          _buildGhost(dragging: dragging, settleDuration: moveDuration),
+      ],
     );
   }
 

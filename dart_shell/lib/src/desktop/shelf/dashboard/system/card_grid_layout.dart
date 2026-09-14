@@ -7,43 +7,36 @@ import 'card_catalog.dart';
 /// Pixel grid metrics for the system card canvas.
 ///
 /// Ported from clavis `SystemCardGrid.js` / `SystemCardGeometry.js` /
-/// `DrawerGridLayout.js`. Clavis fixes the canvas at 472 px (152 px cells);
-/// denial derives the cell width from the measured dashboard width — three
-/// columns, one 8 px snap step, one 24 px guide step.
+/// `DrawerGridLayout.js`. Clavis fixes the canvas at 472 px (152 px cells)
+/// and scales the whole canvas when the viewport is narrower; denial does
+/// the same, so column boundaries (0/160/320) always land on the 8 px snap
+/// grid and a saved anchor means the same slot on every panel width.
 const double cardGridSnapStep = 8;
 const double cardGridGuideStep = 24;
+const double cardCellWidth = 152;
 const double cardCellHeight = 160;
 const double cardCellGap = 8;
 const int cardGridColumns = 3;
 
-/// Immutable grid metrics derived from the measured canvas width.
+/// clavis `canvasWidth`: three cells plus the gaps between them — 472 px.
+const double cardCanvasWidth =
+    cardGridColumns * cardCellWidth + (cardGridColumns - 1) * cardCellGap;
+
+/// Sanity ceiling for vertical anchors. The canvas scrolls, so clavis keeps
+/// y unbounded — but a corrupt save or a wild pointer must not stretch the
+/// scroll extent to absurdity. 10 000 px still covers ~60 rows of cards.
+const double cardCanvasMaxHeight = 10000;
+
+/// Immutable grid metrics. The canvas geometry is fixed like clavis; the
+/// fields stay parameterised only so tests can exercise smaller variants.
 class CardGridGeometry {
-  const CardGridGeometry._({
-    required this.cellWidth,
+  const CardGridGeometry({
+    this.cellWidth = cardCellWidth,
     this.cellHeight = cardCellHeight,
     this.gap = cardCellGap,
     this.columns = cardGridColumns,
     this.snapStep = cardGridSnapStep,
   });
-
-  /// Divides [canvasWidth] into [cardGridColumns] equal cells separated by
-  /// [cardCellGap]. Heights stay fixed; only column width follows the panel.
-  factory CardGridGeometry.forWidth(
-    double canvasWidth, {
-    double cellHeight = cardCellHeight,
-    double gap = cardCellGap,
-    int columns = cardGridColumns,
-    double snapStep = cardGridSnapStep,
-  }) {
-    final cellWidth = (canvasWidth - (columns - 1) * gap) / columns;
-    return CardGridGeometry._(
-      cellWidth: cellWidth,
-      cellHeight: cellHeight,
-      gap: gap,
-      columns: columns,
-      snapStep: snapStep,
-    );
-  }
 
   final double cellWidth;
   final double cellHeight;
@@ -264,12 +257,13 @@ Offset _clampAnchor(
       geometry.canvasWidth - geometry.widthForSpan(catalog.columnSpanFor(id)),
       step: geometry.snapStep,
     ),
-    gridSnap(y, double.maxFinite, step: geometry.snapStep),
+    gridSnap(y, cardCanvasMaxHeight, step: geometry.snapStep),
   );
 }
 
-/// clavis `withinBounds`: finite, snapped, and inside the canvas width.
-/// The vertical extent stays unbounded — the canvas scrolls.
+/// clavis `withinBounds`: finite, snapped, inside the canvas width, and
+/// below the scroll-extent ceiling — the canvas scrolls so y is not bound
+/// to the viewport, but it is bound against corrupt saves.
 bool _withinBounds(CardTile tile, CardGridGeometry geometry) {
   final step = geometry.snapStep;
   return tile.x.isFinite &&
@@ -278,7 +272,8 @@ bool _withinBounds(CardTile tile, CardGridGeometry geometry) {
       tile.y >= 0 &&
       tile.x % step == 0 &&
       tile.y % step == 0 &&
-      tile.x + tile.width <= geometry.canvasWidth;
+      tile.x + tile.width <= geometry.canvasWidth &&
+      tile.y + tile.height <= cardCanvasMaxHeight;
 }
 
 /// clavis `validateLayout`: exactly the expected ids, catalog sizes, snapped

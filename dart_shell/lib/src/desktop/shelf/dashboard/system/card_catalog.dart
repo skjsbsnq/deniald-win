@@ -25,9 +25,12 @@ class SystemCardCatalog {
       <String, ({int columnSpan, int rowSpan})>{
         'cpu': (columnSpan: 2, rowSpan: 1),
         'memory': (columnSpan: 1, rowSpan: 1),
-        'network': (columnSpan: 2, rowSpan: 1),
-        'storage': (columnSpan: 2, rowSpan: 1),
-        'battery': (columnSpan: 1, rowSpan: 2),
+        // clavis: network and storage are full-row split hero cards.
+        'network': (columnSpan: 3, rowSpan: 1),
+        'storage': (columnSpan: 3, rowSpan: 1),
+        // clavis runs a 1x2 tank; denial ships the mini 1x1 tank so the
+        // default layout compacts without holes (see defaultAnchorFor).
+        'battery': (columnSpan: 1, rowSpan: 1),
       };
 
   // Placement priority when free positions compete. GPU tiles insert after
@@ -66,10 +69,11 @@ class SystemCardCatalog {
 
   /// Default anchor in grid cells for [id] given the active id set.
   ///
-  /// The default arrangement stacks the full-width sparkline cards on the
-  /// left two columns with the narrow cards down the right column:
-  /// `cpu+memory` on row 0, one row per gpu, then `network+battery` and
-  /// `storage+battery`.
+  /// The default arrangement pairs `cpu+memory` on row 0, stacks one 2-wide
+  /// row per gpu (the battery mini-tank fills the free third column of the
+  /// last gpu row), then lands the two full-row hero cards. Without a gpu
+  /// the full-width rows block upward compaction, so the battery lands on
+  /// the partial bottom row — the tail hole beats a mid-grid one.
   ({int column, int row}) defaultAnchorFor(String id, List<String> activeIds) {
     final gpuIds = activeIds.where(isGpuTileId).toList(growable: false);
     final gpuRows = gpuIds.length;
@@ -81,7 +85,7 @@ class SystemCardCatalog {
       'memory' => (column: 2, row: 0),
       'network' => (column: 0, row: 1 + gpuRows),
       'storage' => (column: 0, row: 2 + gpuRows),
-      'battery' => (column: 2, row: 1 + gpuRows),
+      'battery' => (column: 2, row: gpuRows > 0 ? gpuRows : 3),
       _ => (column: 0, row: 0),
     };
   }

@@ -72,9 +72,13 @@ void main() {
     expect(find.text('2.5 MB/s'), findsOneWidget);
     expect(find.text('320.0 KB/s'), findsOneWidget);
     expect(find.text('39%'), findsOneWidget);
+    expect(find.text('195 / 500 GB'), findsOneWidget);
     expect(find.text('305 free'), findsOneWidget);
-    expect(find.text('80%'), findsOneWidget);
-    expect(find.text('Charging'), findsOneWidget);
+    // The battery tank paints its contents twice — once on the tank body
+    // and once inside the fill clip with the on-fill foreground — so the
+    // percentage and status each render two Text widgets.
+    expect(find.text('80%'), findsNWidgets(2));
+    expect(find.text('Charging'), findsNWidgets(2));
     expect(find.textContaining('cores'), findsOneWidget);
   });
 
@@ -100,10 +104,14 @@ void main() {
 
     expect(find.text('0%'), findsOneWidget);
     expect(find.text('No battery'), findsOneWidget);
-    // Storage and the battery status line both render the unavailable label.
+    // Storage shows 'Unavailable' for the headline percentage and the used
+    // figure; the battery tank centers its own 'No battery' instead.
     expect(find.text('Unavailable'), findsNWidgets(2));
-    // CPU big number, both network rates, storage and battery percentages.
-    expect(find.text('--'), findsNWidgets(5));
+    // CPU big number plus both network rate figures.
+    expect(find.text('--'), findsNWidgets(3));
+    // Two em dashes: the storage left panel replaces its usage bar with one
+    // and the right panel's 'free' figure degrades to another.
+    expect(find.text('—'), findsNWidgets(2));
   });
 
   testWidgets('weather view shows the locating pane first', (tester) async {

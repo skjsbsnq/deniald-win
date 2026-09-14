@@ -1,5 +1,7 @@
 import 'dart:math' as math;
 
+import 'package:androidx_graphics_shapes/material_shapes.dart';
+import 'package:androidx_graphics_shapes/shapes.dart' show RoundedPolygon;
 import 'package:flutter/widgets.dart';
 
 import '../../../../theme/shell_theme.dart';
@@ -15,6 +17,9 @@ class MetricSparklineCard extends StatelessWidget {
     required this.history,
     this.detail,
     this.showExpressivePolygon = false,
+    this.decorationShape,
+    this.decorationIcon,
+    this.decorationForeground,
     this.surfaceColor,
     this.contentColor,
     this.mutedContentColor,
@@ -34,6 +39,16 @@ class MetricSparklineCard extends StatelessWidget {
 
   /// Whether to draw the expressive corner polygon that blooms with load.
   final bool showExpressivePolygon;
+
+  /// clavis `shapeOverride`: pins the corner decoration to one
+  /// `MaterialShapes` polygon (gpu uses Gem) instead of picking by load.
+  final RoundedPolygon? decorationShape;
+
+  /// Icon centered inside the corner decoration (clavis `MaterialSymbol`).
+  final IconData? decorationIcon;
+
+  /// Color of [decorationIcon]; defaults to the accent's "on" role.
+  final Color? decorationForeground;
 
   /// clavis card-surface override; defaults to the panel surface.
   final Color? surfaceColor;
@@ -57,11 +72,18 @@ class MetricSparklineCard extends StatelessWidget {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: surfaceColor ?? theme.panelColor(colors.surfaceContainer),
-        borderRadius: theme.borderRadius(ShellShapeScale.large),
-        border: Border.all(color: colors.hairlineSoft, width: 1.0),
+        borderRadius: theme.borderRadius(ShellShapeScale.extraLarge),
+        boxShadow: <BoxShadow>[
+          // clavis MultiEffect card shadow: +4 y, low alpha, heavy blur.
+          BoxShadow(
+            color: colors.shadow.withValues(alpha: 0.4),
+            offset: const Offset(0, 4),
+            blurRadius: 18,
+          ),
+        ],
       ),
       child: ClipRRect(
-        borderRadius: theme.borderRadius(ShellShapeScale.large),
+        borderRadius: theme.borderRadius(ShellShapeScale.extraLarge),
         child: Stack(
           children: [
             Padding(
@@ -125,19 +147,14 @@ class MetricSparklineCard extends StatelessWidget {
               ),
             ),
             if (showExpressivePolygon)
-              Positioned(
-                right: -18,
-                bottom: -18,
-                child: SizedBox.square(
-                  dimension: 96,
-                  child: CustomPaint(
-                    painter: _ExpressivePolygonPainter(
-                      // The decoration blooms from a four-point bud at idle to
-                      // an eight-point star under full load.
-                      complexity: usage ?? 0,
-                      color: accent,
-                    ),
-                  ),
+              Positioned.fill(
+                child: _ExpressiveDecoration(
+                  usage: usage,
+                  accentColor: accent,
+                  shapeOverride: decorationShape,
+                  icon: decorationIcon,
+                  iconColor:
+                      decorationForeground ?? theme.accentPalette.onPrimary,
                 ),
               ),
           ],
@@ -266,52 +283,126 @@ class _MetricSparklinePainter extends CustomPainter {
       oldDelegate.strokeWidth != strokeWidth;
 }
 
-/// Decorative expressive star whose vertex count grows with the metric, per
-/// the M3E "shape as state" idea. Purely static: no idle ticker runs for it.
-class _ExpressivePolygonPainter extends CustomPainter {
-  const _ExpressivePolygonPainter({
-    required this.complexity,
-    required this.color,
+/// clavis `ExpressiveMetricTile` corner decoration: a filled `MaterialShapes`
+/// polygon anchored to the card's lower-right corner with negative margins,
+/// rotated +18°, carrying a counter-rotated icon. Which polygon shows is
+/// picked from the load level — idle or unreadable renders Cookie4Sided,
+/// medium Sunny, high SoftBurst — unless [shapeOverride] pins one.
+class _ExpressiveDecoration extends StatelessWidget {
+  const _ExpressiveDecoration({
+    required this.usage,
+    required this.accentColor,
+    required this.iconColor,
+    this.shapeOverride,
+    this.icon,
   });
 
-  /// 0-1 load fraction driving 4 -> 8 points.
-  final double complexity;
+  final double? usage;
+  final Color accentColor;
+  final Color iconColor;
+  final RoundedPolygon? shapeOverride;
+  final IconData? icon;
+
+  static RoundedPolygon _shapeFor(double? usage) {
+    final level = usage ?? -1.0;
+    if (level < 0) {
+      return MaterialShapes.cookie4Sided;
+    }
+    if (level >= 0.82) {
+      return MaterialShapes.softBurst;
+    }
+    if (level >= 0.48) {
+      return MaterialShapes.sunny;
+    }
+    return MaterialShapes.cookie4Sided;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final level = (usage ?? -1.0).clamp(0.0, 1.0);
+          final dense =
+              constraints.maxWidth < 210 || constraints.maxHeight < 190;
+          // clavis: implicitSize = min(w * 0.38, h * 0.42, base 50 grown
+          // slightly with load); the shape overflows the card corner by
+          // 18%/20% of its size.
+          final side = math.min(
+            constraints.maxWidth * 0.38,
+            math.min(constraints.maxHeight * 0.42, 50 * (1.08 + level * 0.14)),
+          );
+          return Align(
+            alignment: Alignment.bottomRight,
+            child: Transform.translate(
+              offset: Offset(side * 0.18, side * 0.2),
+              child: Transform.rotate(
+                angle: 18 * math.pi / 180,
+                child: SizedBox.square(
+                  dimension: side,
+                  child: Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      CustomPaint(
+                        painter: _FilledPolygonPainter(
+                          polygon: shapeOverride ?? _shapeFor(usage),
+                          color: accentColor,
+                        ),
+                      ),
+                      if (icon != null)
+                        Center(
+                          child: Transform.rotate(
+                            angle: -12 * math.pi / 180,
+                            child: Icon(
+                              icon,
+                              size: dense ? 21 : 25,
+                              color: iconColor,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// Paints a normalized `MaterialShapes` [RoundedPolygon] scaled into the box
+/// it is given, preserving aspect ratio and centering.
+class _FilledPolygonPainter extends CustomPainter {
+  const _FilledPolygonPainter({required this.polygon, required this.color});
+
+  final RoundedPolygon polygon;
   final Color color;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final radius = size.shortestSide / 2;
-    final points = 4 + (complexity.clamp(0.0, 1.0) * 4).round();
-    final inner = radius * 0.44;
-
-    final path = Path();
-    for (var i = 0; i < points * 2; i++) {
-      final angle = -math.pi / 2 + i * math.pi / points;
-      final r = i.isEven ? radius : inner;
-      final point = Offset(
-        center.dx + math.cos(angle) * r,
-        center.dy + math.sin(angle) * r,
-      );
-      if (i == 0) {
-        path.moveTo(point.dx, point.dy);
-      } else {
-        path.lineTo(point.dx, point.dy);
-      }
+    if (size.width <= 0 || size.height <= 0) {
+      return;
     }
-    path.close();
-
-    canvas.drawPath(path, Paint()..color = color.withValues(alpha: 0.10));
-    canvas.drawPath(
-      path,
-      Paint()
-        ..color = color.withValues(alpha: 0.28)
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.5,
+    final path = polygon.toPath();
+    final bounds = path.getBounds();
+    if (bounds.width <= 0 || bounds.height <= 0) {
+      return;
+    }
+    final scale = math.min(
+      size.width / bounds.width,
+      size.height / bounds.height,
     );
+    final matrix = Matrix4.translationValues(size.width / 2, size.height / 2, 0)
+      ..multiply(Matrix4.diagonal3Values(scale, scale, 1))
+      ..multiply(
+        Matrix4.translationValues(-bounds.center.dx, -bounds.center.dy, 0),
+      );
+    canvas.drawPath(path.transform(matrix.storage), Paint()..color = color);
   }
 
   @override
-  bool shouldRepaint(_ExpressivePolygonPainter oldDelegate) =>
-      oldDelegate.complexity != complexity || oldDelegate.color != color;
+  bool shouldRepaint(_FilledPolygonPainter oldDelegate) =>
+      !identical(oldDelegate.polygon, polygon) || oldDelegate.color != color;
 }
