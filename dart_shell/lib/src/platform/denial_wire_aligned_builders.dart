@@ -514,7 +514,9 @@ bool _nativePayloadType(generated.PayloadTypeId type) {
       type == generated.PayloadTypeId.TextInputState ||
       type == generated.PayloadTypeId.DesktopNotificationEvent ||
       type == generated.PayloadTypeId.SettingsResponse ||
-      type == generated.PayloadTypeId.XEmbedTrayEvent;
+      type == generated.PayloadTypeId.XEmbedTrayEvent ||
+      type == generated.PayloadTypeId.ImeFrame ||
+      type == generated.PayloadTypeId.ImeState;
 }
 
 DenialSurfaceLayer _decodeSurfaceLayer(generated.SurfaceLayer layer) {

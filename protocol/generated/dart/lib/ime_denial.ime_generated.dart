@@ -157,7 +157,8 @@ enum ImePreeditStyle {
   Plain(0),
   Underline(1),
   Highlight(2),
-  Prediction(3);
+  Prediction(3),
+  Correction(4);
 
   final int value;
   const ImePreeditStyle(this.value);
@@ -168,6 +169,7 @@ enum ImePreeditStyle {
       case 1: return ImePreeditStyle.Underline;
       case 2: return ImePreeditStyle.Highlight;
       case 3: return ImePreeditStyle.Prediction;
+      case 4: return ImePreeditStyle.Correction;
       default: throw StateError('Invalid value $value for bit flag enum');
     }
   }
@@ -176,7 +178,7 @@ enum ImePreeditStyle {
       value == null ? null : ImePreeditStyle.fromValue(value);
 
   static const int minValue = 0;
-  static const int maxValue = 3;
+  static const int maxValue = 4;
   static const fb.Reader<ImePreeditStyle> reader = _ImePreeditStyleReader();
 }
 

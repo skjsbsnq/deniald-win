@@ -1288,6 +1288,11 @@ class _DesktopSceneState extends ConsumerState<_DesktopScene> {
                           ),
                         ),
                       ),
+                  // The session input engine's candidate panel renders in
+                  // the shell layer above every client surface, anchored to
+                  // the caret rect the validated frame carries (or its
+                  // documented fallbacks).
+                  const ImeCandidatePanelLayer(),
                   if (frameTimingOptions.showOverlay)
                     Positioned(
                       top: 12,

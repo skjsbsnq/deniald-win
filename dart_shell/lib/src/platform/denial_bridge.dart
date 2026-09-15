@@ -10,6 +10,7 @@ import '../models/denial_drag_icon.dart';
 import '../models/denial_cursor_state.dart';
 import '../models/desktop_notification.dart';
 import '../models/display_layout.dart';
+import '../models/ime_frame.dart';
 import '../models/input_device_capabilities.dart';
 import '../models/keyboard_configuration.dart';
 import '../models/output_configuration.dart';
@@ -259,6 +260,10 @@ class DenialBridge {
       StreamController<DenialShortcutConfiguration>.broadcast(sync: true);
   final StreamController<DenialTextInputState> _textInputStates =
       StreamController<DenialTextInputState>.broadcast(sync: true);
+  final StreamController<DenialImeFrame> _imeFrames =
+      StreamController<DenialImeFrame>.broadcast(sync: true);
+  final StreamController<DenialImeState> _imeStates =
+      StreamController<DenialImeState>.broadcast(sync: true);
   final StreamController<DenialSettingsDocument> _settingsDocuments =
       StreamController<DenialSettingsDocument>.broadcast(sync: true);
   final StreamController<DisplayLayout> _displayLayouts =
@@ -304,6 +309,8 @@ class DenialBridge {
   Stream<DenialShortcutConfiguration> get shortcutConfigurations =>
       _shortcutConfigurations.stream;
   Stream<DenialTextInputState> get textInputStates => _textInputStates.stream;
+  Stream<DenialImeFrame> get imeFrames => _imeFrames.stream;
+  Stream<DenialImeState> get imeStates => _imeStates.stream;
   Stream<DenialSettingsDocument> get settingsDocuments =>
       _settingsDocuments.stream;
   Stream<DisplayLayout> get displayLayouts => _displayLayouts.stream;
@@ -610,6 +617,8 @@ class DenialBridge {
     unawaited(_inputDeviceCapabilities.close());
     unawaited(_shortcutConfigurations.close());
     unawaited(_textInputStates.close());
+    unawaited(_imeFrames.close());
+    unawaited(_imeStates.close());
     unawaited(_settingsDocuments.close());
     unawaited(_displayLayouts.close());
   }
@@ -2686,6 +2695,16 @@ class DenialBridge {
               contentPurpose: payload.contentPurpose,
             ),
           );
+        }
+      } else if (payload is wire.ImeFrame) {
+        final frame = _wireCodec.decodeImeFrame(payload);
+        if (frame != null && !_imeFrames.isClosed) {
+          _imeFrames.add(frame);
+        }
+      } else if (payload is wire.ImeState) {
+        final state = _wireCodec.decodeImeState(payload);
+        if (state != null && !_imeStates.isClosed) {
+          _imeStates.add(state);
         }
       } else if (payload is wire.DesktopNotificationEvent) {
         final event = _wireCodec.decodeNotificationEvent(payload);

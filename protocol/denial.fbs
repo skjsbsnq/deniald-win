@@ -792,11 +792,15 @@ enum ImeCloudOverride : ubyte {
 }
 
 // Visual hint for one preedit segment inside the candidate panel.
+// Correction marks deleted/replaced text; the panel renders it with a
+// strikethrough.
 enum ImePreeditStyle : ubyte {
   Plain = 0,
   Underline = 1,
   Highlight = 2,
-  Prediction = 3
+  Prediction = 3,
+  // Appended for wire compatibility.
+  Correction = 4
 }
 
 enum ImeCommandKind : ubyte {

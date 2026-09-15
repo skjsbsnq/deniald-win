@@ -181,7 +181,8 @@ a stream of deltas:
 
 - `preedit` is an ordered list of `{text, style}` spans; `preedit_cursor` is
   a UTF-8 byte offset into their concatenation (`-1` = no explicit caret).
-  `style` is a display hint: `Plain`, `Underline`, `Highlight`, `Prediction`.
+  `style` is a display hint: `Plain`, `Underline`, `Highlight`,
+  `Prediction`, `Correction` (a strikethrough for deleted/replaced text).
 - `candidates` rows carry `{text, annotation, from_cloud, tone_mark}`.
   Position in the vector is the selection index. `from_cloud`/`tone_mark`
   badge the row only; they never alter commit behavior.

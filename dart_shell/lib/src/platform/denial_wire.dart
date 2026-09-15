@@ -10,6 +10,7 @@ import '../input/input_layout.dart';
 import '../models/display_layout.dart';
 import '../models/denial_drag_icon.dart';
 import '../models/denial_cursor_state.dart';
+import '../models/ime_frame.dart';
 import '../models/desktop_notification.dart' as model;
 import '../models/input_device_capabilities.dart';
 import '../models/keyboard_configuration.dart';
@@ -37,6 +38,8 @@ const int denialWireMaxSettingsDocumentBytes = 256 * 1024;
 const int _maxShortcutBindings = 256;
 const int _maxShortcutInputs = 256;
 const int _maxShortcutCommandArguments = 64;
+const int denialWireMaxImeCandidates = 64;
+const int denialWireMaxImePreeditSpans = 64;
 
 const String denialWireToNativeChannel = 'denial/wire/to_native';
 const String denialWireToFlutterChannel = 'denial/wire/to_flutter';
@@ -919,6 +922,180 @@ class DenialWireCodec {
       hotspot: Offset(hotspot.x, hotspot.y),
       surfaceLayers: List<DenialSurfaceLayer>.unmodifiable(layers),
     );
+  }
+
+  /// Validates a shell-facing `ImeFrame` payload into its Dart model.
+  ///
+  /// Rust already enforced the input-engine-v1 bounds before republishing;
+  /// this pass re-checks them because every cross-process payload stays
+  /// untrusted. A violating frame is dropped whole — never sanitized into
+  /// something the contract says cannot exist.
+  DenialImeFrame? decodeImeFrame(generated.ImeFrame frame) {
+    try {
+      final spans = frame.preedit ?? const <generated.ImePreeditSpan>[];
+      final candidates = frame.candidates ?? const <generated.ImeCandidate>[];
+      if (spans.length > denialWireMaxImePreeditSpans ||
+          candidates.length > denialWireMaxImeCandidates) {
+        rejectedStructuredMessages += 1;
+        return null;
+      }
+
+      final preeditByteSink = BytesBuilder(copy: false);
+      final preedit = <DenialImePreeditSpan>[];
+      for (final span in spans) {
+        final text = span.text;
+        if (text == null || text.contains('\u0000')) {
+          rejectedStructuredMessages += 1;
+          return null;
+        }
+        final encoded = utf8.encode(text);
+        if (encoded.length > denialWireMaxStringLength) {
+          rejectedStructuredMessages += 1;
+          return null;
+        }
+        if (text.isEmpty) {
+          continue;
+        }
+        preeditByteSink.add(encoded);
+        preedit.add(
+          DenialImePreeditSpan(
+            text: text,
+            style: switch (span.style) {
+              generated.ImePreeditStyle.Underline =>
+                DenialImePreeditStyle.underline,
+              generated.ImePreeditStyle.Highlight =>
+                DenialImePreeditStyle.highlight,
+              generated.ImePreeditStyle.Prediction =>
+                DenialImePreeditStyle.prediction,
+              generated.ImePreeditStyle.Correction =>
+                DenialImePreeditStyle.correction,
+              _ => DenialImePreeditStyle.plain,
+            },
+          ),
+        );
+      }
+      final preeditBytes = preeditByteSink.takeBytes();
+
+      final rows = <DenialImeCandidate>[];
+      for (final candidate in candidates) {
+        final text = candidate.text;
+        final annotation = candidate.annotation;
+        if (text == null ||
+            text.isEmpty ||
+            text.contains('\u0000') ||
+            utf8.encode(text).length > denialWireMaxStringLength ||
+            (annotation != null &&
+                (annotation.contains('\u0000') ||
+                    utf8.encode(annotation).length >
+                        denialWireMaxStringLength))) {
+          rejectedStructuredMessages += 1;
+          return null;
+        }
+        rows.add(
+          DenialImeCandidate(
+            text: text,
+            annotation: annotation == null || annotation.isEmpty
+                ? null
+                : annotation,
+            fromCloud: candidate.fromCloud,
+            toneMark: candidate.toneMark,
+          ),
+        );
+      }
+
+      // Contract invariants (input-engine-v1.md): highlighted is -1 or a
+      // valid index; page_index is below page_count; page_count 0 requires
+      // no candidate state at all; preedit_cursor is -1 or inside the
+      // concatenated preedit's byte length, on a code-point boundary.
+      final highlighted = frame.highlighted;
+      final pageIndex = frame.pageIndex;
+      final pageCount = frame.pageCount;
+      final preeditCursor = frame.preeditCursor;
+      if (highlighted < -1 ||
+          highlighted >= rows.length ||
+          (pageCount == 0 &&
+              (pageIndex != 0 || rows.isNotEmpty || highlighted != -1)) ||
+          (pageCount > 0 && pageIndex >= pageCount) ||
+          preeditCursor < -1 ||
+          preeditCursor > preeditBytes.length ||
+          // A mid-sequence offset (10xxxxxx continuation byte) splits a
+          // multi-byte character — the contract forbids it, so the frame
+          // is dropped whole rather than snapped.
+          (preeditCursor >= 0 &&
+              preeditCursor < preeditBytes.length &&
+              (preeditBytes[preeditCursor] & 0xC0) == 0x80)) {
+        rejectedStructuredMessages += 1;
+        return null;
+      }
+
+      final completion = frame.completion;
+      final notice = frame.notice;
+      if ((completion != null &&
+              (completion.contains('\u0000') ||
+                  utf8.encode(completion).length >
+                      denialWireMaxStringLength)) ||
+          (notice != null &&
+              (notice.contains('\u0000') ||
+                  utf8.encode(notice).length > denialWireMaxStringLength))) {
+        rejectedStructuredMessages += 1;
+        return null;
+      }
+
+      return DenialImeFrame(
+        serial: frame.serial,
+        preedit: List<DenialImePreeditSpan>.unmodifiable(preedit),
+        preeditCursor: preeditCursor,
+        candidates: List<DenialImeCandidate>.unmodifiable(rows),
+        highlighted: highlighted,
+        pageIndex: pageIndex,
+        pageCount: pageCount,
+        completion: completion == null || completion.isEmpty
+            ? null
+            : completion,
+        notice: notice == null || notice.isEmpty ? null : notice,
+      );
+    } on Object {
+      rejectedStructuredMessages += 1;
+      return null;
+    }
+  }
+
+  /// Validates a shell-facing `ImeState` payload into its Dart model.
+  DenialImeState? decodeImeState(generated.ImeState state) {
+    try {
+      final error = state.error;
+      if (error != null &&
+          (error.contains('\u0000') ||
+              utf8.encode(error).length > denialWireMaxStringLength)) {
+        rejectedStructuredMessages += 1;
+        return null;
+      }
+      return DenialImeState(
+        serial: state.serial,
+        engine: switch (state.engine) {
+          generated.ImeEngineStatus.Starting => DenialImeEngineStatus.starting,
+          generated.ImeEngineStatus.Ready => DenialImeEngineStatus.ready,
+          generated.ImeEngineStatus.Error => DenialImeEngineStatus.error,
+          _ => DenialImeEngineStatus.offline,
+        },
+        endpoint: switch (state.endpoint) {
+          generated.ImeEndpointKind.WaylandTextInput =>
+            DenialImeEndpointKind.waylandTextInput,
+          generated.ImeEndpointKind.Flutter => DenialImeEndpointKind.flutter,
+          generated.ImeEndpointKind.Legacy => DenialImeEndpointKind.legacy,
+          _ => DenialImeEndpointKind.none,
+        },
+        mode: switch (state.mode) {
+          generated.ImeInputMode.Chinese => DenialImeInputMode.chinese,
+          _ => DenialImeInputMode.latin,
+        },
+        cloudEnabled: state.cloudEnabled,
+        error: error == null || error.isEmpty ? null : error,
+      );
+    } on Object {
+      rejectedStructuredMessages += 1;
+      return null;
+    }
   }
 
   DenialDecodedEnvelope? decodeStructured(ByteData? data) {

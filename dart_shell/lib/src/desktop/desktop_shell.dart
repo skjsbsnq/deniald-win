@@ -42,6 +42,7 @@ import '../widgets/clipboard_tray_layer.dart';
 import '../widgets/desktop_window_close_animation.dart';
 import '../widgets/desktop_window_switcher.dart';
 import '../widgets/desktop_window_reveal.dart';
+import '../widgets/ime/ime_panel_layer.dart';
 import '../widgets/main_output_centered_surface.dart';
 import '../widgets/retained_translation.dart';
 import '../widgets/shell_backdrop_blur.dart';
@@ -89,6 +90,7 @@ const desktopApplicationSuggestionsRowKey = ValueKey<String>(
 const desktopApplicationSuggestionsDividerKey = ValueKey<String>(
   'desktop-application-suggestions-divider',
 );
+
 class DesktopShell extends ConsumerStatefulWidget {
   const DesktopShell({super.key});
 

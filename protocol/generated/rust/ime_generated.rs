@@ -389,14 +389,15 @@ impl flatbuffers::SimpleToVerifyInSlice for ImeCloudOverride {}
 #[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
 pub const ENUM_MIN_IME_PREEDIT_STYLE: u8 = 0;
 #[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
-pub const ENUM_MAX_IME_PREEDIT_STYLE: u8 = 3;
+pub const ENUM_MAX_IME_PREEDIT_STYLE: u8 = 4;
 #[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
 #[allow(non_camel_case_types)]
-pub const ENUM_VALUES_IME_PREEDIT_STYLE: [ImePreeditStyle; 4] = [
+pub const ENUM_VALUES_IME_PREEDIT_STYLE: [ImePreeditStyle; 5] = [
   ImePreeditStyle::Plain,
   ImePreeditStyle::Underline,
   ImePreeditStyle::Highlight,
   ImePreeditStyle::Prediction,
+  ImePreeditStyle::Correction,
 ];
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
@@ -408,14 +409,16 @@ impl ImePreeditStyle {
   pub const Underline: Self = Self(1);
   pub const Highlight: Self = Self(2);
   pub const Prediction: Self = Self(3);
+  pub const Correction: Self = Self(4);
 
   pub const ENUM_MIN: u8 = 0;
-  pub const ENUM_MAX: u8 = 3;
+  pub const ENUM_MAX: u8 = 4;
   pub const ENUM_VALUES: &'static [Self] = &[
     Self::Plain,
     Self::Underline,
     Self::Highlight,
     Self::Prediction,
+    Self::Correction,
   ];
   /// Returns the variant's name or "" if unknown.
   pub fn variant_name(self) -> Option<&'static str> {
@@ -424,6 +427,7 @@ impl ImePreeditStyle {
       Self::Underline => Some("Underline"),
       Self::Highlight => Some("Highlight"),
       Self::Prediction => Some("Prediction"),
+      Self::Correction => Some("Correction"),
       _ => None,
     }
   }
