@@ -1,0 +1,26 @@
+name: 使用疑问
+description: 不确定是用法问题还是缺陷，先问一下
+title: "[Question] "
+labels: ["question"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        按键总表、双拼、云联想等用法在 [使用说明](https://qingjian.app/docs) 里，很多问题能直接查到。
+  - type: dropdown
+    id: platform
+    attributes:
+      label: 平台
+      options:
+        - macOS
+        - Windows
+        - 与平台无关
+    validations:
+      required: true
+  - type: textarea
+    id: question
+    attributes:
+      label: 问题
+      description: 想做什么、试了什么、结果如何。
+    validations:
+      required: true

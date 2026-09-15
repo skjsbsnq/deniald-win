@@ -1,0 +1,27 @@
+# 每周一提依赖更新 PR：Cargo 依赖与 workflow 里钉死 commit 的 actions（钉 commit 之后升级全靠这里）。
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      # windows-rs 一家（windows / windows-core / windows-registry / windows-reactor / windows-strings…）版本必须一起走：
+      # windows-core 0.100 配 windows 0.62 的 #[implement] 直接编不过（Box 私有），windows-registry 0.100 的 Error 与 0.62 的对不上；
+      # 合成一个 PR，只有全家都有新版时才可能绿
+      windows-rs:
+        patterns: ["windows", "windows-*"]
+    ignore:
+      # windows 主包还停在 0.62.2，姊妹包先到了 0.100：单独跟着姊妹包升编不过（见上）。先压住它们的 0.x 版本跳（Dependabot 算 minor），
+      # 等 windows 出 0.100 时会单独来一个 PR，那时把这段删掉、手动一家一起升
+      - dependency-name: "windows-core"
+        update-types: ["version-update:semver-minor"]
+      - dependency-name: "windows-registry"
+        update-types: ["version-update:semver-minor"]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday

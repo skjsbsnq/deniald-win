@@ -1,0 +1,29 @@
+[package]
+name = "qingjian-linux"
+description = "Linux 输入引擎服务进程：装配 Engine，作为 input-engine-v1 客户端接宿主输入框架的 ime.sock"
+version = "0.1.0-dev"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+clap.workspace = true
+dotenvy.workspace = true
+flatbuffers.workspace = true
+libc.workspace = true
+xkbcommon.workspace = true
+qingjian-core.workspace = true
+qingjian-dictionary.workspace = true
+qingjian-learning.workspace = true
+qingjian-lm.workspace = true
+qingjian-neural.workspace = true
+qingjian-platform.workspace = true
+qingjian-predict.workspace = true
+qingjian-translate.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tracing-appender.workspace = true
+tracing-subscriber.workspace = true

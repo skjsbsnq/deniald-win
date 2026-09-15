@@ -1,0 +1,263 @@
+// 青简引擎侧的 input-engine-v1 线格式（与宿主 input-method 守护进程的私有协议）。
+//
+// 本文件是本仓库自撰的等价 schema：语义以协议规范文档为准，字段顺序即字段
+// 编号（voffset = 4 + 2 * 序号），union 成员按声明顺序编号（1 起，0 为 NONE）。
+// 代码没有走 flatc 生成：编解码由 `src/ime/wire/` 手写在 flatbuffers 运行时
+// crate 之上（builder 负责编码，verifier 负责对端不可信包的有界校验），
+// 本文件是那份手写代码的契约文档。
+
+namespace Qingjian.Ime;
+
+// 端点能力：宿主焦点编辑器能给引擎什么。Legacy 覆盖无 text-input 的客户端：
+// 无 surrounding、无光标矩形、不能 delete-surrounding，preedit 只在面板里。
+enum ImeEndpointKind : ubyte {
+  None = 0,
+  WaylandTextInput = 1,
+  Flutter = 2,
+  Legacy = 3
+}
+
+// 粗粒度输入模式：Latin 是原样直通，Chinese 是组句输入。
+enum ImeInputMode : ubyte {
+  Latin = 0,
+  Chinese = 1
+}
+
+// 引擎生命周期；Offline 保留给宿主侧状态（引擎永远不发），编号与宿主的
+// 壳状态枚举一致。
+enum ImeEngineStatus : ubyte {
+  Offline = 0,
+  Starting = 1,
+  Ready = 2,
+  Error = 3
+}
+
+// ImeSetInputMode.cloud 的三态：Unchanged 不动引擎自己的云联想开关。
+enum ImeCloudOverride : ubyte {
+  Unchanged = 0,
+  Enable = 1,
+  Disable = 2
+}
+
+// 面板里 preedit 分段的显示提示。
+enum ImePreeditStyle : ubyte {
+  Plain = 0,
+  Underline = 1,
+  Highlight = 2,
+  Prediction = 3
+}
+
+// ImeKeyEvent.modifiers 位：bit0 Shift、bit1 Control、bit2 Alt、bit3 Super；
+// 其余位保留，必须发零，收到非零按协议错误处理。
+// 锁定位（Caps / Num）不在掩码里：切换锁的键本身作为普通按键事件转发。
+
+// 逻辑像素的光标矩形（surface 局部坐标）。用 table 表示「端点不报光标」
+// （缺省）与零尺寸矩形的区别。
+table ImeRect {
+  x:int;
+  y:int;
+  width:int;
+  height:int;
+}
+
+// 激活 / 重载快照里的一条配置键值。
+table ImeConfigEntry {
+  key:string;
+  value:string;
+}
+
+// 一段 preedit：有界文本 + 显示提示。
+table ImePreeditSpan {
+  text:string;
+  style:ImePreeditStyle = Plain;
+}
+
+// 一行候选：在 ImeFrame.candidates 里的位置就是点选下标，没有单独的序号字段。
+table ImeCandidate {
+  text:string;
+  annotation:string;
+  // 纯显示徽标：云来源与声调标记，不影响上屏语义。
+  from_cloud:bool;
+  tone_mark:bool;
+}
+
+// —— 引擎 -> 宿主 ——
+
+// 新连接上的第一个包，引擎发出。client_version 必须等于 ImeEnvelope 的
+// protocol_version，否则宿主直接关连接。
+table ImeHello {
+  client_version:ushort = 1;
+  name:string;
+  version:string;
+}
+
+// 激活级面板快照：此刻屏幕该是什么样，不是增量。空帧（无 preedit、候选、
+// completion、notice）收起候选面板。
+table ImeFrame {
+  serial:ulong;
+  preedit:[ImePreeditSpan];
+  // 光标在拼接后 preedit 里的 UTF-8 字节偏移；-1 为没有显式光标。
+  preedit_cursor:int = -1;
+  candidates:[ImeCandidate];
+  // candidates 里的高亮下标；-1 为无高亮。
+  highlighted:int = -1;
+  page_index:uint;
+  page_count:uint;
+  // 整句补全预览；notice 是瞬时引擎提示（模式 / 错误 / 云状态）。
+  completion:string;
+  notice:string;
+}
+
+// 上屏文本进活跃端点；Legacy 端点上宿主翻成合成 keysym 事件。
+table ImeCommitText {
+  serial:ulong;
+  text:string;
+}
+
+// 有内联 preedit 能力的端点（WaylandTextInput / Flutter）的行内组字串；
+// Legacy 只出现在面板。null text 清除；光标是 UTF-8 字节偏移，-1 为无光标。
+table ImeInlinePreedit {
+  serial:ulong;
+  text:string;
+  cursor_begin:int = -1;
+  cursor_end:int = -1;
+}
+
+// 请求删除光标周围的 UTF-8 字节；Legacy 端点会被拒绝。
+table ImeDeleteSurrounding {
+  serial:ulong;
+  before_bytes:uint;
+  after_bytes:uint;
+}
+
+// 引擎侧发起的中 / 英模式与云开关状态，由宿主转发给壳。
+table ImeModeState {
+  serial:ulong;
+  mode:ImeInputMode = Latin;
+  cloud_enabled:bool;
+}
+
+// 引擎生命周期与健康；error 是有界的人类可读诊断串。
+table ImeStatus {
+  status:ImeEngineStatus = Starting;
+  error:string;
+}
+
+// 对每个转发的 ImeKeyEvent 回消费判定，按 key_id 对上。handled=false 或
+// 100ms 内不应答，宿主把原按键回注给焦点端点。
+table ImeKeyResult {
+  serial:ulong;
+  key_id:uint;
+  handled:bool;
+}
+
+// —— 宿主 -> 引擎 ——
+
+// 开一次激活，serial 是宿主拥有的激活世代：从 1 起、连接内不重、永不为 0。
+// 之后所有激活级载荷都带它，两端都丢 serial 失配的载荷。
+// surrounding_text / cursor_rectangle 缺省表示端点不提供（Legacy 恒如此）。
+table ImeActivate {
+  serial:ulong;
+  endpoint:ImeEndpointKind = None;
+  app_id:string;
+  // text-input-v3 的数值原样透传。
+  content_hint:uint;
+  content_purpose:uint;
+  cursor_rectangle:ImeRect;
+  surrounding_text:string;
+  // surrounding_text 里的 UTF-8 字节偏移，仅 surrounding_text 存在时有效。
+  surrounding_cursor:uint;
+  surrounding_anchor:uint;
+  config:[ImeConfigEntry];
+}
+
+// 激活内的可变编辑器状态整体替换（input-method-v2 语义，不是补丁）：
+// surrounding_text 为 null 表示不可用而不是空。
+table ImeEditorUpdate {
+  serial:ulong;
+  app_id:string;
+  content_hint:uint;
+  content_purpose:uint;
+  cursor_rectangle:ImeRect;
+  surrounding_text:string;
+  surrounding_cursor:uint;
+  surrounding_anchor:uint;
+}
+
+// 结束 serial 指定的激活；自带语义、丢弃开着的状态组、不需要 ImeDone。
+// 之后引擎不得再为该 serial 发任何载荷，并清面板状态。
+table ImeDeactivate {
+  serial:ulong;
+}
+
+// 关闭一组状态消息：ImeActivate 与每段连续的 ImeEditorUpdate 各成一组，
+// 收到 ImeDone 才算合法；引擎按组整体生效，不暴露半应用的状态。
+table ImeDone {
+  serial:ulong;
+}
+
+// 一次原始物理按键：keycode 是 evdev 输入事件码；key_id 是激活内从 1 起的
+// 计数（自动重复下也唯一），ImeKeyResult 原样回显；宿主按 100ms 超时等应答。
+table ImeKeyEvent {
+  serial:ulong;
+  keycode:uint;
+  modifiers:uint;
+  pressed:bool;
+  key_id:uint;
+}
+
+// 面板点选：上屏本激活最新一帧 candidates 里第 index 个。
+table ImeSelectCandidate {
+  serial:ulong;
+  index:uint;
+}
+
+// 候选翻页：只看 delta 的符号。
+table ImePageCandidates {
+  serial:ulong;
+  delta:int;
+}
+
+// 壳请求的模式切换；cloud 是三态覆盖。
+table ImeSetInputMode {
+  serial:ulong;
+  mode:ImeInputMode = Latin;
+  cloud:ImeCloudOverride = Unchanged;
+}
+
+// 要求引擎丢掉内存状态、按附带的新快照原子重载配置。
+table ImeReloadConfiguration {
+  serial:ulong;
+  config:[ImeConfigEntry];
+}
+
+union ImePayload {
+  ImeHello,
+  ImeActivate,
+  ImeDeactivate,
+  ImeEditorUpdate,
+  ImeDone,
+  ImeKeyEvent,
+  ImeSelectCandidate,
+  ImePageCandidates,
+  ImeSetInputMode,
+  ImeReloadConfiguration,
+  ImeFrame,
+  ImeCommitText,
+  ImeInlinePreedit,
+  ImeDeleteSurrounding,
+  ImeModeState,
+  ImeStatus,
+  ImeKeyResult
+}
+
+table ImeEnvelope {
+  protocol_version:ushort = 1;
+  // 每方向单调递增、从 1 起；只做日志与丢包检测，排序权威是 serial。
+  sequence:ulong;
+  payload:ImePayload;
+}
+
+root_type ImeEnvelope;
+file_identifier "IEMG";
+file_extension "iemg";

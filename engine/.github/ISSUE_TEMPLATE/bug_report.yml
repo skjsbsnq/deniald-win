@@ -1,0 +1,84 @@
+name: 报告问题
+description: 功能不正常、崩溃、行为与文档不符
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈。请尽量填全，尤其是复现步骤和版本号，能省去来回追问的时间。
+        提交后维护者会补上平台（`os: *`）与模块（`area: *`）标签，不必自己操心。
+  - type: dropdown
+    id: platform
+    attributes:
+      label: 平台
+      options:
+        - macOS
+        - Windows
+        - Linux
+    validations:
+      required: true
+  - type: input
+    id: os_version
+    attributes:
+      label: 系统版本
+      description: 例如 macOS 26.1、Windows 11 24H2、Windows 10 22H2
+      placeholder: Windows 11 24H2
+    validations:
+      required: true
+  - type: input
+    id: qingjian_version
+    attributes:
+      label: 青简版本
+      description: 「设置 → 关于」页里的版本号，或下载的安装包文件名
+      placeholder: windows-v0.1.0-alpha.2
+    validations:
+      required: true
+  - type: input
+    id: app
+    attributes:
+      label: 出问题时所在的应用
+      description: 如果只在某些应用里出现，写出应用名和版本；所有应用都出现就写「全部」
+      placeholder: 企业微信 4.1.x / Visual Studio Code / 全部
+  - type: dropdown
+    id: schema
+    attributes:
+      label: 输入方案
+      options:
+        - 全拼
+        - 双拼
+        - 不确定
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 一步一步写，包括敲了哪些键。能稳定复现请注明；偶发的也请写大致频率。
+      placeholder: |
+        1. 切到青简，在记事本里输入 v1+2
+        2. 预期出现 3，实际……
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: 预期行为
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际行为
+      description: 可以贴截图或录屏。
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 运行日志
+      description: |
+        先贴「设置 → 关于 → 复制诊断信息」的内容（版本、系统、配置，密钥会被抹去）。
+        日志文件：macOS 在「关于 → 打开日志目录」里取当天的；Windows 点「关于 → 打包日志到桌面」，把 zip 拖进来作为附件。
+        目录位置见 https://qingjian.app/docs/help/data-and-logs 。缺省级别不含输入内容。
+      render: text
