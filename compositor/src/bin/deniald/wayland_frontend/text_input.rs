@@ -20,7 +20,7 @@ use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::reexports::wayland_server::{
     Client, DataInit, Dispatch, DisplayHandle, GlobalDispatch, New, Resource,
 };
-use smithay::utils::Rectangle;
+use smithay::utils::{Logical, Point, Rectangle};
 use tracing::debug;
 
 #[cfg(feature = "flutter")]
@@ -34,7 +34,6 @@ const MAX_TEXT_INPUTS_PER_CLIENT: usize = 16;
 const MAX_SURROUNDING_TEXT_BYTES: usize = 4000;
 const TOUCH_AUTHORIZATION_WINDOW: Duration = Duration::from_millis(250);
 
-#[cfg(feature = "flutter")]
 fn finite_i32(value: f64) -> i32 {
     value
         .round()
@@ -748,14 +747,50 @@ impl TextInputManager {
         }
     }
 
-    pub(super) fn input_method_snapshot(&self) -> Option<EditorSnapshot> {
+    pub(super) fn input_method_snapshot(
+        &self,
+        pointer: Option<Point<f64, Logical>>,
+    ) -> Option<EditorSnapshot> {
         if self.broker.shell_capture {
             return self.flutter_input_method_snapshot();
         }
         match self.broker.seat_focus {
-            SeatFocusKind::Wayland => self.wayland_input_method_snapshot(),
-            SeatFocusKind::Xwayland => None,
+            SeatFocusKind::Wayland => self
+                .wayland_input_method_snapshot()
+                .or_else(|| Some(self.legacy_input_method_snapshot(pointer))),
+            SeatFocusKind::Xwayland => Some(self.legacy_input_method_snapshot(pointer)),
             SeatFocusKind::None => self.flutter_input_method_snapshot(),
+        }
+    }
+
+    /// Fallback for a focused client with no text-input endpoint: Xwayland
+    /// windows, or a Wayland client that never enabled text-input-v3. The
+    /// seat focus itself stands in as the editor, so there is no surrounding
+    /// text or content metadata to forward. The pointer is the only caret
+    /// hint a legacy client can offer, so the candidate window anchors to a
+    /// small rectangle at the pointer in global logical coordinates — the
+    /// same coordinate space `input_method_editor_rectangle_global`
+    /// consumers expect.
+    ///
+    /// Note the `text_input_rectangle` the IM client receives for this
+    /// endpoint therefore carries global logical coordinates, not the
+    /// surface-local coordinates the input-method protocol prescribes —
+    /// there is no surface to be local to.
+    fn legacy_input_method_snapshot(&self, pointer: Option<Point<f64, Logical>>) -> EditorSnapshot {
+        EditorSnapshot {
+            endpoint: EditorEndpoint::SeatFallback,
+            surrounding_text: None,
+            // `Other`: the legacy endpoint reported no text change, so the
+            // snapshot must not claim an input-method cause.
+            change_cause: 1,
+            content_hint: 0,
+            content_purpose: 0,
+            cursor_rectangle: pointer.map(|position| {
+                Rectangle::new(
+                    (finite_i32(position.x), finite_i32(position.y)).into(),
+                    (1, 1).into(),
+                )
+            }),
         }
     }
 
@@ -1056,7 +1091,11 @@ fn parse_available_actions(bytes: &[u8]) -> Option<Vec<u32>> {
 
 impl WaylandFrontend {
     pub(super) fn synchronize_input_method(&mut self) -> bool {
-        let snapshot = self.text_input.input_method_snapshot();
+        let pointer = self
+            .seat
+            .get_pointer()
+            .map(|pointer| pointer.current_location());
+        let snapshot = self.text_input.input_method_snapshot(pointer);
         self.input_method.synchronize(snapshot)
     }
 
@@ -1084,5 +1123,67 @@ impl WaylandFrontend {
         &mut self,
     ) -> impl Iterator<Item = (u64, i64, InputMethodTransaction)> + '_ {
         self.input_method.drain_flutter_transactions()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use smithay::reexports::wayland_server::Display;
+
+    fn manager_with_focus(focus: SeatFocusKind) -> TextInputManager {
+        let display = Display::<RuntimeState>::new().expect("wayland display");
+        let mut manager = TextInputManager::new(&display.handle());
+        manager.broker.set_seat_focus(focus);
+        manager
+    }
+
+    #[test]
+    fn xwayland_focus_exposes_seat_fallback_endpoint() {
+        let manager = manager_with_focus(SeatFocusKind::Xwayland);
+        let snapshot = manager
+            .input_method_snapshot(Some(Point::from((120.4, 87.6))))
+            .expect("Xwayland focus offers the legacy seat endpoint");
+        assert_eq!(snapshot.endpoint, EditorEndpoint::SeatFallback);
+        assert_eq!(snapshot.surrounding_text, None);
+        // `Other` (1): the legacy endpoint reported no text change.
+        assert_eq!(snapshot.change_cause, 1);
+        assert_eq!(snapshot.content_hint, 0);
+        assert_eq!(snapshot.content_purpose, 0);
+        // The caret hint is a small rectangle at the pointer in global
+        // logical coordinates.
+        assert_eq!(
+            snapshot.cursor_rectangle,
+            Some(Rectangle::new((120, 88).into(), (1, 1).into()))
+        );
+    }
+
+    #[test]
+    fn wayland_focus_without_text_input_uses_seat_fallback() {
+        let manager = manager_with_focus(SeatFocusKind::Wayland);
+        let snapshot = manager
+            .input_method_snapshot(None)
+            .expect("Wayland focus without an active text-input uses the legacy seat endpoint");
+        assert_eq!(snapshot.endpoint, EditorEndpoint::SeatFallback);
+        assert_eq!(snapshot.cursor_rectangle, None);
+    }
+
+    #[test]
+    fn unfocused_seat_offers_no_endpoint() {
+        let manager = manager_with_focus(SeatFocusKind::None);
+        assert!(manager.input_method_snapshot(None).is_none());
+    }
+
+    #[test]
+    fn shell_capture_still_overrides_seat_focus() {
+        let mut manager = manager_with_focus(SeatFocusKind::Xwayland);
+        manager.broker.set_shell_capture(true);
+        // No active Flutter editor: the shell capture wins over the legacy
+        // seat fallback and exposes no endpoint.
+        assert!(
+            manager
+                .input_method_snapshot(Some(Point::from((1.0, 1.0))))
+                .is_none()
+        );
     }
 }

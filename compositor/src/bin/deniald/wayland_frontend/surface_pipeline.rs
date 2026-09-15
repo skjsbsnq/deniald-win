@@ -667,6 +667,9 @@ impl WaylandFrontend {
                 let surface_offset = self.surface_tree_offset(&root, &surface)?;
                 saturating_point_add(root_origin, surface_offset)
             }
+            // Legacy endpoints already report their caret hint in global
+            // logical coordinates (a small rectangle at the pointer).
+            EditorEndpoint::SeatFallback => Point::from((0, 0)),
         };
         Some(Rectangle::new(
             saturating_point_add(origin, rectangle.loc),

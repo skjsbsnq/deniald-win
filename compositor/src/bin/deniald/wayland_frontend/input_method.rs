@@ -79,6 +79,13 @@ pub(super) enum EditorEndpoint {
         lifecycle: u64,
         client_id: i64,
     },
+    /// The seat focus is a client with no text-input endpoint: an Xwayland
+    /// window, or a Wayland client that never enabled text-input-v3. The
+    /// seat focus itself is the editor identity, so all SeatFallback
+    /// endpoints are the same editor; retargeting is driven by
+    /// `synchronize`. Committed transactions carry no text-input resource
+    /// and are delivered through the legacy keysym path instead.
+    SeatFallback,
 }
 
 impl EditorEndpoint {
@@ -106,6 +113,7 @@ impl EditorEndpoint {
                     && left_lifecycle == right_lifecycle
                     && left_client == right_client
             }
+            (Self::SeatFallback, Self::SeatFallback) => true,
             _ => false,
         }
     }
@@ -123,6 +131,10 @@ pub(super) struct EditorSnapshot {
 
 impl EditorSnapshot {
     fn permits_external_input_method(&self) -> bool {
+        // SeatFallback endpoints cannot declare a purpose at all, so this
+        // check never rejects them: legacy clients such as Xwayland windows
+        // always admit the input method. Known limitation — a password field
+        // under X11 has no protocol-level marker Denial could honor here.
         !matches!(self.content_purpose, PASSWORD_PURPOSE | PIN_PURPOSE)
     }
 }
@@ -368,15 +380,12 @@ impl InputMethodManager {
             self.keyboard_route.set_active(false);
             return false;
         };
-        let same_editor = match (
+        let (deactivate, activate) = activation_plan(
             instance.active,
-            effective.as_ref(),
             instance.active_endpoint.as_ref(),
-        ) {
-            (true, Some(next), Some(current)) => next.endpoint.same_editor(current),
-            _ => false,
-        };
-        if instance.active && (!same_editor || effective.is_none()) {
+            effective.as_ref(),
+        );
+        if deactivate {
             instance.resource.deactivate();
             instance.resource.done();
             instance.serial = instance.serial.wrapping_add(1);
@@ -385,7 +394,7 @@ impl InputMethodManager {
             instance.pending = InputMethodTransaction::default();
         }
         if let Some(editor) = effective {
-            if !instance.active {
+            if activate {
                 instance.resource.activate();
                 instance.active = true;
             }
@@ -706,6 +715,24 @@ impl InputMethodManager {
             modifiers.layout_effective,
         );
     }
+}
+
+/// Focus-transition pairing for the single input-method instance.
+///
+/// Returns `(deactivate, activate)`. Deactivation always precedes
+/// activation so the client observes a clean retarget when the editor
+/// identity changes. An unchanged endpoint only republishes mutable state.
+/// Pure so seat-focus churn is testable without Wayland resources.
+fn activation_plan(
+    active: bool,
+    active_endpoint: Option<&EditorEndpoint>,
+    next: Option<&EditorSnapshot>,
+) -> (bool, bool) {
+    let survives = match (active, next, active_endpoint) {
+        (true, Some(next), Some(current)) => next.endpoint.same_editor(current),
+        _ => false,
+    };
+    (active && !survives, next.is_some() && !survives)
 }
 
 fn change_cause(raw: u32) -> ChangeCause {
@@ -1116,7 +1143,7 @@ impl Dispatch<ZwpInputMethodV2, InputMethodUserData> for RuntimeState {
                     .as_mut()
                     .and_then(|frontend| frontend.input_method.commit(resource, serial));
                 if let Some((endpoint, transaction, serial_matches)) = committed {
-                    let delivered = match endpoint {
+                    let resolved = match endpoint {
                         EditorEndpoint::Wayland {
                             resource, serial, ..
                         } => state.wayland.as_mut().is_some_and(|frontend| {
@@ -1149,8 +1176,20 @@ impl Dispatch<ZwpInputMethodV2, InputMethodUserData> for RuntimeState {
                                 false
                             }
                         }
+                        EditorEndpoint::SeatFallback => {
+                            // Legacy endpoints own no text-input object. The
+                            // transaction is taken out of the queue with its
+                            // endpoint label; keysym-synthesis delivery for
+                            // legacy editors lands separately. The endpoint is
+                            // present, so this counts as resolved — deferred
+                            // delivery, not a lost editor.
+                            debug!(
+                                "input-method transaction on legacy endpoint awaits keysym delivery"
+                            );
+                            true
+                        }
                     };
-                    if !delivered {
+                    if !resolved {
                         debug!("input-method transaction lost its active editor");
                     }
                 }
@@ -1325,5 +1364,84 @@ impl Dispatch<ZwpInputMethodKeyboardGrabV2, InputMethodKeyboardUserData> for Run
         {
             keyboard.unset_grab(state);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn snapshot(endpoint: EditorEndpoint) -> EditorSnapshot {
+        EditorSnapshot {
+            endpoint,
+            surrounding_text: None,
+            change_cause: 0,
+            content_hint: 0,
+            content_purpose: 0,
+            cursor_rectangle: None,
+        }
+    }
+
+    #[test]
+    fn seat_fallback_endpoints_share_editor_identity() {
+        assert!(EditorEndpoint::SeatFallback.same_editor(&EditorEndpoint::SeatFallback));
+        let flutter = EditorEndpoint::Flutter {
+            generation: 1,
+            lifecycle: 2,
+            client_id: 3,
+        };
+        assert!(!EditorEndpoint::SeatFallback.same_editor(&flutter));
+        assert!(!flutter.same_editor(&EditorEndpoint::SeatFallback));
+    }
+
+    #[test]
+    fn legacy_focus_activates_and_focus_loss_deactivates() {
+        let legacy = snapshot(EditorEndpoint::SeatFallback);
+        // X11 focus arriving while nothing is active activates the IM.
+        assert_eq!(activation_plan(false, None, Some(&legacy)), (false, true));
+        // Hopping between X11 windows keeps the same endpoint: no
+        // deactivate/activate pair, only a state republish.
+        assert_eq!(
+            activation_plan(true, Some(&EditorEndpoint::SeatFallback), Some(&legacy)),
+            (false, false)
+        );
+        // Focus leaving to no usable editor deactivates.
+        assert_eq!(
+            activation_plan(true, Some(&EditorEndpoint::SeatFallback), None),
+            (true, false)
+        );
+    }
+
+    #[test]
+    fn switching_editor_kind_retargets_activation() {
+        let legacy = snapshot(EditorEndpoint::SeatFallback);
+        let flutter_endpoint = EditorEndpoint::Flutter {
+            generation: 1,
+            lifecycle: 1,
+            client_id: 7,
+        };
+        let flutter = snapshot(flutter_endpoint.clone());
+        // legacy -> Flutter and Flutter -> legacy each deactivate then
+        // activate, so the IM client observes a clean retarget.
+        assert_eq!(
+            activation_plan(true, Some(&EditorEndpoint::SeatFallback), Some(&flutter)),
+            (true, true)
+        );
+        assert_eq!(
+            activation_plan(true, Some(&flutter_endpoint), Some(&legacy)),
+            (true, true)
+        );
+    }
+
+    #[test]
+    fn legacy_endpoint_permits_input_method_but_purpose_still_blocks() {
+        let mut editor = snapshot(EditorEndpoint::SeatFallback);
+        // X11 cannot declare a purpose, so the fallback is always admitted.
+        assert!(editor.permits_external_input_method());
+        // A snapshot that does carry a protected purpose is still rejected.
+        editor.content_purpose = PASSWORD_PURPOSE;
+        assert!(!editor.permits_external_input_method());
+        editor.content_purpose = PIN_PURPOSE;
+        assert!(!editor.permits_external_input_method());
     }
 }
