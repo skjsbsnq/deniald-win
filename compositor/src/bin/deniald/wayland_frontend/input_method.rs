@@ -173,7 +173,7 @@ struct KeyboardRouteState {
 }
 
 #[derive(Clone, Debug, Default)]
-struct InputMethodKeyboardRoute {
+pub(super) struct InputMethodKeyboardRoute {
     inner: Arc<Mutex<KeyboardRouteState>>,
     forwarding_virtual_key: Arc<AtomicBool>,
 }
@@ -214,7 +214,7 @@ impl InputMethodKeyboardRoute {
             .filter(Resource::is_alive)
     }
 
-    fn forward_virtual_key(
+    pub(super) fn forward_virtual_key(
         &self,
         keyboard: &KeyboardHandle<RuntimeState>,
         state: &mut RuntimeState,
@@ -512,12 +512,17 @@ impl InputMethodManager {
     }
 
     fn stage_commit_string(&mut self, resource: &ZwpInputMethodV2, text: String) {
-        if text.len() <= MAX_INPUT_METHOD_TEXT_BYTES
-            && !text.contains('\0')
-            && let Some(instance) = self
-                .instance
-                .as_mut()
-                .filter(|instance| instance.resource == *resource)
+        if text.len() > MAX_INPUT_METHOD_TEXT_BYTES || text.contains('\0') {
+            warn!(
+                bytes = text.len(),
+                "dropping oversized or NUL-containing input-method commit string"
+            );
+            return;
+        }
+        if let Some(instance) = self
+            .instance
+            .as_mut()
+            .filter(|instance| instance.resource == *resource)
         {
             instance.pending.commit_string = Some(text);
         }
@@ -681,7 +686,7 @@ impl InputMethodManager {
         self.flutter_transactions.drain(..)
     }
 
-    fn keyboard_route(&self) -> InputMethodKeyboardRoute {
+    pub(super) fn keyboard_route(&self) -> InputMethodKeyboardRoute {
         self.keyboard_route.clone()
     }
 
@@ -1177,15 +1182,14 @@ impl Dispatch<ZwpInputMethodV2, InputMethodUserData> for RuntimeState {
                             }
                         }
                         EditorEndpoint::SeatFallback => {
-                            // Legacy endpoints own no text-input object. The
-                            // transaction is taken out of the queue with its
-                            // endpoint label; keysym-synthesis delivery for
-                            // legacy editors lands separately. The endpoint is
-                            // present, so this counts as resolved — deferred
-                            // delivery, not a lost editor.
-                            debug!(
-                                "input-method transaction on legacy endpoint awaits keysym delivery"
-                            );
+                            // Legacy endpoints own no text-input object, so
+                            // the commit string is typed out instead:
+                            // unicode_input augments the focused client's
+                            // keymap with Unicode keysyms on spare keycodes,
+                            // forwards synthetic press/release pairs, and
+                            // restores the original keymap. The endpoint is
+                            // present, so this counts as resolved.
+                            super::unicode_input::deliver_legacy_commit(state, &transaction);
                             true
                         }
                     };

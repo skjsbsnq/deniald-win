@@ -172,6 +172,8 @@ mod topology;
 #[cfg(feature = "flutter")]
 #[path = "wayland_frontend/touch_gestures.rs"]
 mod touch_gestures;
+#[path = "wayland_frontend/unicode_input.rs"]
+mod unicode_input;
 #[path = "wayland_frontend/window_layout.rs"]
 mod window_layout_adapter;
 #[path = "wayland_frontend/window_management.rs"]
