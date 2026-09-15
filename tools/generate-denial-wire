@@ -4,7 +4,6 @@ set -euo pipefail
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 VERSION="$(tr -d '[:space:]' < "$ROOT/protocol/FLATBUFFERS_VERSION")"
-SCHEMA="$ROOT/protocol/denial.fbs"
 DART_OUT="$ROOT/protocol/generated/dart"
 RUST_OUT="$ROOT/protocol/generated/rust"
 MODE="${1:-generate}"
@@ -34,20 +33,42 @@ TMP="$(mktemp -d)"
 trap 'rm -rf -- "$TMP"' EXIT
 mkdir -p "$TMP/dart" "$TMP/rust"
 
-"$FLATC_BIN" --dart --warnings-as-errors -o "$TMP/dart" "$SCHEMA"
-"$FLATC_BIN" --rust --warnings-as-errors -o "$TMP/rust" "$SCHEMA"
+# Every schema under protocol/ participates in the same pinned flow. flatc
+# derives each output name from the schema stem, so stems must stay unique.
+shopt -s nullglob
+SCHEMAS=("$ROOT"/protocol/*.fbs)
+if [[ ${#SCHEMAS[@]} -eq 0 ]]; then
+    printf 'no schemas found under %s/protocol\n' "$ROOT" >&2
+    exit 1
+fi
+
+for SCHEMA in "${SCHEMAS[@]}"; do
+    "$FLATC_BIN" --dart --warnings-as-errors -o "$TMP/dart" "$SCHEMA"
+    "$FLATC_BIN" --rust --warnings-as-errors -o "$TMP/rust" "$SCHEMA"
+done
 
 if [[ "$MODE" == "--check" ]]; then
-    cmp "$DART_OUT/lib/denial_denial.wire_generated.dart" \
-        "$TMP/dart/denial_denial.wire_generated.dart"
-    cmp "$RUST_OUT/denial_generated.rs" \
-        "$TMP/rust/denial_generated.rs"
+    for GENERATED in "$TMP"/dart/*.dart; do
+        cmp "$DART_OUT/lib/$(basename -- "$GENERATED")" "$GENERATED"
+    done
+    for GENERATED in "$TMP"/rust/*.rs; do
+        cmp "$RUST_OUT/$(basename -- "$GENERATED")" "$GENERATED"
+    done
+    for COMMITTED in "$DART_OUT"/lib/*.dart; do
+        cmp "$COMMITTED" "$TMP/dart/$(basename -- "$COMMITTED")"
+    done
+    for COMMITTED in "$RUST_OUT"/*.rs; do
+        cmp "$COMMITTED" "$TMP/rust/$(basename -- "$COMMITTED")"
+    done
     printf 'Denial generated wire code is current (FlatBuffers %s)\n' "$VERSION"
     exit 0
 fi
 
 mkdir -p "$DART_OUT/lib" "$RUST_OUT"
-cp "$TMP/dart/denial_denial.wire_generated.dart" \
-    "$DART_OUT/lib/denial_denial.wire_generated.dart"
-cp "$TMP/rust/denial_generated.rs" "$RUST_OUT/denial_generated.rs"
+for GENERATED in "$TMP"/dart/*.dart; do
+    cp "$GENERATED" "$DART_OUT/lib/$(basename -- "$GENERATED")"
+done
+for GENERATED in "$TMP"/rust/*.rs; do
+    cp "$GENERATED" "$RUST_OUT/$(basename -- "$GENERATED")"
+done
 printf 'generated Denial wire code with FlatBuffers %s\n' "$VERSION"

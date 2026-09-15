@@ -749,6 +749,127 @@ table ThemeState {
   accent_srgb:uint;
 }
 
+// ---------------------------------------------------------------------------
+// Input-engine bridge (input-engine-v1)
+//
+// These payloads carry the shell-facing half of the input-engine contract
+// documented in docs/protocol/input-engine-v1.md between deniald and the
+// embedded Dart shell. The engine itself attaches over a separate socket
+// schema (protocol/ime.fbs); Rust validates and republishes, never forwarding
+// untrusted engine bytes verbatim.
+// ---------------------------------------------------------------------------
+
+// Kind of text endpoint the engine currently serves. Legacy covers X11
+// clients and Wayland clients without text-input that are reached through the
+// focused-seat fallback.
+enum ImeEndpointKind : ubyte {
+  None = 0,
+  WaylandTextInput = 1,
+  Flutter = 2,
+  Legacy = 3
+}
+
+// Coarse composing mode; engines map their internal modes onto these values.
+enum ImeInputMode : ubyte {
+  Latin = 0,
+  Chinese = 1
+}
+
+// Attached-engine lifecycle as republished to the shell.
+enum ImeEngineStatus : ubyte {
+  Offline = 0,
+  Starting = 1,
+  Ready = 2,
+  Error = 3
+}
+
+// Tri-state for ImeCommand.SetInputMode: Unchanged leaves the engine's
+// cloud-assisted lookup preference untouched.
+enum ImeCloudOverride : ubyte {
+  Unchanged = 0,
+  Enable = 1,
+  Disable = 2
+}
+
+// Visual hint for one preedit segment inside the candidate panel.
+enum ImePreeditStyle : ubyte {
+  Plain = 0,
+  Underline = 1,
+  Highlight = 2,
+  Prediction = 3
+}
+
+enum ImeCommandKind : ubyte {
+  SelectCandidate = 0,
+  PagePrevious = 1,
+  PageNext = 2,
+  SetInputMode = 3,
+  ReloadConfiguration = 4
+}
+
+// One preedit segment: bounded text plus a display hint.
+table ImePreeditSpan {
+  text:string;
+  style:ImePreeditStyle = Plain;
+}
+
+// One candidate row. Its position inside ImeFrame.candidates is its
+// selection index.
+table ImeCandidate {
+  text:string;
+  annotation:string;
+  // Pure display hints: the panel may badge cloud-sourced candidates and
+  // tone-marked readings. They never change commit semantics.
+  from_cloud:bool;
+  tone_mark:bool;
+}
+
+// Authoritative snapshot of what the candidate panel should show right now.
+// A frame with no preedit, candidates, completion or notice hides the panel.
+// Native to Dart only.
+table ImeFrame {
+  // Activation serial this frame renders; receivers drop stale serials.
+  serial:ulong;
+  preedit:[ImePreeditSpan];
+  // UTF-8 byte offset of the caret inside the concatenated preedit text;
+  // -1 when the engine reports no explicit caret.
+  preedit_cursor:int = -1;
+  candidates:[ImeCandidate];
+  // Index into candidates; -1 when nothing is highlighted.
+  highlighted:int = -1;
+  page_index:uint;
+  page_count:uint;
+  // Whole-sentence completion preview.
+  completion:string;
+  notice:string;
+}
+
+// Panel-originated intent travelling Dart to native to engine. serial is the
+// activation whose latest published frame the user acted on; native drops
+// commands whose serial is stale and validates kind-specific fields.
+// Dart to native only.
+table ImeCommand {
+  kind:ImeCommandKind = SelectCandidate;
+  serial:ulong;
+  // SelectCandidate only: index into that frame's candidates.
+  index:uint;
+  // SetInputMode only.
+  mode:ImeInputMode = Latin;
+  cloud:ImeCloudOverride = Unchanged;
+}
+
+// Authoritative engine/session state for the shell indicator. serial is the
+// current activation serial; zero means no engine is active.
+// Native to Dart only.
+table ImeState {
+  serial:ulong;
+  engine:ImeEngineStatus = Offline;
+  endpoint:ImeEndpointKind = None;
+  mode:ImeInputMode = Latin;
+  cloud_enabled:bool;
+  error:string;
+}
+
 union Payload {
   InputLayout,
   WindowSnapshot,
@@ -768,7 +889,12 @@ union Payload {
   XEmbedTrayEvent,
   XEmbedTrayCommand,
   ThemeState,
-  CursorState
+  CursorState,
+  // Appended for wire compatibility: input-engine payloads land only on
+  // runtimes that attach an external input engine.
+  ImeFrame,
+  ImeCommand,
+  ImeState
 }
 
 table Envelope {

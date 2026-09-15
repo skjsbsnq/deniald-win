@@ -377,10 +377,10 @@ impl flatbuffers::SimpleToVerifyInSlice for WindowOpacityClass {}
 #[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
 pub const ENUM_MIN_WINDOW_REQUEST_KIND: u8 = 0;
 #[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
-pub const ENUM_MAX_WINDOW_REQUEST_KIND: u8 = 7;
+pub const ENUM_MAX_WINDOW_REQUEST_KIND: u8 = 9;
 #[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
 #[allow(non_camel_case_types)]
-pub const ENUM_VALUES_WINDOW_REQUEST_KIND: [WindowRequestKind; 8] = [
+pub const ENUM_VALUES_WINDOW_REQUEST_KIND: [WindowRequestKind; 10] = [
   WindowRequestKind::ListWindows,
   WindowRequestKind::GetDisplayLayout,
   WindowRequestKind::CloseWindow,
@@ -388,6 +388,8 @@ pub const ENUM_VALUES_WINDOW_REQUEST_KIND: [WindowRequestKind; 8] = [
   WindowRequestKind::ConfigureWindow,
   WindowRequestKind::CreateLocalWindow,
   WindowRequestKind::ConfigureSystemBar,
+  WindowRequestKind::SwitchWorkspace,
+  WindowRequestKind::MoveWindowToWorkspace,
   WindowRequestKind::MinimizeWindow,
 ];
 
@@ -767,10 +769,10 @@ impl flatbuffers::SimpleToVerifyInSlice for WindowActionKind {}
 #[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
 pub const ENUM_MIN_SHELL_ACTION_KIND: u8 = 0;
 #[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
-pub const ENUM_MAX_SHELL_ACTION_KIND: u8 = 12;
+pub const ENUM_MAX_SHELL_ACTION_KIND: u8 = 13;
 #[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
 #[allow(non_camel_case_types)]
-pub const ENUM_VALUES_SHELL_ACTION_KIND: [ShellActionKind; 13] = [
+pub const ENUM_VALUES_SHELL_ACTION_KIND: [ShellActionKind; 14] = [
   ShellActionKind::Applications,
   ShellActionKind::Overview,
   ShellActionKind::WindowSwitcherNext,
@@ -784,6 +786,7 @@ pub const ENUM_VALUES_SHELL_ACTION_KIND: [ShellActionKind; 13] = [
   ShellActionKind::WindowSwitcherPrevious,
   ShellActionKind::OpenSettings,
   ShellActionKind::Dashboard,
+  ShellActionKind::WorkspaceChanged,
 ];
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
@@ -1210,10 +1213,10 @@ impl flatbuffers::SimpleToVerifyInSlice for SettingsResponseKind {}
 #[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
 pub const ENUM_MIN_SHORTCUT_ACTION_KIND: u8 = 0;
 #[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
-pub const ENUM_MAX_SHORTCUT_ACTION_KIND: u8 = 30;
+pub const ENUM_MAX_SHORTCUT_ACTION_KIND: u8 = 52;
 #[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
 #[allow(non_camel_case_types)]
-pub const ENUM_VALUES_SHORTCUT_ACTION_KIND: [ShortcutActionKind; 31] = [
+pub const ENUM_VALUES_SHORTCUT_ACTION_KIND: [ShortcutActionKind; 53] = [
   ShortcutActionKind::Shutdown,
   ShortcutActionKind::OpenApplications,
   ShortcutActionKind::OpenOverview,
@@ -1245,6 +1248,28 @@ pub const ENUM_VALUES_SHORTCUT_ACTION_KIND: [ShortcutActionKind; 31] = [
   ShortcutActionKind::SwapRight,
   ShortcutActionKind::SwapUp,
   ShortcutActionKind::SwapDown,
+  ShortcutActionKind::PreviousWorkspace,
+  ShortcutActionKind::NextWorkspace,
+  ShortcutActionKind::MoveToPreviousWorkspace,
+  ShortcutActionKind::MoveToNextWorkspace,
+  ShortcutActionKind::SwitchWorkspace1,
+  ShortcutActionKind::SwitchWorkspace2,
+  ShortcutActionKind::SwitchWorkspace3,
+  ShortcutActionKind::SwitchWorkspace4,
+  ShortcutActionKind::SwitchWorkspace5,
+  ShortcutActionKind::SwitchWorkspace6,
+  ShortcutActionKind::SwitchWorkspace7,
+  ShortcutActionKind::SwitchWorkspace8,
+  ShortcutActionKind::SwitchWorkspace9,
+  ShortcutActionKind::MoveToWorkspace1,
+  ShortcutActionKind::MoveToWorkspace2,
+  ShortcutActionKind::MoveToWorkspace3,
+  ShortcutActionKind::MoveToWorkspace4,
+  ShortcutActionKind::MoveToWorkspace5,
+  ShortcutActionKind::MoveToWorkspace6,
+  ShortcutActionKind::MoveToWorkspace7,
+  ShortcutActionKind::MoveToWorkspace8,
+  ShortcutActionKind::MoveToWorkspace9,
 ];
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
@@ -2488,12 +2513,562 @@ impl flatbuffers::SimpleToVerifyInSlice for ShortcutTarget {}
 pub struct ShortcutTargetUnionTableOffset {}
 
 #[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
-pub const ENUM_MIN_PAYLOAD: u8 = 0;
+pub const ENUM_MIN_IME_ENDPOINT_KIND: u8 = 0;
 #[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
-pub const ENUM_MAX_PAYLOAD: u8 = 19;
+pub const ENUM_MAX_IME_ENDPOINT_KIND: u8 = 3;
 #[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
 #[allow(non_camel_case_types)]
-pub const ENUM_VALUES_PAYLOAD: [Payload; 20] = [
+pub const ENUM_VALUES_IME_ENDPOINT_KIND: [ImeEndpointKind; 4] = [
+  ImeEndpointKind::None,
+  ImeEndpointKind::WaylandTextInput,
+  ImeEndpointKind::Flutter,
+  ImeEndpointKind::Legacy,
+];
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+#[repr(transparent)]
+pub struct ImeEndpointKind(pub u8);
+#[allow(non_upper_case_globals)]
+impl ImeEndpointKind {
+  pub const None: Self = Self(0);
+  pub const WaylandTextInput: Self = Self(1);
+  pub const Flutter: Self = Self(2);
+  pub const Legacy: Self = Self(3);
+
+  pub const ENUM_MIN: u8 = 0;
+  pub const ENUM_MAX: u8 = 3;
+  pub const ENUM_VALUES: &'static [Self] = &[
+    Self::None,
+    Self::WaylandTextInput,
+    Self::Flutter,
+    Self::Legacy,
+  ];
+  /// Returns the variant's name or "" if unknown.
+  pub fn variant_name(self) -> Option<&'static str> {
+    match self {
+      Self::None => Some("None"),
+      Self::WaylandTextInput => Some("WaylandTextInput"),
+      Self::Flutter => Some("Flutter"),
+      Self::Legacy => Some("Legacy"),
+      _ => None,
+    }
+  }
+}
+impl core::fmt::Debug for ImeEndpointKind {
+  fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+    if let Some(name) = self.variant_name() {
+      f.write_str(name)
+    } else {
+      f.write_fmt(format_args!("<UNKNOWN {:?}>", self.0))
+    }
+  }
+}
+impl<'a> flatbuffers::Follow<'a> for ImeEndpointKind {
+  type Inner = Self;
+  #[inline]
+  unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+    let b = unsafe { flatbuffers::read_scalar_at::<u8>(buf, loc) };
+    Self(b)
+  }
+}
+
+impl flatbuffers::Push for ImeEndpointKind {
+    type Output = ImeEndpointKind;
+    #[inline]
+    unsafe fn push(&self, dst: &mut [u8], _written_len: usize) {
+        unsafe { flatbuffers::emplace_scalar::<u8>(dst, self.0); }
+    }
+}
+
+impl flatbuffers::EndianScalar for ImeEndpointKind {
+  type Scalar = u8;
+  #[inline]
+  fn to_little_endian(self) -> u8 {
+    self.0.to_le()
+  }
+  #[inline]
+  #[allow(clippy::wrong_self_convention)]
+  fn from_little_endian(v: u8) -> Self {
+    let b = u8::from_le(v);
+    Self(b)
+  }
+}
+
+impl<'a> flatbuffers::Verifiable for ImeEndpointKind {
+  #[inline]
+  fn run_verifier(
+    v: &mut flatbuffers::Verifier, pos: usize
+  ) -> Result<(), flatbuffers::InvalidFlatbuffer> {
+    use self::flatbuffers::Verifiable;
+    u8::run_verifier(v, pos)
+  }
+}
+
+impl flatbuffers::SimpleToVerifyInSlice for ImeEndpointKind {}
+#[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
+pub const ENUM_MIN_IME_INPUT_MODE: u8 = 0;
+#[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
+pub const ENUM_MAX_IME_INPUT_MODE: u8 = 1;
+#[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
+#[allow(non_camel_case_types)]
+pub const ENUM_VALUES_IME_INPUT_MODE: [ImeInputMode; 2] = [
+  ImeInputMode::Latin,
+  ImeInputMode::Chinese,
+];
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+#[repr(transparent)]
+pub struct ImeInputMode(pub u8);
+#[allow(non_upper_case_globals)]
+impl ImeInputMode {
+  pub const Latin: Self = Self(0);
+  pub const Chinese: Self = Self(1);
+
+  pub const ENUM_MIN: u8 = 0;
+  pub const ENUM_MAX: u8 = 1;
+  pub const ENUM_VALUES: &'static [Self] = &[
+    Self::Latin,
+    Self::Chinese,
+  ];
+  /// Returns the variant's name or "" if unknown.
+  pub fn variant_name(self) -> Option<&'static str> {
+    match self {
+      Self::Latin => Some("Latin"),
+      Self::Chinese => Some("Chinese"),
+      _ => None,
+    }
+  }
+}
+impl core::fmt::Debug for ImeInputMode {
+  fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+    if let Some(name) = self.variant_name() {
+      f.write_str(name)
+    } else {
+      f.write_fmt(format_args!("<UNKNOWN {:?}>", self.0))
+    }
+  }
+}
+impl<'a> flatbuffers::Follow<'a> for ImeInputMode {
+  type Inner = Self;
+  #[inline]
+  unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+    let b = unsafe { flatbuffers::read_scalar_at::<u8>(buf, loc) };
+    Self(b)
+  }
+}
+
+impl flatbuffers::Push for ImeInputMode {
+    type Output = ImeInputMode;
+    #[inline]
+    unsafe fn push(&self, dst: &mut [u8], _written_len: usize) {
+        unsafe { flatbuffers::emplace_scalar::<u8>(dst, self.0); }
+    }
+}
+
+impl flatbuffers::EndianScalar for ImeInputMode {
+  type Scalar = u8;
+  #[inline]
+  fn to_little_endian(self) -> u8 {
+    self.0.to_le()
+  }
+  #[inline]
+  #[allow(clippy::wrong_self_convention)]
+  fn from_little_endian(v: u8) -> Self {
+    let b = u8::from_le(v);
+    Self(b)
+  }
+}
+
+impl<'a> flatbuffers::Verifiable for ImeInputMode {
+  #[inline]
+  fn run_verifier(
+    v: &mut flatbuffers::Verifier, pos: usize
+  ) -> Result<(), flatbuffers::InvalidFlatbuffer> {
+    use self::flatbuffers::Verifiable;
+    u8::run_verifier(v, pos)
+  }
+}
+
+impl flatbuffers::SimpleToVerifyInSlice for ImeInputMode {}
+#[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
+pub const ENUM_MIN_IME_ENGINE_STATUS: u8 = 0;
+#[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
+pub const ENUM_MAX_IME_ENGINE_STATUS: u8 = 3;
+#[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
+#[allow(non_camel_case_types)]
+pub const ENUM_VALUES_IME_ENGINE_STATUS: [ImeEngineStatus; 4] = [
+  ImeEngineStatus::Offline,
+  ImeEngineStatus::Starting,
+  ImeEngineStatus::Ready,
+  ImeEngineStatus::Error,
+];
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+#[repr(transparent)]
+pub struct ImeEngineStatus(pub u8);
+#[allow(non_upper_case_globals)]
+impl ImeEngineStatus {
+  pub const Offline: Self = Self(0);
+  pub const Starting: Self = Self(1);
+  pub const Ready: Self = Self(2);
+  pub const Error: Self = Self(3);
+
+  pub const ENUM_MIN: u8 = 0;
+  pub const ENUM_MAX: u8 = 3;
+  pub const ENUM_VALUES: &'static [Self] = &[
+    Self::Offline,
+    Self::Starting,
+    Self::Ready,
+    Self::Error,
+  ];
+  /// Returns the variant's name or "" if unknown.
+  pub fn variant_name(self) -> Option<&'static str> {
+    match self {
+      Self::Offline => Some("Offline"),
+      Self::Starting => Some("Starting"),
+      Self::Ready => Some("Ready"),
+      Self::Error => Some("Error"),
+      _ => None,
+    }
+  }
+}
+impl core::fmt::Debug for ImeEngineStatus {
+  fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+    if let Some(name) = self.variant_name() {
+      f.write_str(name)
+    } else {
+      f.write_fmt(format_args!("<UNKNOWN {:?}>", self.0))
+    }
+  }
+}
+impl<'a> flatbuffers::Follow<'a> for ImeEngineStatus {
+  type Inner = Self;
+  #[inline]
+  unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+    let b = unsafe { flatbuffers::read_scalar_at::<u8>(buf, loc) };
+    Self(b)
+  }
+}
+
+impl flatbuffers::Push for ImeEngineStatus {
+    type Output = ImeEngineStatus;
+    #[inline]
+    unsafe fn push(&self, dst: &mut [u8], _written_len: usize) {
+        unsafe { flatbuffers::emplace_scalar::<u8>(dst, self.0); }
+    }
+}
+
+impl flatbuffers::EndianScalar for ImeEngineStatus {
+  type Scalar = u8;
+  #[inline]
+  fn to_little_endian(self) -> u8 {
+    self.0.to_le()
+  }
+  #[inline]
+  #[allow(clippy::wrong_self_convention)]
+  fn from_little_endian(v: u8) -> Self {
+    let b = u8::from_le(v);
+    Self(b)
+  }
+}
+
+impl<'a> flatbuffers::Verifiable for ImeEngineStatus {
+  #[inline]
+  fn run_verifier(
+    v: &mut flatbuffers::Verifier, pos: usize
+  ) -> Result<(), flatbuffers::InvalidFlatbuffer> {
+    use self::flatbuffers::Verifiable;
+    u8::run_verifier(v, pos)
+  }
+}
+
+impl flatbuffers::SimpleToVerifyInSlice for ImeEngineStatus {}
+#[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
+pub const ENUM_MIN_IME_CLOUD_OVERRIDE: u8 = 0;
+#[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
+pub const ENUM_MAX_IME_CLOUD_OVERRIDE: u8 = 2;
+#[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
+#[allow(non_camel_case_types)]
+pub const ENUM_VALUES_IME_CLOUD_OVERRIDE: [ImeCloudOverride; 3] = [
+  ImeCloudOverride::Unchanged,
+  ImeCloudOverride::Enable,
+  ImeCloudOverride::Disable,
+];
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+#[repr(transparent)]
+pub struct ImeCloudOverride(pub u8);
+#[allow(non_upper_case_globals)]
+impl ImeCloudOverride {
+  pub const Unchanged: Self = Self(0);
+  pub const Enable: Self = Self(1);
+  pub const Disable: Self = Self(2);
+
+  pub const ENUM_MIN: u8 = 0;
+  pub const ENUM_MAX: u8 = 2;
+  pub const ENUM_VALUES: &'static [Self] = &[
+    Self::Unchanged,
+    Self::Enable,
+    Self::Disable,
+  ];
+  /// Returns the variant's name or "" if unknown.
+  pub fn variant_name(self) -> Option<&'static str> {
+    match self {
+      Self::Unchanged => Some("Unchanged"),
+      Self::Enable => Some("Enable"),
+      Self::Disable => Some("Disable"),
+      _ => None,
+    }
+  }
+}
+impl core::fmt::Debug for ImeCloudOverride {
+  fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+    if let Some(name) = self.variant_name() {
+      f.write_str(name)
+    } else {
+      f.write_fmt(format_args!("<UNKNOWN {:?}>", self.0))
+    }
+  }
+}
+impl<'a> flatbuffers::Follow<'a> for ImeCloudOverride {
+  type Inner = Self;
+  #[inline]
+  unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+    let b = unsafe { flatbuffers::read_scalar_at::<u8>(buf, loc) };
+    Self(b)
+  }
+}
+
+impl flatbuffers::Push for ImeCloudOverride {
+    type Output = ImeCloudOverride;
+    #[inline]
+    unsafe fn push(&self, dst: &mut [u8], _written_len: usize) {
+        unsafe { flatbuffers::emplace_scalar::<u8>(dst, self.0); }
+    }
+}
+
+impl flatbuffers::EndianScalar for ImeCloudOverride {
+  type Scalar = u8;
+  #[inline]
+  fn to_little_endian(self) -> u8 {
+    self.0.to_le()
+  }
+  #[inline]
+  #[allow(clippy::wrong_self_convention)]
+  fn from_little_endian(v: u8) -> Self {
+    let b = u8::from_le(v);
+    Self(b)
+  }
+}
+
+impl<'a> flatbuffers::Verifiable for ImeCloudOverride {
+  #[inline]
+  fn run_verifier(
+    v: &mut flatbuffers::Verifier, pos: usize
+  ) -> Result<(), flatbuffers::InvalidFlatbuffer> {
+    use self::flatbuffers::Verifiable;
+    u8::run_verifier(v, pos)
+  }
+}
+
+impl flatbuffers::SimpleToVerifyInSlice for ImeCloudOverride {}
+#[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
+pub const ENUM_MIN_IME_PREEDIT_STYLE: u8 = 0;
+#[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
+pub const ENUM_MAX_IME_PREEDIT_STYLE: u8 = 3;
+#[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
+#[allow(non_camel_case_types)]
+pub const ENUM_VALUES_IME_PREEDIT_STYLE: [ImePreeditStyle; 4] = [
+  ImePreeditStyle::Plain,
+  ImePreeditStyle::Underline,
+  ImePreeditStyle::Highlight,
+  ImePreeditStyle::Prediction,
+];
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+#[repr(transparent)]
+pub struct ImePreeditStyle(pub u8);
+#[allow(non_upper_case_globals)]
+impl ImePreeditStyle {
+  pub const Plain: Self = Self(0);
+  pub const Underline: Self = Self(1);
+  pub const Highlight: Self = Self(2);
+  pub const Prediction: Self = Self(3);
+
+  pub const ENUM_MIN: u8 = 0;
+  pub const ENUM_MAX: u8 = 3;
+  pub const ENUM_VALUES: &'static [Self] = &[
+    Self::Plain,
+    Self::Underline,
+    Self::Highlight,
+    Self::Prediction,
+  ];
+  /// Returns the variant's name or "" if unknown.
+  pub fn variant_name(self) -> Option<&'static str> {
+    match self {
+      Self::Plain => Some("Plain"),
+      Self::Underline => Some("Underline"),
+      Self::Highlight => Some("Highlight"),
+      Self::Prediction => Some("Prediction"),
+      _ => None,
+    }
+  }
+}
+impl core::fmt::Debug for ImePreeditStyle {
+  fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+    if let Some(name) = self.variant_name() {
+      f.write_str(name)
+    } else {
+      f.write_fmt(format_args!("<UNKNOWN {:?}>", self.0))
+    }
+  }
+}
+impl<'a> flatbuffers::Follow<'a> for ImePreeditStyle {
+  type Inner = Self;
+  #[inline]
+  unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+    let b = unsafe { flatbuffers::read_scalar_at::<u8>(buf, loc) };
+    Self(b)
+  }
+}
+
+impl flatbuffers::Push for ImePreeditStyle {
+    type Output = ImePreeditStyle;
+    #[inline]
+    unsafe fn push(&self, dst: &mut [u8], _written_len: usize) {
+        unsafe { flatbuffers::emplace_scalar::<u8>(dst, self.0); }
+    }
+}
+
+impl flatbuffers::EndianScalar for ImePreeditStyle {
+  type Scalar = u8;
+  #[inline]
+  fn to_little_endian(self) -> u8 {
+    self.0.to_le()
+  }
+  #[inline]
+  #[allow(clippy::wrong_self_convention)]
+  fn from_little_endian(v: u8) -> Self {
+    let b = u8::from_le(v);
+    Self(b)
+  }
+}
+
+impl<'a> flatbuffers::Verifiable for ImePreeditStyle {
+  #[inline]
+  fn run_verifier(
+    v: &mut flatbuffers::Verifier, pos: usize
+  ) -> Result<(), flatbuffers::InvalidFlatbuffer> {
+    use self::flatbuffers::Verifiable;
+    u8::run_verifier(v, pos)
+  }
+}
+
+impl flatbuffers::SimpleToVerifyInSlice for ImePreeditStyle {}
+#[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
+pub const ENUM_MIN_IME_COMMAND_KIND: u8 = 0;
+#[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
+pub const ENUM_MAX_IME_COMMAND_KIND: u8 = 4;
+#[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
+#[allow(non_camel_case_types)]
+pub const ENUM_VALUES_IME_COMMAND_KIND: [ImeCommandKind; 5] = [
+  ImeCommandKind::SelectCandidate,
+  ImeCommandKind::PagePrevious,
+  ImeCommandKind::PageNext,
+  ImeCommandKind::SetInputMode,
+  ImeCommandKind::ReloadConfiguration,
+];
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+#[repr(transparent)]
+pub struct ImeCommandKind(pub u8);
+#[allow(non_upper_case_globals)]
+impl ImeCommandKind {
+  pub const SelectCandidate: Self = Self(0);
+  pub const PagePrevious: Self = Self(1);
+  pub const PageNext: Self = Self(2);
+  pub const SetInputMode: Self = Self(3);
+  pub const ReloadConfiguration: Self = Self(4);
+
+  pub const ENUM_MIN: u8 = 0;
+  pub const ENUM_MAX: u8 = 4;
+  pub const ENUM_VALUES: &'static [Self] = &[
+    Self::SelectCandidate,
+    Self::PagePrevious,
+    Self::PageNext,
+    Self::SetInputMode,
+    Self::ReloadConfiguration,
+  ];
+  /// Returns the variant's name or "" if unknown.
+  pub fn variant_name(self) -> Option<&'static str> {
+    match self {
+      Self::SelectCandidate => Some("SelectCandidate"),
+      Self::PagePrevious => Some("PagePrevious"),
+      Self::PageNext => Some("PageNext"),
+      Self::SetInputMode => Some("SetInputMode"),
+      Self::ReloadConfiguration => Some("ReloadConfiguration"),
+      _ => None,
+    }
+  }
+}
+impl core::fmt::Debug for ImeCommandKind {
+  fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+    if let Some(name) = self.variant_name() {
+      f.write_str(name)
+    } else {
+      f.write_fmt(format_args!("<UNKNOWN {:?}>", self.0))
+    }
+  }
+}
+impl<'a> flatbuffers::Follow<'a> for ImeCommandKind {
+  type Inner = Self;
+  #[inline]
+  unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+    let b = unsafe { flatbuffers::read_scalar_at::<u8>(buf, loc) };
+    Self(b)
+  }
+}
+
+impl flatbuffers::Push for ImeCommandKind {
+    type Output = ImeCommandKind;
+    #[inline]
+    unsafe fn push(&self, dst: &mut [u8], _written_len: usize) {
+        unsafe { flatbuffers::emplace_scalar::<u8>(dst, self.0); }
+    }
+}
+
+impl flatbuffers::EndianScalar for ImeCommandKind {
+  type Scalar = u8;
+  #[inline]
+  fn to_little_endian(self) -> u8 {
+    self.0.to_le()
+  }
+  #[inline]
+  #[allow(clippy::wrong_self_convention)]
+  fn from_little_endian(v: u8) -> Self {
+    let b = u8::from_le(v);
+    Self(b)
+  }
+}
+
+impl<'a> flatbuffers::Verifiable for ImeCommandKind {
+  #[inline]
+  fn run_verifier(
+    v: &mut flatbuffers::Verifier, pos: usize
+  ) -> Result<(), flatbuffers::InvalidFlatbuffer> {
+    use self::flatbuffers::Verifiable;
+    u8::run_verifier(v, pos)
+  }
+}
+
+impl flatbuffers::SimpleToVerifyInSlice for ImeCommandKind {}
+#[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
+pub const ENUM_MIN_PAYLOAD: u8 = 0;
+#[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
+pub const ENUM_MAX_PAYLOAD: u8 = 22;
+#[deprecated(since = "2.0.0", note = "Use associated constants instead. This will no longer be generated in 2021.")]
+#[allow(non_camel_case_types)]
+pub const ENUM_VALUES_PAYLOAD: [Payload; 23] = [
   Payload::NONE,
   Payload::InputLayout,
   Payload::WindowSnapshot,
@@ -2514,6 +3089,9 @@ pub const ENUM_VALUES_PAYLOAD: [Payload; 20] = [
   Payload::XEmbedTrayCommand,
   Payload::ThemeState,
   Payload::CursorState,
+  Payload::ImeFrame,
+  Payload::ImeCommand,
+  Payload::ImeState,
 ];
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
@@ -2541,9 +3119,12 @@ impl Payload {
   pub const XEmbedTrayCommand: Self = Self(17);
   pub const ThemeState: Self = Self(18);
   pub const CursorState: Self = Self(19);
+  pub const ImeFrame: Self = Self(20);
+  pub const ImeCommand: Self = Self(21);
+  pub const ImeState: Self = Self(22);
 
   pub const ENUM_MIN: u8 = 0;
-  pub const ENUM_MAX: u8 = 19;
+  pub const ENUM_MAX: u8 = 22;
   pub const ENUM_VALUES: &'static [Self] = &[
     Self::NONE,
     Self::InputLayout,
@@ -2565,6 +3146,9 @@ impl Payload {
     Self::XEmbedTrayCommand,
     Self::ThemeState,
     Self::CursorState,
+    Self::ImeFrame,
+    Self::ImeCommand,
+    Self::ImeState,
   ];
   /// Returns the variant's name or "" if unknown.
   pub fn variant_name(self) -> Option<&'static str> {
@@ -2589,6 +3173,9 @@ impl Payload {
       Self::XEmbedTrayCommand => Some("XEmbedTrayCommand"),
       Self::ThemeState => Some("ThemeState"),
       Self::CursorState => Some("CursorState"),
+      Self::ImeFrame => Some("ImeFrame"),
+      Self::ImeCommand => Some("ImeCommand"),
+      Self::ImeState => Some("ImeState"),
       _ => None,
     }
   }
@@ -4016,12 +4603,12 @@ impl<'a> Window<'a> {
     args: &'args WindowArgs<'args>
   ) -> flatbuffers::WIPOffset<Window<'bldr>> {
     let mut builder = WindowBuilder::new(_fbb);
+    builder.add_workspace_id(args.workspace_id);
     builder.add_content_height(args.content_height);
     builder.add_content_width(args.content_width);
     builder.add_content_y(args.content_y);
     builder.add_content_x(args.content_x);
     builder.add_monitor_id(args.monitor_id);
-    builder.add_workspace_id(args.workspace_id);
     builder.add_geometry_height(args.geometry_height);
     builder.add_geometry_width(args.geometry_width);
     builder.add_geometry_y(args.geometry_y);
@@ -4047,6 +4634,7 @@ impl<'a> Window<'a> {
     builder.add_width(args.width);
     if let Some(x) = args.app_id { builder.add_app_id(x); }
     if let Some(x) = args.title { builder.add_title(x); }
+    builder.add_minimized(args.minimized);
     builder.add_opacity_class(args.opacity_class);
     builder.add_content_kind(args.content_kind);
     builder.add_server_side_decorated(args.server_side_decorated);
@@ -4054,7 +4642,6 @@ impl<'a> Window<'a> {
     builder.add_pinned(args.pinned);
     builder.add_has_status_color(args.has_status_color);
     builder.add_object_kind(args.object_kind);
-    builder.add_minimized(args.minimized);
     builder.finish()
   }
 
@@ -5329,12 +5916,12 @@ impl<'a> WindowRequest<'a> {
     args: &'args WindowRequestArgs<'args>
   ) -> flatbuffers::WIPOffset<WindowRequest<'bldr>> {
     let mut builder = WindowRequestBuilder::new(_fbb);
-    builder.add_window_id(args.window_id);
-    builder.add_monitor_id(args.monitor_id);
-    builder.add_flags(args.flags);
-    builder.add_workspace_id(args.workspace_id);
-    builder.add_system_bar_thickness(args.system_bar_thickness);
     builder.add_maximize_padding(args.maximize_padding);
+    builder.add_system_bar_thickness(args.system_bar_thickness);
+    builder.add_monitor_id(args.monitor_id);
+    builder.add_window_id(args.window_id);
+    builder.add_workspace_id(args.workspace_id);
+    builder.add_flags(args.flags);
     if let Some(x) = args.system_bar_monitor_ids { builder.add_system_bar_monitor_ids(x); }
     if let Some(x) = args.title { builder.add_title(x); }
     if let Some(x) = args.app_id { builder.add_app_id(x); }
@@ -5902,9 +6489,9 @@ impl<'a> ShellAction<'a> {
     args: &'args ShellActionArgs
   ) -> flatbuffers::WIPOffset<ShellAction<'bldr>> {
     let mut builder = ShellActionBuilder::new(_fbb);
-    builder.add_workspace_id(args.workspace_id);
     builder.add_texture_id(args.texture_id);
     builder.add_monitor_id(args.monitor_id);
+    builder.add_workspace_id(args.workspace_id);
     builder.add_has_monitor_id(args.has_monitor_id);
     builder.add_action(args.action);
     builder.finish()
@@ -10409,6 +10996,848 @@ impl core::fmt::Debug for ThemeState<'_> {
       ds.finish()
   }
 }
+pub enum ImePreeditSpanOffset {}
+#[derive(Copy, Clone, PartialEq)]
+
+pub struct ImePreeditSpan<'a> {
+  pub _tab: flatbuffers::Table<'a>,
+}
+
+impl<'a> flatbuffers::Follow<'a> for ImePreeditSpan<'a> {
+  type Inner = ImePreeditSpan<'a>;
+  #[inline]
+  unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+    Self { _tab: unsafe { flatbuffers::Table::new(buf, loc) } }
+  }
+}
+
+impl<'a> ImePreeditSpan<'a> {
+  pub const VT_TEXT: flatbuffers::VOffsetT = 4;
+  pub const VT_STYLE: flatbuffers::VOffsetT = 6;
+
+  #[inline]
+  pub unsafe fn init_from_table(table: flatbuffers::Table<'a>) -> Self {
+    ImePreeditSpan { _tab: table }
+  }
+  #[allow(unused_mut)]
+  pub fn create<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr, A: flatbuffers::Allocator + 'bldr>(
+    _fbb: &'mut_bldr mut flatbuffers::FlatBufferBuilder<'bldr, A>,
+    args: &'args ImePreeditSpanArgs<'args>
+  ) -> flatbuffers::WIPOffset<ImePreeditSpan<'bldr>> {
+    let mut builder = ImePreeditSpanBuilder::new(_fbb);
+    if let Some(x) = args.text { builder.add_text(x); }
+    builder.add_style(args.style);
+    builder.finish()
+  }
+
+
+  #[inline]
+  pub fn text(&self) -> Option<&'a str> {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<flatbuffers::ForwardsUOffset<&str>>(ImePreeditSpan::VT_TEXT, None)}
+  }
+  #[inline]
+  pub fn style(&self) -> ImePreeditStyle {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<ImePreeditStyle>(ImePreeditSpan::VT_STYLE, Some(ImePreeditStyle::Plain)).unwrap()}
+  }
+}
+
+impl flatbuffers::Verifiable for ImePreeditSpan<'_> {
+  #[inline]
+  fn run_verifier(
+    v: &mut flatbuffers::Verifier, pos: usize
+  ) -> Result<(), flatbuffers::InvalidFlatbuffer> {
+    use self::flatbuffers::Verifiable;
+    v.visit_table(pos)?
+     .visit_field::<flatbuffers::ForwardsUOffset<&str>>("text", Self::VT_TEXT, false)?
+     .visit_field::<ImePreeditStyle>("style", Self::VT_STYLE, false)?
+     .finish();
+    Ok(())
+  }
+}
+pub struct ImePreeditSpanArgs<'a> {
+    pub text: Option<flatbuffers::WIPOffset<&'a str>>,
+    pub style: ImePreeditStyle,
+}
+impl<'a> Default for ImePreeditSpanArgs<'a> {
+  #[inline]
+  fn default() -> Self {
+    ImePreeditSpanArgs {
+      text: None,
+      style: ImePreeditStyle::Plain,
+    }
+  }
+}
+
+pub struct ImePreeditSpanBuilder<'a: 'b, 'b, A: flatbuffers::Allocator + 'a> {
+  fbb_: &'b mut flatbuffers::FlatBufferBuilder<'a, A>,
+  start_: flatbuffers::WIPOffset<flatbuffers::TableUnfinishedWIPOffset>,
+}
+impl<'a: 'b, 'b, A: flatbuffers::Allocator + 'a> ImePreeditSpanBuilder<'a, 'b, A> {
+  #[inline]
+  pub fn add_text(&mut self, text: flatbuffers::WIPOffset<&'b  str>) {
+    self.fbb_.push_slot_always::<flatbuffers::WIPOffset<_>>(ImePreeditSpan::VT_TEXT, text);
+  }
+  #[inline]
+  pub fn add_style(&mut self, style: ImePreeditStyle) {
+    self.fbb_.push_slot::<ImePreeditStyle>(ImePreeditSpan::VT_STYLE, style, ImePreeditStyle::Plain);
+  }
+  #[inline]
+  pub fn new(_fbb: &'b mut flatbuffers::FlatBufferBuilder<'a, A>) -> ImePreeditSpanBuilder<'a, 'b, A> {
+    let start = _fbb.start_table();
+    ImePreeditSpanBuilder {
+      fbb_: _fbb,
+      start_: start,
+    }
+  }
+  #[inline]
+  pub fn finish(self) -> flatbuffers::WIPOffset<ImePreeditSpan<'a>> {
+    let o = self.fbb_.end_table(self.start_);
+    flatbuffers::WIPOffset::new(o.value())
+  }
+}
+
+impl core::fmt::Debug for ImePreeditSpan<'_> {
+  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    let mut ds = f.debug_struct("ImePreeditSpan");
+      ds.field("text", &self.text());
+      ds.field("style", &self.style());
+      ds.finish()
+  }
+}
+pub enum ImeCandidateOffset {}
+#[derive(Copy, Clone, PartialEq)]
+
+pub struct ImeCandidate<'a> {
+  pub _tab: flatbuffers::Table<'a>,
+}
+
+impl<'a> flatbuffers::Follow<'a> for ImeCandidate<'a> {
+  type Inner = ImeCandidate<'a>;
+  #[inline]
+  unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+    Self { _tab: unsafe { flatbuffers::Table::new(buf, loc) } }
+  }
+}
+
+impl<'a> ImeCandidate<'a> {
+  pub const VT_TEXT: flatbuffers::VOffsetT = 4;
+  pub const VT_ANNOTATION: flatbuffers::VOffsetT = 6;
+  pub const VT_FROM_CLOUD: flatbuffers::VOffsetT = 8;
+  pub const VT_TONE_MARK: flatbuffers::VOffsetT = 10;
+
+  #[inline]
+  pub unsafe fn init_from_table(table: flatbuffers::Table<'a>) -> Self {
+    ImeCandidate { _tab: table }
+  }
+  #[allow(unused_mut)]
+  pub fn create<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr, A: flatbuffers::Allocator + 'bldr>(
+    _fbb: &'mut_bldr mut flatbuffers::FlatBufferBuilder<'bldr, A>,
+    args: &'args ImeCandidateArgs<'args>
+  ) -> flatbuffers::WIPOffset<ImeCandidate<'bldr>> {
+    let mut builder = ImeCandidateBuilder::new(_fbb);
+    if let Some(x) = args.annotation { builder.add_annotation(x); }
+    if let Some(x) = args.text { builder.add_text(x); }
+    builder.add_tone_mark(args.tone_mark);
+    builder.add_from_cloud(args.from_cloud);
+    builder.finish()
+  }
+
+
+  #[inline]
+  pub fn text(&self) -> Option<&'a str> {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<flatbuffers::ForwardsUOffset<&str>>(ImeCandidate::VT_TEXT, None)}
+  }
+  #[inline]
+  pub fn annotation(&self) -> Option<&'a str> {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<flatbuffers::ForwardsUOffset<&str>>(ImeCandidate::VT_ANNOTATION, None)}
+  }
+  #[inline]
+  pub fn from_cloud(&self) -> bool {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<bool>(ImeCandidate::VT_FROM_CLOUD, Some(false)).unwrap()}
+  }
+  #[inline]
+  pub fn tone_mark(&self) -> bool {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<bool>(ImeCandidate::VT_TONE_MARK, Some(false)).unwrap()}
+  }
+}
+
+impl flatbuffers::Verifiable for ImeCandidate<'_> {
+  #[inline]
+  fn run_verifier(
+    v: &mut flatbuffers::Verifier, pos: usize
+  ) -> Result<(), flatbuffers::InvalidFlatbuffer> {
+    use self::flatbuffers::Verifiable;
+    v.visit_table(pos)?
+     .visit_field::<flatbuffers::ForwardsUOffset<&str>>("text", Self::VT_TEXT, false)?
+     .visit_field::<flatbuffers::ForwardsUOffset<&str>>("annotation", Self::VT_ANNOTATION, false)?
+     .visit_field::<bool>("from_cloud", Self::VT_FROM_CLOUD, false)?
+     .visit_field::<bool>("tone_mark", Self::VT_TONE_MARK, false)?
+     .finish();
+    Ok(())
+  }
+}
+pub struct ImeCandidateArgs<'a> {
+    pub text: Option<flatbuffers::WIPOffset<&'a str>>,
+    pub annotation: Option<flatbuffers::WIPOffset<&'a str>>,
+    pub from_cloud: bool,
+    pub tone_mark: bool,
+}
+impl<'a> Default for ImeCandidateArgs<'a> {
+  #[inline]
+  fn default() -> Self {
+    ImeCandidateArgs {
+      text: None,
+      annotation: None,
+      from_cloud: false,
+      tone_mark: false,
+    }
+  }
+}
+
+pub struct ImeCandidateBuilder<'a: 'b, 'b, A: flatbuffers::Allocator + 'a> {
+  fbb_: &'b mut flatbuffers::FlatBufferBuilder<'a, A>,
+  start_: flatbuffers::WIPOffset<flatbuffers::TableUnfinishedWIPOffset>,
+}
+impl<'a: 'b, 'b, A: flatbuffers::Allocator + 'a> ImeCandidateBuilder<'a, 'b, A> {
+  #[inline]
+  pub fn add_text(&mut self, text: flatbuffers::WIPOffset<&'b  str>) {
+    self.fbb_.push_slot_always::<flatbuffers::WIPOffset<_>>(ImeCandidate::VT_TEXT, text);
+  }
+  #[inline]
+  pub fn add_annotation(&mut self, annotation: flatbuffers::WIPOffset<&'b  str>) {
+    self.fbb_.push_slot_always::<flatbuffers::WIPOffset<_>>(ImeCandidate::VT_ANNOTATION, annotation);
+  }
+  #[inline]
+  pub fn add_from_cloud(&mut self, from_cloud: bool) {
+    self.fbb_.push_slot::<bool>(ImeCandidate::VT_FROM_CLOUD, from_cloud, false);
+  }
+  #[inline]
+  pub fn add_tone_mark(&mut self, tone_mark: bool) {
+    self.fbb_.push_slot::<bool>(ImeCandidate::VT_TONE_MARK, tone_mark, false);
+  }
+  #[inline]
+  pub fn new(_fbb: &'b mut flatbuffers::FlatBufferBuilder<'a, A>) -> ImeCandidateBuilder<'a, 'b, A> {
+    let start = _fbb.start_table();
+    ImeCandidateBuilder {
+      fbb_: _fbb,
+      start_: start,
+    }
+  }
+  #[inline]
+  pub fn finish(self) -> flatbuffers::WIPOffset<ImeCandidate<'a>> {
+    let o = self.fbb_.end_table(self.start_);
+    flatbuffers::WIPOffset::new(o.value())
+  }
+}
+
+impl core::fmt::Debug for ImeCandidate<'_> {
+  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    let mut ds = f.debug_struct("ImeCandidate");
+      ds.field("text", &self.text());
+      ds.field("annotation", &self.annotation());
+      ds.field("from_cloud", &self.from_cloud());
+      ds.field("tone_mark", &self.tone_mark());
+      ds.finish()
+  }
+}
+pub enum ImeFrameOffset {}
+#[derive(Copy, Clone, PartialEq)]
+
+pub struct ImeFrame<'a> {
+  pub _tab: flatbuffers::Table<'a>,
+}
+
+impl<'a> flatbuffers::Follow<'a> for ImeFrame<'a> {
+  type Inner = ImeFrame<'a>;
+  #[inline]
+  unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+    Self { _tab: unsafe { flatbuffers::Table::new(buf, loc) } }
+  }
+}
+
+impl<'a> ImeFrame<'a> {
+  pub const VT_SERIAL: flatbuffers::VOffsetT = 4;
+  pub const VT_PREEDIT: flatbuffers::VOffsetT = 6;
+  pub const VT_PREEDIT_CURSOR: flatbuffers::VOffsetT = 8;
+  pub const VT_CANDIDATES: flatbuffers::VOffsetT = 10;
+  pub const VT_HIGHLIGHTED: flatbuffers::VOffsetT = 12;
+  pub const VT_PAGE_INDEX: flatbuffers::VOffsetT = 14;
+  pub const VT_PAGE_COUNT: flatbuffers::VOffsetT = 16;
+  pub const VT_COMPLETION: flatbuffers::VOffsetT = 18;
+  pub const VT_NOTICE: flatbuffers::VOffsetT = 20;
+
+  #[inline]
+  pub unsafe fn init_from_table(table: flatbuffers::Table<'a>) -> Self {
+    ImeFrame { _tab: table }
+  }
+  #[allow(unused_mut)]
+  pub fn create<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr, A: flatbuffers::Allocator + 'bldr>(
+    _fbb: &'mut_bldr mut flatbuffers::FlatBufferBuilder<'bldr, A>,
+    args: &'args ImeFrameArgs<'args>
+  ) -> flatbuffers::WIPOffset<ImeFrame<'bldr>> {
+    let mut builder = ImeFrameBuilder::new(_fbb);
+    builder.add_serial(args.serial);
+    if let Some(x) = args.notice { builder.add_notice(x); }
+    if let Some(x) = args.completion { builder.add_completion(x); }
+    builder.add_page_count(args.page_count);
+    builder.add_page_index(args.page_index);
+    builder.add_highlighted(args.highlighted);
+    if let Some(x) = args.candidates { builder.add_candidates(x); }
+    builder.add_preedit_cursor(args.preedit_cursor);
+    if let Some(x) = args.preedit { builder.add_preedit(x); }
+    builder.finish()
+  }
+
+
+  #[inline]
+  pub fn serial(&self) -> u64 {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<u64>(ImeFrame::VT_SERIAL, Some(0)).unwrap()}
+  }
+  #[inline]
+  pub fn preedit(&self) -> Option<flatbuffers::Vector<'a, flatbuffers::ForwardsUOffset<ImePreeditSpan<'a>>>> {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<flatbuffers::ForwardsUOffset<flatbuffers::Vector<'a, flatbuffers::ForwardsUOffset<ImePreeditSpan>>>>(ImeFrame::VT_PREEDIT, None)}
+  }
+  #[inline]
+  pub fn preedit_cursor(&self) -> i32 {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<i32>(ImeFrame::VT_PREEDIT_CURSOR, Some(-1)).unwrap()}
+  }
+  #[inline]
+  pub fn candidates(&self) -> Option<flatbuffers::Vector<'a, flatbuffers::ForwardsUOffset<ImeCandidate<'a>>>> {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<flatbuffers::ForwardsUOffset<flatbuffers::Vector<'a, flatbuffers::ForwardsUOffset<ImeCandidate>>>>(ImeFrame::VT_CANDIDATES, None)}
+  }
+  #[inline]
+  pub fn highlighted(&self) -> i32 {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<i32>(ImeFrame::VT_HIGHLIGHTED, Some(-1)).unwrap()}
+  }
+  #[inline]
+  pub fn page_index(&self) -> u32 {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<u32>(ImeFrame::VT_PAGE_INDEX, Some(0)).unwrap()}
+  }
+  #[inline]
+  pub fn page_count(&self) -> u32 {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<u32>(ImeFrame::VT_PAGE_COUNT, Some(0)).unwrap()}
+  }
+  #[inline]
+  pub fn completion(&self) -> Option<&'a str> {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<flatbuffers::ForwardsUOffset<&str>>(ImeFrame::VT_COMPLETION, None)}
+  }
+  #[inline]
+  pub fn notice(&self) -> Option<&'a str> {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<flatbuffers::ForwardsUOffset<&str>>(ImeFrame::VT_NOTICE, None)}
+  }
+}
+
+impl flatbuffers::Verifiable for ImeFrame<'_> {
+  #[inline]
+  fn run_verifier(
+    v: &mut flatbuffers::Verifier, pos: usize
+  ) -> Result<(), flatbuffers::InvalidFlatbuffer> {
+    use self::flatbuffers::Verifiable;
+    v.visit_table(pos)?
+     .visit_field::<u64>("serial", Self::VT_SERIAL, false)?
+     .visit_field::<flatbuffers::ForwardsUOffset<flatbuffers::Vector<'_, flatbuffers::ForwardsUOffset<ImePreeditSpan>>>>("preedit", Self::VT_PREEDIT, false)?
+     .visit_field::<i32>("preedit_cursor", Self::VT_PREEDIT_CURSOR, false)?
+     .visit_field::<flatbuffers::ForwardsUOffset<flatbuffers::Vector<'_, flatbuffers::ForwardsUOffset<ImeCandidate>>>>("candidates", Self::VT_CANDIDATES, false)?
+     .visit_field::<i32>("highlighted", Self::VT_HIGHLIGHTED, false)?
+     .visit_field::<u32>("page_index", Self::VT_PAGE_INDEX, false)?
+     .visit_field::<u32>("page_count", Self::VT_PAGE_COUNT, false)?
+     .visit_field::<flatbuffers::ForwardsUOffset<&str>>("completion", Self::VT_COMPLETION, false)?
+     .visit_field::<flatbuffers::ForwardsUOffset<&str>>("notice", Self::VT_NOTICE, false)?
+     .finish();
+    Ok(())
+  }
+}
+pub struct ImeFrameArgs<'a> {
+    pub serial: u64,
+    pub preedit: Option<flatbuffers::WIPOffset<flatbuffers::Vector<'a, flatbuffers::ForwardsUOffset<ImePreeditSpan<'a>>>>>,
+    pub preedit_cursor: i32,
+    pub candidates: Option<flatbuffers::WIPOffset<flatbuffers::Vector<'a, flatbuffers::ForwardsUOffset<ImeCandidate<'a>>>>>,
+    pub highlighted: i32,
+    pub page_index: u32,
+    pub page_count: u32,
+    pub completion: Option<flatbuffers::WIPOffset<&'a str>>,
+    pub notice: Option<flatbuffers::WIPOffset<&'a str>>,
+}
+impl<'a> Default for ImeFrameArgs<'a> {
+  #[inline]
+  fn default() -> Self {
+    ImeFrameArgs {
+      serial: 0,
+      preedit: None,
+      preedit_cursor: -1,
+      candidates: None,
+      highlighted: -1,
+      page_index: 0,
+      page_count: 0,
+      completion: None,
+      notice: None,
+    }
+  }
+}
+
+pub struct ImeFrameBuilder<'a: 'b, 'b, A: flatbuffers::Allocator + 'a> {
+  fbb_: &'b mut flatbuffers::FlatBufferBuilder<'a, A>,
+  start_: flatbuffers::WIPOffset<flatbuffers::TableUnfinishedWIPOffset>,
+}
+impl<'a: 'b, 'b, A: flatbuffers::Allocator + 'a> ImeFrameBuilder<'a, 'b, A> {
+  #[inline]
+  pub fn add_serial(&mut self, serial: u64) {
+    self.fbb_.push_slot::<u64>(ImeFrame::VT_SERIAL, serial, 0);
+  }
+  #[inline]
+  pub fn add_preedit(&mut self, preedit: flatbuffers::WIPOffset<flatbuffers::Vector<'b , flatbuffers::ForwardsUOffset<ImePreeditSpan<'b >>>>) {
+    self.fbb_.push_slot_always::<flatbuffers::WIPOffset<_>>(ImeFrame::VT_PREEDIT, preedit);
+  }
+  #[inline]
+  pub fn add_preedit_cursor(&mut self, preedit_cursor: i32) {
+    self.fbb_.push_slot::<i32>(ImeFrame::VT_PREEDIT_CURSOR, preedit_cursor, -1);
+  }
+  #[inline]
+  pub fn add_candidates(&mut self, candidates: flatbuffers::WIPOffset<flatbuffers::Vector<'b , flatbuffers::ForwardsUOffset<ImeCandidate<'b >>>>) {
+    self.fbb_.push_slot_always::<flatbuffers::WIPOffset<_>>(ImeFrame::VT_CANDIDATES, candidates);
+  }
+  #[inline]
+  pub fn add_highlighted(&mut self, highlighted: i32) {
+    self.fbb_.push_slot::<i32>(ImeFrame::VT_HIGHLIGHTED, highlighted, -1);
+  }
+  #[inline]
+  pub fn add_page_index(&mut self, page_index: u32) {
+    self.fbb_.push_slot::<u32>(ImeFrame::VT_PAGE_INDEX, page_index, 0);
+  }
+  #[inline]
+  pub fn add_page_count(&mut self, page_count: u32) {
+    self.fbb_.push_slot::<u32>(ImeFrame::VT_PAGE_COUNT, page_count, 0);
+  }
+  #[inline]
+  pub fn add_completion(&mut self, completion: flatbuffers::WIPOffset<&'b  str>) {
+    self.fbb_.push_slot_always::<flatbuffers::WIPOffset<_>>(ImeFrame::VT_COMPLETION, completion);
+  }
+  #[inline]
+  pub fn add_notice(&mut self, notice: flatbuffers::WIPOffset<&'b  str>) {
+    self.fbb_.push_slot_always::<flatbuffers::WIPOffset<_>>(ImeFrame::VT_NOTICE, notice);
+  }
+  #[inline]
+  pub fn new(_fbb: &'b mut flatbuffers::FlatBufferBuilder<'a, A>) -> ImeFrameBuilder<'a, 'b, A> {
+    let start = _fbb.start_table();
+    ImeFrameBuilder {
+      fbb_: _fbb,
+      start_: start,
+    }
+  }
+  #[inline]
+  pub fn finish(self) -> flatbuffers::WIPOffset<ImeFrame<'a>> {
+    let o = self.fbb_.end_table(self.start_);
+    flatbuffers::WIPOffset::new(o.value())
+  }
+}
+
+impl core::fmt::Debug for ImeFrame<'_> {
+  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    let mut ds = f.debug_struct("ImeFrame");
+      ds.field("serial", &self.serial());
+      ds.field("preedit", &self.preedit());
+      ds.field("preedit_cursor", &self.preedit_cursor());
+      ds.field("candidates", &self.candidates());
+      ds.field("highlighted", &self.highlighted());
+      ds.field("page_index", &self.page_index());
+      ds.field("page_count", &self.page_count());
+      ds.field("completion", &self.completion());
+      ds.field("notice", &self.notice());
+      ds.finish()
+  }
+}
+pub enum ImeCommandOffset {}
+#[derive(Copy, Clone, PartialEq)]
+
+pub struct ImeCommand<'a> {
+  pub _tab: flatbuffers::Table<'a>,
+}
+
+impl<'a> flatbuffers::Follow<'a> for ImeCommand<'a> {
+  type Inner = ImeCommand<'a>;
+  #[inline]
+  unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+    Self { _tab: unsafe { flatbuffers::Table::new(buf, loc) } }
+  }
+}
+
+impl<'a> ImeCommand<'a> {
+  pub const VT_KIND: flatbuffers::VOffsetT = 4;
+  pub const VT_SERIAL: flatbuffers::VOffsetT = 6;
+  pub const VT_INDEX: flatbuffers::VOffsetT = 8;
+  pub const VT_MODE: flatbuffers::VOffsetT = 10;
+  pub const VT_CLOUD: flatbuffers::VOffsetT = 12;
+
+  #[inline]
+  pub unsafe fn init_from_table(table: flatbuffers::Table<'a>) -> Self {
+    ImeCommand { _tab: table }
+  }
+  #[allow(unused_mut)]
+  pub fn create<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr, A: flatbuffers::Allocator + 'bldr>(
+    _fbb: &'mut_bldr mut flatbuffers::FlatBufferBuilder<'bldr, A>,
+    args: &'args ImeCommandArgs
+  ) -> flatbuffers::WIPOffset<ImeCommand<'bldr>> {
+    let mut builder = ImeCommandBuilder::new(_fbb);
+    builder.add_serial(args.serial);
+    builder.add_index(args.index);
+    builder.add_cloud(args.cloud);
+    builder.add_mode(args.mode);
+    builder.add_kind(args.kind);
+    builder.finish()
+  }
+
+
+  #[inline]
+  pub fn kind(&self) -> ImeCommandKind {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<ImeCommandKind>(ImeCommand::VT_KIND, Some(ImeCommandKind::SelectCandidate)).unwrap()}
+  }
+  #[inline]
+  pub fn serial(&self) -> u64 {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<u64>(ImeCommand::VT_SERIAL, Some(0)).unwrap()}
+  }
+  #[inline]
+  pub fn index(&self) -> u32 {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<u32>(ImeCommand::VT_INDEX, Some(0)).unwrap()}
+  }
+  #[inline]
+  pub fn mode(&self) -> ImeInputMode {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<ImeInputMode>(ImeCommand::VT_MODE, Some(ImeInputMode::Latin)).unwrap()}
+  }
+  #[inline]
+  pub fn cloud(&self) -> ImeCloudOverride {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<ImeCloudOverride>(ImeCommand::VT_CLOUD, Some(ImeCloudOverride::Unchanged)).unwrap()}
+  }
+}
+
+impl flatbuffers::Verifiable for ImeCommand<'_> {
+  #[inline]
+  fn run_verifier(
+    v: &mut flatbuffers::Verifier, pos: usize
+  ) -> Result<(), flatbuffers::InvalidFlatbuffer> {
+    use self::flatbuffers::Verifiable;
+    v.visit_table(pos)?
+     .visit_field::<ImeCommandKind>("kind", Self::VT_KIND, false)?
+     .visit_field::<u64>("serial", Self::VT_SERIAL, false)?
+     .visit_field::<u32>("index", Self::VT_INDEX, false)?
+     .visit_field::<ImeInputMode>("mode", Self::VT_MODE, false)?
+     .visit_field::<ImeCloudOverride>("cloud", Self::VT_CLOUD, false)?
+     .finish();
+    Ok(())
+  }
+}
+pub struct ImeCommandArgs {
+    pub kind: ImeCommandKind,
+    pub serial: u64,
+    pub index: u32,
+    pub mode: ImeInputMode,
+    pub cloud: ImeCloudOverride,
+}
+impl<'a> Default for ImeCommandArgs {
+  #[inline]
+  fn default() -> Self {
+    ImeCommandArgs {
+      kind: ImeCommandKind::SelectCandidate,
+      serial: 0,
+      index: 0,
+      mode: ImeInputMode::Latin,
+      cloud: ImeCloudOverride::Unchanged,
+    }
+  }
+}
+
+pub struct ImeCommandBuilder<'a: 'b, 'b, A: flatbuffers::Allocator + 'a> {
+  fbb_: &'b mut flatbuffers::FlatBufferBuilder<'a, A>,
+  start_: flatbuffers::WIPOffset<flatbuffers::TableUnfinishedWIPOffset>,
+}
+impl<'a: 'b, 'b, A: flatbuffers::Allocator + 'a> ImeCommandBuilder<'a, 'b, A> {
+  #[inline]
+  pub fn add_kind(&mut self, kind: ImeCommandKind) {
+    self.fbb_.push_slot::<ImeCommandKind>(ImeCommand::VT_KIND, kind, ImeCommandKind::SelectCandidate);
+  }
+  #[inline]
+  pub fn add_serial(&mut self, serial: u64) {
+    self.fbb_.push_slot::<u64>(ImeCommand::VT_SERIAL, serial, 0);
+  }
+  #[inline]
+  pub fn add_index(&mut self, index: u32) {
+    self.fbb_.push_slot::<u32>(ImeCommand::VT_INDEX, index, 0);
+  }
+  #[inline]
+  pub fn add_mode(&mut self, mode: ImeInputMode) {
+    self.fbb_.push_slot::<ImeInputMode>(ImeCommand::VT_MODE, mode, ImeInputMode::Latin);
+  }
+  #[inline]
+  pub fn add_cloud(&mut self, cloud: ImeCloudOverride) {
+    self.fbb_.push_slot::<ImeCloudOverride>(ImeCommand::VT_CLOUD, cloud, ImeCloudOverride::Unchanged);
+  }
+  #[inline]
+  pub fn new(_fbb: &'b mut flatbuffers::FlatBufferBuilder<'a, A>) -> ImeCommandBuilder<'a, 'b, A> {
+    let start = _fbb.start_table();
+    ImeCommandBuilder {
+      fbb_: _fbb,
+      start_: start,
+    }
+  }
+  #[inline]
+  pub fn finish(self) -> flatbuffers::WIPOffset<ImeCommand<'a>> {
+    let o = self.fbb_.end_table(self.start_);
+    flatbuffers::WIPOffset::new(o.value())
+  }
+}
+
+impl core::fmt::Debug for ImeCommand<'_> {
+  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    let mut ds = f.debug_struct("ImeCommand");
+      ds.field("kind", &self.kind());
+      ds.field("serial", &self.serial());
+      ds.field("index", &self.index());
+      ds.field("mode", &self.mode());
+      ds.field("cloud", &self.cloud());
+      ds.finish()
+  }
+}
+pub enum ImeStateOffset {}
+#[derive(Copy, Clone, PartialEq)]
+
+pub struct ImeState<'a> {
+  pub _tab: flatbuffers::Table<'a>,
+}
+
+impl<'a> flatbuffers::Follow<'a> for ImeState<'a> {
+  type Inner = ImeState<'a>;
+  #[inline]
+  unsafe fn follow(buf: &'a [u8], loc: usize) -> Self::Inner {
+    Self { _tab: unsafe { flatbuffers::Table::new(buf, loc) } }
+  }
+}
+
+impl<'a> ImeState<'a> {
+  pub const VT_SERIAL: flatbuffers::VOffsetT = 4;
+  pub const VT_ENGINE: flatbuffers::VOffsetT = 6;
+  pub const VT_ENDPOINT: flatbuffers::VOffsetT = 8;
+  pub const VT_MODE: flatbuffers::VOffsetT = 10;
+  pub const VT_CLOUD_ENABLED: flatbuffers::VOffsetT = 12;
+  pub const VT_ERROR: flatbuffers::VOffsetT = 14;
+
+  #[inline]
+  pub unsafe fn init_from_table(table: flatbuffers::Table<'a>) -> Self {
+    ImeState { _tab: table }
+  }
+  #[allow(unused_mut)]
+  pub fn create<'bldr: 'args, 'args: 'mut_bldr, 'mut_bldr, A: flatbuffers::Allocator + 'bldr>(
+    _fbb: &'mut_bldr mut flatbuffers::FlatBufferBuilder<'bldr, A>,
+    args: &'args ImeStateArgs<'args>
+  ) -> flatbuffers::WIPOffset<ImeState<'bldr>> {
+    let mut builder = ImeStateBuilder::new(_fbb);
+    builder.add_serial(args.serial);
+    if let Some(x) = args.error { builder.add_error(x); }
+    builder.add_cloud_enabled(args.cloud_enabled);
+    builder.add_mode(args.mode);
+    builder.add_endpoint(args.endpoint);
+    builder.add_engine(args.engine);
+    builder.finish()
+  }
+
+
+  #[inline]
+  pub fn serial(&self) -> u64 {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<u64>(ImeState::VT_SERIAL, Some(0)).unwrap()}
+  }
+  #[inline]
+  pub fn engine(&self) -> ImeEngineStatus {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<ImeEngineStatus>(ImeState::VT_ENGINE, Some(ImeEngineStatus::Offline)).unwrap()}
+  }
+  #[inline]
+  pub fn endpoint(&self) -> ImeEndpointKind {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<ImeEndpointKind>(ImeState::VT_ENDPOINT, Some(ImeEndpointKind::None)).unwrap()}
+  }
+  #[inline]
+  pub fn mode(&self) -> ImeInputMode {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<ImeInputMode>(ImeState::VT_MODE, Some(ImeInputMode::Latin)).unwrap()}
+  }
+  #[inline]
+  pub fn cloud_enabled(&self) -> bool {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<bool>(ImeState::VT_CLOUD_ENABLED, Some(false)).unwrap()}
+  }
+  #[inline]
+  pub fn error(&self) -> Option<&'a str> {
+    // Safety:
+    // Created from valid Table for this object
+    // which contains a valid value in this slot
+    unsafe { self._tab.get::<flatbuffers::ForwardsUOffset<&str>>(ImeState::VT_ERROR, None)}
+  }
+}
+
+impl flatbuffers::Verifiable for ImeState<'_> {
+  #[inline]
+  fn run_verifier(
+    v: &mut flatbuffers::Verifier, pos: usize
+  ) -> Result<(), flatbuffers::InvalidFlatbuffer> {
+    use self::flatbuffers::Verifiable;
+    v.visit_table(pos)?
+     .visit_field::<u64>("serial", Self::VT_SERIAL, false)?
+     .visit_field::<ImeEngineStatus>("engine", Self::VT_ENGINE, false)?
+     .visit_field::<ImeEndpointKind>("endpoint", Self::VT_ENDPOINT, false)?
+     .visit_field::<ImeInputMode>("mode", Self::VT_MODE, false)?
+     .visit_field::<bool>("cloud_enabled", Self::VT_CLOUD_ENABLED, false)?
+     .visit_field::<flatbuffers::ForwardsUOffset<&str>>("error", Self::VT_ERROR, false)?
+     .finish();
+    Ok(())
+  }
+}
+pub struct ImeStateArgs<'a> {
+    pub serial: u64,
+    pub engine: ImeEngineStatus,
+    pub endpoint: ImeEndpointKind,
+    pub mode: ImeInputMode,
+    pub cloud_enabled: bool,
+    pub error: Option<flatbuffers::WIPOffset<&'a str>>,
+}
+impl<'a> Default for ImeStateArgs<'a> {
+  #[inline]
+  fn default() -> Self {
+    ImeStateArgs {
+      serial: 0,
+      engine: ImeEngineStatus::Offline,
+      endpoint: ImeEndpointKind::None,
+      mode: ImeInputMode::Latin,
+      cloud_enabled: false,
+      error: None,
+    }
+  }
+}
+
+pub struct ImeStateBuilder<'a: 'b, 'b, A: flatbuffers::Allocator + 'a> {
+  fbb_: &'b mut flatbuffers::FlatBufferBuilder<'a, A>,
+  start_: flatbuffers::WIPOffset<flatbuffers::TableUnfinishedWIPOffset>,
+}
+impl<'a: 'b, 'b, A: flatbuffers::Allocator + 'a> ImeStateBuilder<'a, 'b, A> {
+  #[inline]
+  pub fn add_serial(&mut self, serial: u64) {
+    self.fbb_.push_slot::<u64>(ImeState::VT_SERIAL, serial, 0);
+  }
+  #[inline]
+  pub fn add_engine(&mut self, engine: ImeEngineStatus) {
+    self.fbb_.push_slot::<ImeEngineStatus>(ImeState::VT_ENGINE, engine, ImeEngineStatus::Offline);
+  }
+  #[inline]
+  pub fn add_endpoint(&mut self, endpoint: ImeEndpointKind) {
+    self.fbb_.push_slot::<ImeEndpointKind>(ImeState::VT_ENDPOINT, endpoint, ImeEndpointKind::None);
+  }
+  #[inline]
+  pub fn add_mode(&mut self, mode: ImeInputMode) {
+    self.fbb_.push_slot::<ImeInputMode>(ImeState::VT_MODE, mode, ImeInputMode::Latin);
+  }
+  #[inline]
+  pub fn add_cloud_enabled(&mut self, cloud_enabled: bool) {
+    self.fbb_.push_slot::<bool>(ImeState::VT_CLOUD_ENABLED, cloud_enabled, false);
+  }
+  #[inline]
+  pub fn add_error(&mut self, error: flatbuffers::WIPOffset<&'b  str>) {
+    self.fbb_.push_slot_always::<flatbuffers::WIPOffset<_>>(ImeState::VT_ERROR, error);
+  }
+  #[inline]
+  pub fn new(_fbb: &'b mut flatbuffers::FlatBufferBuilder<'a, A>) -> ImeStateBuilder<'a, 'b, A> {
+    let start = _fbb.start_table();
+    ImeStateBuilder {
+      fbb_: _fbb,
+      start_: start,
+    }
+  }
+  #[inline]
+  pub fn finish(self) -> flatbuffers::WIPOffset<ImeState<'a>> {
+    let o = self.fbb_.end_table(self.start_);
+    flatbuffers::WIPOffset::new(o.value())
+  }
+}
+
+impl core::fmt::Debug for ImeState<'_> {
+  fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+    let mut ds = f.debug_struct("ImeState");
+      ds.field("serial", &self.serial());
+      ds.field("engine", &self.engine());
+      ds.field("endpoint", &self.endpoint());
+      ds.field("mode", &self.mode());
+      ds.field("cloud_enabled", &self.cloud_enabled());
+      ds.field("error", &self.error());
+      ds.finish()
+  }
+}
 pub enum EnvelopeOffset {}
 #[derive(Copy, Clone, PartialEq)]
 
@@ -10770,6 +12199,51 @@ impl<'a> Envelope<'a> {
     }
   }
 
+  #[inline]
+  #[allow(non_snake_case)]
+  pub fn payload_as_ime_frame(&self) -> Option<ImeFrame<'a>> {
+    if self.payload_type() == Payload::ImeFrame {
+      self.payload().map(|t| {
+       // Safety:
+       // Created from a valid Table for this object
+       // Which contains a valid union in this slot
+       unsafe { ImeFrame::init_from_table(t) }
+     })
+    } else {
+      None
+    }
+  }
+
+  #[inline]
+  #[allow(non_snake_case)]
+  pub fn payload_as_ime_command(&self) -> Option<ImeCommand<'a>> {
+    if self.payload_type() == Payload::ImeCommand {
+      self.payload().map(|t| {
+       // Safety:
+       // Created from a valid Table for this object
+       // Which contains a valid union in this slot
+       unsafe { ImeCommand::init_from_table(t) }
+     })
+    } else {
+      None
+    }
+  }
+
+  #[inline]
+  #[allow(non_snake_case)]
+  pub fn payload_as_ime_state(&self) -> Option<ImeState<'a>> {
+    if self.payload_type() == Payload::ImeState {
+      self.payload().map(|t| {
+       // Safety:
+       // Created from a valid Table for this object
+       // Which contains a valid union in this slot
+       unsafe { ImeState::init_from_table(t) }
+     })
+    } else {
+      None
+    }
+  }
+
 }
 
 impl flatbuffers::Verifiable for Envelope<'_> {
@@ -10803,6 +12277,9 @@ impl flatbuffers::Verifiable for Envelope<'_> {
           Payload::XEmbedTrayCommand => v.verify_union_variant::<flatbuffers::ForwardsUOffset<XEmbedTrayCommand>>("Payload::XEmbedTrayCommand", pos),
           Payload::ThemeState => v.verify_union_variant::<flatbuffers::ForwardsUOffset<ThemeState>>("Payload::ThemeState", pos),
           Payload::CursorState => v.verify_union_variant::<flatbuffers::ForwardsUOffset<CursorState>>("Payload::CursorState", pos),
+          Payload::ImeFrame => v.verify_union_variant::<flatbuffers::ForwardsUOffset<ImeFrame>>("Payload::ImeFrame", pos),
+          Payload::ImeCommand => v.verify_union_variant::<flatbuffers::ForwardsUOffset<ImeCommand>>("Payload::ImeCommand", pos),
+          Payload::ImeState => v.verify_union_variant::<flatbuffers::ForwardsUOffset<ImeState>>("Payload::ImeState", pos),
           _ => Ok(()),
         }
      })?
@@ -11006,6 +12483,27 @@ impl core::fmt::Debug for Envelope<'_> {
         },
         Payload::CursorState => {
           if let Some(x) = self.payload_as_cursor_state() {
+            ds.field("payload", &x)
+          } else {
+            ds.field("payload", &"InvalidFlatbuffer: Union discriminant does not match value.")
+          }
+        },
+        Payload::ImeFrame => {
+          if let Some(x) = self.payload_as_ime_frame() {
+            ds.field("payload", &x)
+          } else {
+            ds.field("payload", &"InvalidFlatbuffer: Union discriminant does not match value.")
+          }
+        },
+        Payload::ImeCommand => {
+          if let Some(x) = self.payload_as_ime_command() {
+            ds.field("payload", &x)
+          } else {
+            ds.field("payload", &"InvalidFlatbuffer: Union discriminant does not match value.")
+          }
+        },
+        Payload::ImeState => {
+          if let Some(x) = self.payload_as_ime_state() {
             ds.field("payload", &x)
           } else {
             ds.field("payload", &"InvalidFlatbuffer: Union discriminant does not match value.")

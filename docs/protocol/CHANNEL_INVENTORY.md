@@ -23,6 +23,12 @@ outside this inventory.
 | `denial/system_command` | Dart → native | bounded length-prefixed packet | Launch application, toggle OSK, take screenshot, or log out |
 | `denial/window_close_complete` | Dart → native | little-endian nonzero `uint64` window ID | Release native texture leases after Flutter's close animation |
 
+The `denial/wire/*` envelopes additionally carry the input-engine bridge
+payloads `ImeFrame` (native → Dart panel snapshot), `ImeCommand`
+(Dart → native panel intent), and `ImeState` (native → Dart engine and mode
+state) defined in `protocol/denial.fbs` and specified by
+[input-engine-v1](input-engine-v1.md).
+
 Structured messages are limited to 1 MiB, 4,096 windows, 8,192 input regions,
 32,768 visible surfaces, and 4,096 bytes per string. Native verifies schema,
 direction, version, counts, enums, identities, geometry, flags, and ordering
@@ -81,6 +87,21 @@ bounded PNG, JPEG, or WebP images are retained. Requests are at most 4 KiB,
 capture and send file descriptors are nonblocking and time-bounded, and a
 locked session publishes an empty redacted snapshot. Clipboard contents are
 never written to disk.
+
+## Input-engine socket
+
+`deniald` listens on a mode-`0600` `SOCK_SEQPACKET` Unix socket at
+`$XDG_RUNTIME_DIR/denial/ime.sock` for at most one session-scoped input
+engine. Packets are FlatBuffers `Denial.Ime.ImeEnvelope` values with file
+identifier `IEMG`, protocol version `1`, an activation serial on every
+activation-scoped payload, and the bounds listed in
+[input-engine-v1](input-engine-v1.md): at most 1 MiB per packet, 4,096 bytes
+per string, 4,000 bytes of surrounding text, and 64 candidates, preedit
+spans, or configuration entries per message. Forwarded keys form a bounded
+round trip: every `ImeKeyEvent` is answered by `ImeKeyResult` or reinjected
+after a 100 ms timeout. The engine is untrusted; `deniald` validates every
+field — including message direction — and republishes panel state to the
+shell as `ImeFrame`/`ImeState` instead of forwarding engine bytes.
 
 ## UI-development packets
 

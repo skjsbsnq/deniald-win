@@ -1,0 +1,308 @@
+// Denial input-engine socket protocol (input-engine-v1).
+//
+// This schema describes the private channel between deniald and one
+// session-scoped input engine over $XDG_RUNTIME_DIR/denial/ime.sock. It is a
+// Denial-side contract only; the engine implements the same document with its
+// own types. The human-readable specification lives in
+// docs/protocol/input-engine-v1.md.
+//
+// Generated code is committed. Bump protocol_version only for an intentional
+// incompatible change. Never reuse a removed field id.
+
+namespace Denial.Ime;
+
+// Kind of text endpoint the engine currently serves. Legacy covers X11
+// clients and Wayland clients without text-input that are reached through the
+// focused-seat fallback; it offers no surrounding text, no cursor rectangle
+// and no delete-surrounding, and its preedit is panel-only.
+enum ImeEndpointKind : ubyte {
+  None = 0,
+  WaylandTextInput = 1,
+  Flutter = 2,
+  Legacy = 3
+}
+
+// Coarse composing mode. Engines map their internal modes onto these values;
+// Latin means raw keyboard pass-through, Chinese means composing input.
+enum ImeInputMode : ubyte {
+  Latin = 0,
+  Chinese = 1
+}
+
+// Lifecycle state of the attached engine as reported by ImeStatus. Offline
+// is reserved to keep the numbering identical to Denial.Wire.ImeEngineStatus:
+// an attached engine never reports itself offline, and Denial must reject a
+// payload carrying it.
+enum ImeEngineStatus : ubyte {
+  Offline = 0,
+  Starting = 1,
+  Ready = 2,
+  Error = 3
+}
+
+// Tri-state for ImeSetInputMode.cloud: Unchanged leaves the engine's
+// cloud-assisted lookup preference untouched.
+enum ImeCloudOverride : ubyte {
+  Unchanged = 0,
+  Enable = 1,
+  Disable = 2
+}
+
+// Visual hint for one preedit segment inside the candidate panel.
+enum ImePreeditStyle : ubyte {
+  Plain = 0,
+  Underline = 1,
+  Highlight = 2,
+  Prediction = 3
+}
+
+// ImeKeyEvent.modifiers bit layout:
+//   bit 0: Shift
+//   bit 1: Control
+//   bit 2: Alt (Mod1)
+//   bit 3: Super (Mod4)
+// All other bits are reserved and must be sent as zero.
+
+// Logical-pixel caret rectangle in surface-local coordinates. The field is a
+// table so an absent value means "endpoint does not report a caret", which is
+// distinct from a zero-sized rectangle.
+table ImeRect {
+  x:int;
+  y:int;
+  width:int;
+  height:int;
+}
+
+// One configuration key/value pair inside an activation or reload snapshot.
+table ImeConfigEntry {
+  key:string;
+  value:string;
+}
+
+// One preedit segment: bounded text plus a display hint.
+table ImePreeditSpan {
+  text:string;
+  style:ImePreeditStyle = Plain;
+}
+
+// One candidate row. Its position inside ImeFrame.candidates is its
+// selection index; there is no separate ordinal field.
+table ImeCandidate {
+  text:string;
+  annotation:string;
+  // Pure display hints: the panel may badge cloud-sourced candidates and
+  // tone-marked readings. They never change commit semantics.
+  from_cloud:bool;
+  tone_mark:bool;
+}
+
+// ---------------------------------------------------------------------------
+// deniald -> engine
+// ---------------------------------------------------------------------------
+
+// First message on a new connection, sent by the engine. client_version must
+// equal ImeEnvelope.protocol_version or deniald closes the socket.
+table ImeHello {
+  client_version:ushort = 1;
+  // Optional human-readable identity for diagnostics and shell display.
+  name:string;
+  version:string;
+}
+
+// Begins one activation. serial is the compositor-owned activation
+// generation; it starts at 1, is never 0 (zero is the "no engine" sentinel
+// used by Denial.Wire.ImeState), and never repeats within a connection.
+// Every activation-scoped payload in both directions carries it and both
+// sides drop payloads whose serial is stale. Fields snapshot the complete editor state:
+// absent surrounding_text or cursor_rectangle means the endpoint does not
+// provide it (always the case for Legacy).
+table ImeActivate {
+  serial:ulong;
+  endpoint:ImeEndpointKind = None;
+  app_id:string;
+  // text-input-v3 numeric values, passed through verbatim.
+  content_hint:uint;
+  content_purpose:uint;
+  cursor_rectangle:ImeRect;
+  surrounding_text:string;
+  // UTF-8 byte offsets into surrounding_text; valid only when it is present.
+  surrounding_cursor:uint;
+  surrounding_anchor:uint;
+  config:[ImeConfigEntry];
+}
+
+// Ends the activation identified by serial. After this the engine must emit
+// no further payloads for that serial and must clear its panel state.
+table ImeDeactivate {
+  serial:ulong;
+}
+
+// Full replacement of the mutable editor state inside an activation, mirroring
+// input-method-v2 semantics: null surrounding_text means unavailable rather
+// than empty.
+table ImeEditorUpdate {
+  serial:ulong;
+  app_id:string;
+  content_hint:uint;
+  content_purpose:uint;
+  cursor_rectangle:ImeRect;
+  surrounding_text:string;
+  surrounding_cursor:uint;
+  surrounding_anchor:uint;
+}
+
+// Closes a batch of state messages. Denial is the only ordering authority:
+// activate/deactivate/done form one group, and the engine must not expose
+// half-applied editor state.
+table ImeDone {
+  serial:ulong;
+}
+
+// One raw physical key. keycode is the evdev/Linux input-event code; the
+// modifier mask reflects the compositor seat state at press time.
+table ImeKeyEvent {
+  serial:ulong;
+  keycode:uint;
+  modifiers:uint;
+  pressed:bool;
+  // Per-activation counter starting at 1, unique across the activation even
+  // under key autorepeat. Echoed verbatim by ImeKeyResult so the compositor
+  // can match results to in-flight events without guessing from keycode.
+  key_id:uint;
+}
+
+// Reverse commands, mostly panel-originated intents forwarded by deniald.
+// index refers to ImeFrame.candidates of the most recent frame the engine
+// published for this activation serial.
+table ImeSelectCandidate {
+  serial:ulong;
+  index:uint;
+}
+
+// Relative candidate paging; only the sign of delta is meaningful.
+table ImePageCandidates {
+  serial:ulong;
+  delta:int;
+}
+
+table ImeSetInputMode {
+  serial:ulong;
+  mode:ImeInputMode = Latin;
+  cloud:ImeCloudOverride = Unchanged;
+}
+
+// Requests the engine to drop in-memory state and re-read its configuration;
+// carries the new snapshot so the operation is atomic.
+table ImeReloadConfiguration {
+  serial:ulong;
+  config:[ImeConfigEntry];
+}
+
+// ---------------------------------------------------------------------------
+// engine -> deniald
+// ---------------------------------------------------------------------------
+
+// Authoritative panel snapshot: what should be on screen right now, not a
+// delta instruction. A frame with no preedit, candidates, completion or
+// notice collapses the candidate panel.
+table ImeFrame {
+  // Activation serial this frame renders. deniald drops stale serials.
+  serial:ulong;
+  preedit:[ImePreeditSpan];
+  // UTF-8 byte offset of the caret inside the concatenated preedit text;
+  // -1 means no explicit caret.
+  preedit_cursor:int = -1;
+  candidates:[ImeCandidate];
+  // Index into candidates; -1 means nothing is highlighted.
+  highlighted:int = -1;
+  page_index:uint;
+  page_count:uint;
+  // Whole-sentence completion preview shown alongside the candidates.
+  completion:string;
+  // Transient engine notice (mode hints, errors, cloud status).
+  notice:string;
+}
+
+// Commits text into the active endpoint, mirroring
+// InputMethodTransaction.commit_string.
+table ImeCommitText {
+  serial:ulong;
+  text:string;
+}
+
+// Inline preedit for endpoints that support it (WaylandTextInput, Flutter).
+// On Legacy endpoints deniald keeps it panel-only. A null text clears the
+// preedit; cursor offsets are UTF-8 byte offsets, -1 for no caret.
+table ImeInlinePreedit {
+  serial:ulong;
+  text:string;
+  cursor_begin:int = -1;
+  cursor_end:int = -1;
+}
+
+// Requests deletion of surrounding text around the caret, in UTF-8 byte
+// counts. Unsupported on Legacy endpoints; deniald may still refuse.
+table ImeDeleteSurrounding {
+  serial:ulong;
+  before_bytes:uint;
+  after_bytes:uint;
+}
+
+// Engine-originated mode change (hotkeys inside the engine, cloud toggle).
+table ImeModeState {
+  serial:ulong;
+  mode:ImeInputMode = Latin;
+  cloud_enabled:bool;
+}
+
+// Engine lifecycle and health. Error carries a bounded human-readable
+// diagnostic; deniald never treats it as structured data.
+table ImeStatus {
+  status:ImeEngineStatus = Starting;
+  error:string;
+}
+
+// Per-key consumption verdict for one ImeKeyEvent, matched by key_id.
+// handled=true means the engine consumed the key; handled=false tells
+// deniald to reinject the event to the focused endpoint through the normal
+// seat path. An engine that stays silent is timed out by deniald, which
+// then reinjects the event exactly as if handled=false had arrived.
+table ImeKeyResult {
+  serial:ulong;
+  key_id:uint;
+  handled:bool;
+}
+
+union ImePayload {
+  ImeHello,
+  ImeActivate,
+  ImeDeactivate,
+  ImeEditorUpdate,
+  ImeDone,
+  ImeKeyEvent,
+  ImeSelectCandidate,
+  ImePageCandidates,
+  ImeSetInputMode,
+  ImeReloadConfiguration,
+  ImeFrame,
+  ImeCommitText,
+  ImeInlinePreedit,
+  ImeDeleteSurrounding,
+  ImeModeState,
+  ImeStatus,
+  // Appended for wire compatibility: the per-key verdict closes the
+  // forwarded-key round trip.
+  ImeKeyResult
+}
+
+table ImeEnvelope {
+  protocol_version:ushort = 1;
+  // Per-direction monotonic counter starting at 1; used for logging and
+  // loss detection only, never for ordering authority.
+  sequence:ulong;
+  payload:ImePayload;
+}
+
+root_type ImeEnvelope;
+file_identifier "IEMG";
+file_extension "iemg";

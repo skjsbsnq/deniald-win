@@ -121,6 +121,13 @@ unit.
   keyboard grab, loop-safe key pass-through, and editing transactions to the
   active endpoint, while candidate surfaces join the same Flutter scene and
   native input layout.
+- one session-scoped input engine may instead attach over the private
+  `SOCK_SEQPACKET` socket `ime.sock` (`input-engine-v1`). Rust owns
+  activation, serials, and endpoint capability; the untrusted engine receives
+  bounded editor state and raw keys and returns validated panel snapshots,
+  which the shell renders as ordinary compositor UI. Legacy endpoints (X11
+  and protocol-free Wayland) get no surrounding text, caret geometry, or
+  delete-surrounding, and their preedit stays inside the panel.
 
 Rust also owns one live XKB configuration for that seat. The same map and
 repeat metadata reach native Wayland clients and Xwayland; Flutter physical
